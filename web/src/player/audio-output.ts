@@ -1,6 +1,17 @@
 import workletUrl from './compressor.worklet.ts?worker&url';
 
 /**
+ * The worklet's address. The built file stands alone; the dev server's copy imports Vite's client
+ * environment, which a worklet scope can't load, so that line is dropped there.
+ */
+async function moduleUrl(): Promise<string> {
+	if (!import.meta.env.DEV) return workletUrl;
+	const source = await fetch(workletUrl).then(async (response) => response.text());
+	const standalone = source.replace(/^import\s+["'][^"']*vite[^"']*["'];?\s*$/gm, '');
+	return URL.createObjectURL(new Blob([standalone], { type: 'text/javascript' }));
+}
+
+/**
  * The end of the sound path, shared by both engines: sources → compressor → volume → speakers.
  * The compressor is the AudioWorklet one where the page may load worklets (a secure context);
  * elsewhere the browser's own DynamicsCompressor, tuned the same way, stands in for it.
@@ -26,7 +37,7 @@ export class AudioOutput {
 		volume.connect(context.destination);
 		if (context.audioWorklet) {
 			try {
-				await context.audioWorklet.addModule(workletUrl);
+				await context.audioWorklet.addModule(await moduleUrl());
 				const node = new AudioWorkletNode(context, 'vixion-compressor', {
 					numberOfInputs: 1,
 					numberOfOutputs: 1,
