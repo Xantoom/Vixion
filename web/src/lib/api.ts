@@ -92,15 +92,72 @@ export interface Streamer {
 	login: string;
 	display_name: string;
 	avatar_url: string | null;
+	banner_url: string | null;
+	/** The newest recording with a picture, for the cover. */
+	cover_stream_id: number | null;
 	monitored: boolean;
 	retention_days: number | null;
-	live: { title: string | null; game: string | null; since: number } | null;
+	live: { title: string | null; game: string | null; viewers: number | null; since: number } | null;
 	recording: LiveProgress | null;
 	stream_count: number;
 	total_bytes: number;
 	total_duration_ms: number;
 	last_stream_at: number | null;
 	created_at: number;
+}
+
+/** A Twitch channel found by name. */
+export interface SearchHit {
+	login: string;
+	display_name: string;
+	avatar_url: string | null;
+	followers: number;
+	live: boolean;
+	game: string | null;
+}
+
+export interface TwitchVideo {
+	id: string;
+	title: string;
+	duration_s: number;
+	created_at: number | null;
+	views: number;
+	thumbnail_url: string | null;
+	game: string | null;
+}
+
+export interface Profile {
+	id: string;
+	login: string;
+	display_name: string;
+	avatar_url: string | null;
+	banner_url: string | null;
+	description: string | null;
+	followers: number;
+	partner: boolean;
+	created_at: number | null;
+	live: {
+		title: string | null;
+		game: string | null;
+		viewers: number;
+		since: number | null;
+		preview_url: string | null;
+	} | null;
+	last_broadcast: number | null;
+	videos: TwitchVideo[];
+}
+
+/** A channel's page: Twitch's side, and Vixion's when the channel is watched. */
+export interface ChannelPage {
+	profile: Profile | null;
+	streamer: Streamer | null;
+	streams: StreamSummary[];
+}
+
+/** Badge pictures by `set/version`, and third-party emotes by word, at 1x and 2x. */
+export interface ChatAssets {
+	badges: Record<string, string>;
+	emotes: Record<string, [string, string]>;
 }
 
 export type StreamStatus = 'recording' | 'done' | 'failed';

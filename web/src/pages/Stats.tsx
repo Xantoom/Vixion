@@ -109,8 +109,8 @@ export function StatsPage() {
 								<tr key={streamer.id} className="border-line hover:bg-surface border-t">
 									<td className="px-4 py-2.5">
 										<Link
-											to="/streamers/$id"
-											params={{ id: String(streamer.id) }}
+											to="/$login"
+											params={{ login: streamer.login }}
 											className="flex items-center gap-2.5 font-medium hover:underline"
 										>
 											<Avatar src={streamer.avatar_url} name={streamer.display_name} size={26} />

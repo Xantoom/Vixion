@@ -1,16 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import {
+	AudioLines,
+	CalendarDays,
 	ChevronLeft,
 	Download,
+	FastForward,
 	FileJson,
 	FileText,
 	FileVideo,
-	Gauge,
+	Gamepad2,
+	HardDrive,
+	ListVideo,
 	Maximize,
 	MessageSquare,
-	MessageSquareOff,
 	Minimize,
+	MonitorPlay,
 	Pause,
 	Play,
 	RefreshCw,
@@ -20,13 +25,21 @@ import {
 	Volume2,
 	VolumeX,
 } from 'lucide-react';
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from 'react';
+import {
+	type PointerEvent as ReactPointerEvent,
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from 'react';
 import { useT } from '@/i18n';
 import { ApiError, type StreamDetail, api } from '@/lib/api';
 import { formatBytes, formatClock, formatDate, formatDuration, formatNumber, formatQuality } from '@/lib/format';
-import { useCan, useRouteId } from '@/lib/session';
+import { useCan, useRouteParams } from '@/lib/session';
 import { ChatPanel } from '@/player/ChatPanel';
 import { type Engine, type EngineError, type PlaybackState, createEngine } from '@/player/engine';
+import { Timeline, boxArt } from '@/player/Timeline';
 import { usePrefs } from '@/stores/prefs';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
@@ -74,7 +87,8 @@ function useFullscreen(target: React.RefObject<HTMLElement | null>) {
 }
 
 export function StudioPage() {
-	const id = useRouteId();
+	const { login, id } = useRouteParams();
+	const navigate = useNavigate();
 	// The media link changes on every answer: the page keeps the one it opened with.
 	const detail = useQuery({
 		queryKey: ['stream', id],
@@ -82,6 +96,12 @@ export function StudioPage() {
 		staleTime: Number.POSITIVE_INFINITY,
 		refetchOnWindowFocus: false,
 	});
+	// An old link with the channel's former name lands on the current one.
+	const actual = detail.data?.streamer_login;
+	useEffect(() => {
+		if (actual && actual !== login)
+			void navigate({ to: '/$login/$id', params: { login: actual, id }, replace: true });
+	}, [actual, login, id, navigate]);
 	if (detail.isPending) return <PageLoading />;
 	if (detail.error) return <NotFound forbidden={detail.error instanceof ApiError && detail.error.status === 403} />;
 	return (
@@ -112,6 +132,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	const [error, setError] = useState<EngineError | null>(null);
 	const [controls, setControls] = useState(true);
 	const [scrub, setScrub] = useState<number | null>(null);
+	const [hovering, setHovering] = useState(false);
 	const hideTimer = useRef(0);
 	const lastTap = useRef(0);
 	const fullscreen = useFullscreen(root);
@@ -203,6 +224,8 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 
 	const seekTo = useCallback((seconds: number) => {
 		engine.current?.seek(seconds);
+		// The bar moves at once, without waiting for the engine's next report.
+		setTime(seconds);
 	}, []);
 
 	const refresh = async () => {
@@ -238,7 +261,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 			if (target?.closest('input, textarea, select, [contenteditable], [role=menu], dialog')) return;
 			if (event.ctrlKey || event.metaKey || event.altKey) return;
 			const set = usePrefs.getState().set;
-			const { volume, muted, chat } = usePrefs.getState();
+			const { volume, muted } = usePrefs.getState();
 			let handled = true;
 			switch (event.key) {
 				case ' ':
@@ -266,9 +289,6 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 				case 'f':
 					fullscreen.toggle();
 					break;
-				case 'c':
-					set({ chat: !chat });
-					break;
 				case 'Home':
 					seekTo(0);
 					break;
@@ -295,7 +315,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 		const startX = event.clientX;
 		const startWidth = prefs.chatWidth;
 		const move = (moved: PointerEvent) => {
-			const width = Math.min(560, Math.max(260, startWidth - (moved.clientX - startX)));
+			const width = Math.min(640, Math.max(280, startWidth - (moved.clientX - startX)));
 			usePrefs.getState().set({ chatWidth: width });
 		};
 		const up = () => {
@@ -307,7 +327,6 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	};
 
 	const shown = scrub ?? time;
-	const progress = duration > 0 ? (shown / duration) * 100 : 0;
 	const downloads = {
 		video: stream.download_url,
 		json: `/api/streams/${stream.id}/chat.json`,
@@ -315,274 +334,282 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	};
 	const VolumeIcon = prefs.muted || prefs.volume === 0 ? VolumeX : prefs.volume < 0.5 ? Volume1 : Volume2;
 	const pseudoFullscreen = fullscreen.active && !fullscreen.native;
-	const chatShown = prefs.chat;
+	// What lies on the picture shows while the pointer is over it, and while paused.
+	const overlay = (hovering && controls) || !state.playing;
 
 	return (
 		<div
 			ref={root}
-			className={`bg-bg flex flex-col lg:flex-row ${fullscreen.active ? 'h-dvh' : 'h-[calc(100dvh-3.5rem)]'} ${pseudoFullscreen ? 'fixed inset-0 z-[60]' : ''}`}
+			style={{ '--chat-width': `${prefs.chatWidth}px` } as React.CSSProperties}
+			className={`bg-bg flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_var(--chat-width)] ${fullscreen.active ? 'h-dvh' : 'h-[calc(100dvh-4rem)]'} ${pseudoFullscreen ? 'fixed inset-0 z-[60]' : ''}`}
 		>
-			<section className="flex min-h-0 min-w-0 flex-col lg:flex-1">
+			<section
+				ref={stage}
+				aria-label={stream.title || t.stream.untitled}
+				className={`relative flex-none bg-black select-none max-lg:aspect-video max-lg:max-h-[60dvh] lg:h-full lg:min-h-0 ${overlay ? '' : 'cursor-none'}`}
+				onPointerMove={() => {
+					setHovering(true);
+					poke();
+				}}
+				onPointerDown={poke}
+				onPointerLeave={(event) => {
+					if (event.pointerType === 'mouse') setHovering(false);
+				}}
+			>
 				<div
-					ref={stage}
-					className={`relative bg-black select-none ${fullscreen.active ? 'min-h-0 flex-1' : 'aspect-video max-h-[50dvh] w-full flex-none lg:aspect-auto lg:max-h-none lg:min-h-0 lg:flex-1'} ${controls || !state.playing ? '' : 'cursor-none'}`}
-					onPointerMove={poke}
-					onPointerDown={poke}
-				>
-					<div
-						ref={surface}
-						className="absolute inset-0"
-						onPointerUp={(event) => {
-							if (event.pointerType === 'mouse') return;
-							// Touch: a tap shows the controls; a double tap on a side jumps 5 s, in the middle goes full screen.
-							const now = performance.now();
-							const box = event.currentTarget.getBoundingClientRect();
-							const third = (event.clientX - box.left) / box.width;
-							if (now - lastTap.current < 320) {
-								lastTap.current = 0;
-								if (third < 1 / 3) seekBy(-5);
-								else if (third > 2 / 3) seekBy(5);
-								else fullscreen.toggle();
-							} else {
-								lastTap.current = now;
-							}
-						}}
-						onClick={(event) => {
-							if (event.nativeEvent instanceof PointerEvent && event.nativeEvent.pointerType !== 'mouse')
-								return;
-							togglePlay();
-						}}
-						onDoubleClick={(event) => {
-							if (event.nativeEvent instanceof PointerEvent && event.nativeEvent.pointerType !== 'mouse')
-								return;
-							fullscreen.toggle();
-						}}
-					/>
-					{opening || state.waiting ? (
-						<div className="pointer-events-none absolute inset-0 grid place-items-center text-white/85">
-							<Spinner size={36} />
-						</div>
-					) : null}
-					{error ? (
-						<div className="absolute inset-0 grid place-items-center bg-black/80 p-6 text-center text-white">
-							<div className="flex max-w-md flex-col items-center gap-4">
-								<p className="text-ui">
-									{error === 'decode'
-										? t.player.cantDecode
-										: error === 'expired'
-											? t.player.expiredLink
-											: t.player.cantOpen}
-								</p>
-								<div className="flex gap-2">
-									{error === 'decode' && downloads.video ? (
-										<a href={downloads.video}>
-											<Button variant="accent" tabIndex={-1}>
-												<Download size={16} />
-												{t.player.downloadVideo}
-											</Button>
-										</a>
-									) : (
-										<Button variant="accent" onClick={() => void refresh()}>
-											<RefreshCw size={16} />
-											{t.player.reload}
-										</Button>
-									)}
-								</div>
-							</div>
-						</div>
-					) : null}
-
-					{/* Controls */}
-					<div
-						className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-2 pt-10 pb-1.5 text-white transition-opacity duration-300 sm:px-4 sm:pb-2.5 ${controls || !state.playing ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+					ref={surface}
+					className="absolute inset-0"
+					onPointerUp={(event) => {
+						if (event.pointerType === 'mouse') return;
+						setHovering(true);
+						// Touch: a tap shows the controls; a double tap on a side jumps 5 s, in the middle goes full screen.
+						const now = performance.now();
+						const box = event.currentTarget.getBoundingClientRect();
+						const third = (event.clientX - box.left) / box.width;
+						if (now - lastTap.current < 320) {
+							lastTap.current = 0;
+							if (third < 1 / 3) seekBy(-5);
+							else if (third > 2 / 3) seekBy(5);
+							else fullscreen.toggle();
+						} else {
+							lastTap.current = now;
+						}
+					}}
+					onClick={(event) => {
+						if (event.nativeEvent instanceof PointerEvent && event.nativeEvent.pointerType !== 'mouse')
+							return;
+						togglePlay();
+					}}
+					onDoubleClick={(event) => {
+						if (event.nativeEvent instanceof PointerEvent && event.nativeEvent.pointerType !== 'mouse')
+							return;
+						fullscreen.toggle();
+					}}
+				/>
+				{opening || state.waiting ? (
+					<div className="pointer-events-none absolute inset-0 grid place-items-center text-white/85">
+						<Spinner size={40} />
+					</div>
+				) : null}
+				{!opening && !state.playing && !error ? (
+					<button
+						type="button"
+						aria-label={t.player.play}
+						onClick={togglePlay}
+						className="absolute top-1/2 left-1/2 grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition-transform duration-150 hover:scale-105"
 					>
-						<div className="relative mb-1 flex items-center">
-							{stream.chapters.length > 1 && duration > 0
-								? stream.chapters
-										.slice(1)
-										.map((chapter) => (
-											<span
-												key={chapter.at_ms}
-												className="pointer-events-none absolute top-1/2 h-2 w-0.5 -translate-y-1/2 bg-white/80"
-												style={{
-													left: `${Math.min(100, (chapter.at_ms / 1000 / duration) * 100)}%`,
-												}}
-											/>
-										))
-								: null}
+						<Play size={34} fill="currentColor" className="ml-1" />
+					</button>
+				) : null}
+				{error ? (
+					<div className="absolute inset-0 grid place-items-center bg-black/80 p-6 text-center text-white">
+						<div className="flex max-w-md flex-col items-center gap-4">
+							<p className="text-body">
+								{error === 'decode'
+									? t.player.cantDecode
+									: error === 'expired'
+										? t.player.expiredLink
+										: t.player.cantOpen}
+							</p>
+							{error === 'decode' && downloads.video ? (
+								<a href={downloads.video}>
+									<Button variant="accent" tabIndex={-1}>
+										<Download size={16} />
+										{t.player.downloadVideo}
+									</Button>
+								</a>
+							) : (
+								<Button variant="accent" onClick={() => void refresh()}>
+									<RefreshCw size={16} />
+									{t.player.reload}
+								</Button>
+							)}
+						</div>
+					</div>
+				) : null}
+
+				<StreamOverlay stream={stream} recording={recording} visible={overlay} />
+
+				{/* Controls */}
+				<div
+					className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 pt-14 pb-2 text-white transition-opacity duration-300 sm:px-5 sm:pb-3 ${overlay ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+				>
+					<Timeline
+						duration={duration}
+						time={shown}
+						chapters={stream.chapters}
+						onSeek={seekTo}
+						onScrub={setScrub}
+					/>
+					<div className="mt-1 flex items-center gap-0.5 sm:gap-1">
+						<PlayerButton label={state.playing ? t.player.pause : t.player.play} onClick={togglePlay}>
+							{state.playing ? (
+								<Pause size={24} fill="currentColor" />
+							) : (
+								<Play size={24} fill="currentColor" />
+							)}
+						</PlayerButton>
+						<PlayerButton
+							label={t.player.back}
+							className="max-[440px]:hidden"
+							onClick={() => {
+								seekBy(-5);
+							}}
+						>
+							<RotateCcw size={21} />
+						</PlayerButton>
+						<PlayerButton
+							label={t.player.forward}
+							className="max-[440px]:hidden"
+							onClick={() => {
+								seekBy(5);
+							}}
+						>
+							<RotateCw size={21} />
+						</PlayerButton>
+						<div className="group/volume flex items-center">
+							<PlayerButton
+								label={prefs.muted ? t.player.unmute : t.player.mute}
+								onClick={() => {
+									prefs.set({ muted: !prefs.muted });
+								}}
+							>
+								<VolumeIcon size={22} />
+							</PlayerButton>
 							<input
 								type="range"
-								className="seek-range"
-								aria-label={t.player.chapters}
+								aria-label={t.player.volume}
+								className="volume-range hidden w-0 opacity-0 transition-[width,opacity] duration-200 group-focus-within/volume:w-24 group-focus-within/volume:opacity-100 group-hover/volume:w-24 group-hover/volume:opacity-100 sm:block"
 								min={0}
-								max={Math.max(1, duration)}
-								step={0.1}
-								value={shown}
-								style={{ '--progress': `${progress}%` } as React.CSSProperties}
+								max={1}
+								step={0.01}
+								value={prefs.muted ? 0 : prefs.volume}
+								style={
+									{ '--level': `${(prefs.muted ? 0 : prefs.volume) * 100}%` } as React.CSSProperties
+								}
 								onChange={(event) => {
-									setScrub(event.target.valueAsNumber);
-								}}
-								onPointerUp={() => {
-									if (scrub !== null) seekTo(scrub);
-									setScrub(null);
-								}}
-								onKeyUp={() => {
-									if (scrub !== null) seekTo(scrub);
-									setScrub(null);
+									prefs.set({ volume: event.target.valueAsNumber, muted: false });
 								}}
 							/>
 						</div>
-						<div className="flex items-center gap-0.5 sm:gap-1">
-							<PlayerButton label={state.playing ? t.player.pause : t.player.play} onClick={togglePlay}>
-								{state.playing ? (
-									<Pause size={22} fill="currentColor" />
-								) : (
-									<Play size={22} fill="currentColor" />
+						<span className="text-ui tabular ml-2 whitespace-nowrap text-white">
+							{formatClock(shown)}
+							<span className="text-white/55 max-sm:hidden"> / {formatClock(duration)}</span>
+						</span>
+						<div className="flex-1" />
+						{recording ? (
+							<PlayerButton label={t.player.reload} onClick={() => void refresh()}>
+								<RefreshCw size={20} />
+							</PlayerButton>
+						) : null}
+						{stream.chapters.length > 1 ? (
+							<Menu
+								label={t.player.chapters}
+								panelClassName="text-ink max-h-[60dvh] overflow-y-auto"
+								trigger={() => (
+									<PlayerButton label={t.player.chapters}>
+										<ListVideo size={21} />
+									</PlayerButton>
 								)}
-							</PlayerButton>
-							<PlayerButton
-								label={t.player.back}
-								className="max-[440px]:hidden"
-								onClick={() => {
-									seekBy(-5);
-								}}
 							>
-								<RotateCcw size={19} />
-							</PlayerButton>
-							<PlayerButton
-								label={t.player.forward}
-								className="max-[440px]:hidden"
-								onClick={() => {
-									seekBy(5);
-								}}
-							>
-								<RotateCw size={19} />
-							</PlayerButton>
-							<div className="group/volume flex items-center">
-								<PlayerButton
-									label={prefs.muted ? t.player.unmute : t.player.mute}
-									onClick={() => {
-										prefs.set({ muted: !prefs.muted });
-									}}
-								>
-									<VolumeIcon size={20} />
-								</PlayerButton>
-								<input
-									type="range"
-									aria-label={t.player.volume}
-									className="volume-range hidden w-0 opacity-0 transition-[width,opacity] duration-200 group-focus-within/volume:w-20 group-focus-within/volume:opacity-100 group-hover/volume:w-20 group-hover/volume:opacity-100 sm:block"
-									min={0}
-									max={1}
-									step={0.01}
-									value={prefs.muted ? 0 : prefs.volume}
-									style={
-										{
-											'--level': `${(prefs.muted ? 0 : prefs.volume) * 100}%`,
-										} as React.CSSProperties
-									}
-									onChange={(event) => {
-										prefs.set({ volume: event.target.valueAsNumber, muted: false });
-									}}
-								/>
-							</div>
-							<span className="text-small tabular ml-1.5 font-mono whitespace-nowrap text-white/90">
-								{formatClock(shown)}
-								<span className="text-white/50 max-sm:hidden"> / {formatClock(duration)}</span>
-							</span>
-							<div className="flex-1" />
-							{recording ? (
-								<PlayerButton label={t.player.reload} onClick={() => void refresh()}>
-									<RefreshCw size={18} />
-								</PlayerButton>
-							) : null}
-							<PlayerButton
-								label={prefs.compressor ? t.player.compressorOn : t.player.compressorOff}
-								pressed={prefs.compressor}
-								onClick={() => {
-									prefs.set({ compressor: !prefs.compressor });
-								}}
-							>
-								<Gauge size={19} />
-							</PlayerButton>
-							<PlayerButton
-								label={chatShown ? t.player.hideChat : t.player.showChat}
-								onClick={() => {
-									prefs.set({ chat: !chatShown });
-								}}
-							>
-								{chatShown ? <MessageSquare size={19} /> : <MessageSquareOff size={19} />}
-							</PlayerButton>
-							{canDownload && downloads.video ? (
-								<Menu
-									label={t.player.download}
-									panelClassName="text-ink"
-									trigger={() => (
-										<PlayerButton label={t.player.download}>
-											<Download size={19} />
-										</PlayerButton>
-									)}
-								>
-									<MenuItem icon={<FileVideo size={15} />} href={downloads.video}>
-										{t.player.downloadVideo}
-									</MenuItem>
-									<MenuItem icon={<FileJson size={15} />} href={downloads.json}>
-										{t.player.downloadChatJson}
-									</MenuItem>
-									<MenuItem icon={<FileText size={15} />} href={downloads.ass}>
-										{t.player.downloadChatAss}
-									</MenuItem>
-									<MenuDivider />
+								{stream.chapters.map((chapter) => (
 									<MenuItem
-										icon={<Download size={15} />}
+										key={chapter.at_ms}
+										icon={
+											chapter.game ? (
+												<img
+													src={boxArt(chapter.game)}
+													alt=""
+													referrerPolicy="no-referrer"
+													className="h-8 w-6 rounded-[2px] object-cover"
+												/>
+											) : (
+												<MonitorPlay size={16} />
+											)
+										}
 										onSelect={() => {
-											downloadAll([downloads.video ?? '', downloads.ass]);
+											seekTo(chapter.at_ms / 1000);
 										}}
 									>
-										{t.player.downloadBoth}
+										<span className="flex min-w-0 flex-col">
+											<span className="truncate font-medium">
+												{chapter.game ?? chapter.title}
+											</span>
+											<span className="text-caption text-muted tabular">
+												{formatClock(chapter.at_ms / 1000)}
+											</span>
+										</span>
 									</MenuItem>
-								</Menu>
-							) : null}
-							<PlayerButton
-								label={fullscreen.active ? t.player.exitFullscreen : t.player.fullscreen}
-								onClick={fullscreen.toggle}
+								))}
+							</Menu>
+						) : null}
+						<PlayerButton
+							label={prefs.compressor ? t.player.compressorOn : t.player.compressorOff}
+							pressed={prefs.compressor}
+							onClick={() => {
+								prefs.set({ compressor: !prefs.compressor });
+							}}
+						>
+							<AudioLines size={21} />
+						</PlayerButton>
+						{canDownload && downloads.video ? (
+							<Menu
+								label={t.player.download}
+								panelClassName="text-ink"
+								trigger={() => (
+									<PlayerButton label={t.player.download}>
+										<Download size={21} />
+									</PlayerButton>
+								)}
 							>
-								{fullscreen.active ? <Minimize size={19} /> : <Maximize size={19} />}
-							</PlayerButton>
-						</div>
+								<MenuItem icon={<FileVideo size={16} />} href={downloads.video}>
+									{t.player.downloadVideo}
+								</MenuItem>
+								<MenuItem icon={<FileJson size={16} />} href={downloads.json}>
+									{t.player.downloadChatJson}
+								</MenuItem>
+								<MenuItem icon={<FileText size={16} />} href={downloads.ass}>
+									{t.player.downloadChatAss}
+								</MenuItem>
+								<MenuDivider />
+								<MenuItem
+									icon={<Download size={16} />}
+									onSelect={() => {
+										downloadAll([downloads.video ?? '', downloads.ass]);
+									}}
+								>
+									{t.player.downloadBoth}
+								</MenuItem>
+							</Menu>
+						) : null}
+						<PlayerButton
+							label={fullscreen.active ? t.player.exitFullscreen : t.player.fullscreen}
+							onClick={fullscreen.toggle}
+						>
+							{fullscreen.active ? <Minimize size={21} /> : <Maximize size={21} />}
+						</PlayerButton>
 					</div>
 				</div>
-
-				{fullscreen.active ? null : <StreamInfo stream={stream} onSeek={seekTo} recording={recording} />}
 			</section>
 
-			{chatShown ? (
-				<aside
-					className="border-line relative flex min-h-0 flex-1 flex-col border-t lg:flex-none lg:border-t-0 lg:border-l"
-					style={{ '--chat-width': `${prefs.chatWidth}px` } as React.CSSProperties}
-				>
-					<div
-						role="separator"
-						aria-orientation="vertical"
-						onPointerDown={startResize}
-						className="hover:bg-accent/40 absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize transition-colors lg:block"
-					/>
-					<div className="border-line text-small text-muted hidden h-10 flex-none items-center justify-between border-b px-4 font-medium lg:flex">
-						{t.player.chat}
-						<span className="tabular">{formatNumber(stream.chat_messages)}</span>
-					</div>
-					<div className="flex min-h-0 flex-1 flex-col lg:w-(--chat-width)">
-						<ChatPanel
-							streamId={stream.id}
-							timeMs={Math.floor(time * 1000)}
-							recording={recording}
-							hasChat={stream.chat_messages > 0 || recording}
-							onSeek={(ms) => {
-								seekTo(ms / 1000);
-							}}
-						/>
-					</div>
-				</aside>
-			) : null}
+			<aside className="border-line relative flex min-h-0 flex-1 flex-col border-t lg:border-t-0 lg:border-l">
+				<div
+					role="separator"
+					aria-orientation="vertical"
+					onPointerDown={startResize}
+					className="hover:bg-accent/40 absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize transition-colors lg:block"
+				/>
+				<ChatPanel
+					streamId={stream.id}
+					timeMs={Math.floor(time * 1000)}
+					recording={recording}
+					hasChat={stream.chat_messages > 0 || recording}
+					count={stream.chat_messages}
+					onSeek={(ms) => {
+						seekTo(ms / 1000);
+					}}
+				/>
+			</aside>
 		</div>
 	);
 }
@@ -596,7 +623,7 @@ function PlayerButton({
 }: {
 	label: string;
 	onClick?: () => void;
-	children: React.ReactNode;
+	children: ReactNode;
 	pressed?: boolean;
 	className?: string;
 }) {
@@ -607,110 +634,91 @@ function PlayerButton({
 			title={label}
 			aria-pressed={pressed}
 			onClick={onClick}
-			className={`touch-target relative grid size-9 flex-none place-items-center rounded-sm text-white/90 sm:size-10 transition-colors duration-150 hover:bg-white/15 hover:text-white aria-pressed:text-[color:var(--accent-text)] ${className}`}
+			className={`touch-target relative grid size-10 flex-none place-items-center rounded-sm text-white/90 transition-colors duration-150 hover:bg-white/15 hover:text-white aria-pressed:text-[color:var(--accent-text)] sm:size-11 ${className}`}
 		>
 			{children}
-			{pressed ? <span className="absolute bottom-1.5 size-1 rounded-full bg-current" /> : null}
+			{pressed ? <span className="absolute bottom-1 size-1 rounded-full bg-current" /> : null}
 		</button>
 	);
 }
 
-function StreamInfo({
-	stream,
-	onSeek,
-	recording,
-}: {
-	stream: StreamDetail;
-	onSeek: (seconds: number) => void;
-	recording: boolean;
-}) {
-	const t = useT();
-	const facts = [
-		formatDate(stream.started_at),
-		formatDuration(stream.duration_ms),
-		formatBytes(stream.size_bytes),
-		formatQuality(stream.height, stream.fps, stream.video_codec),
-		stream.chat_messages > 0 ? t.stream.messages(formatNumber(stream.chat_messages)) : null,
-		stream.ads_skipped_ms > 0 ? t.stream.ads(formatDuration(stream.ads_skipped_ms)) : null,
-		stream.gaps > 0 ? t.stream.gaps(stream.gaps) : null,
-	].filter(Boolean);
+function Fact({ icon, children }: { icon: ReactNode; children: ReactNode }) {
 	return (
-		<div className="flex-none overflow-y-auto px-4 py-3 sm:px-5 lg:max-h-[38%] lg:py-4">
+		<span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+			<span className="opacity-75">{icon}</span>
+			{children}
+		</span>
+	);
+}
+
+/** Who and what, laid over the top of the picture. */
+function StreamOverlay({ stream, recording, visible }: { stream: StreamDetail; recording: boolean; visible: boolean }) {
+	const t = useT();
+	const login = stream.streamer_login;
+	const quality = formatQuality(stream.height, stream.fps, stream.video_codec);
+	return (
+		<div
+			className={`absolute inset-x-0 top-0 bg-gradient-to-b from-black/85 via-black/45 to-transparent px-3 pt-3 pb-16 text-white transition-opacity duration-300 sm:px-5 sm:pt-4 ${visible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+		>
 			<div className="flex items-start gap-3">
 				<Link
-					to="/streamers/$id"
-					params={{ id: String(stream.streamer_id) }}
-					className="flex-none rounded-full"
+					to="/$login"
+					params={{ login }}
 					aria-label={stream.streamer_name}
+					className="flex flex-none items-center gap-0.5 rounded-full text-white/80 hover:text-white"
 				>
-					<Avatar src={stream.streamer_avatar} name={stream.streamer_name} size={40} live={recording} />
+					<ChevronLeft size={22} className="max-sm:hidden" />
+					<Avatar src={stream.streamer_avatar} name={stream.streamer_name} size={44} live={recording} />
 				</Link>
 				<div className="min-w-0 flex-1">
-					<h1 className="text-body sm:text-lead line-clamp-2 font-semibold" title={stream.title}>
+					<h1
+						className="text-body sm:text-lead line-clamp-2 font-semibold [text-shadow:0_1px_3px_rgb(0_0_0/0.5)]"
+						title={stream.title}
+					>
 						{stream.title || t.stream.untitled}
 					</h1>
-					<p className="text-small text-ink-2 mt-0.5 flex flex-wrap items-center gap-x-1.5">
-						<Link
-							to="/streamers/$id"
-							params={{ id: String(stream.streamer_id) }}
-							className="hover:text-accent-text inline-flex items-center gap-0.5 font-medium"
-						>
-							<ChevronLeft size={14} className="-ml-0.5" />
+					<div className="text-small mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-white/80">
+						<Link to="/$login" params={{ login }} className="font-semibold text-white hover:underline">
 							{stream.streamer_name}
 						</Link>
-						{stream.game ? <span className="text-muted">· {stream.game}</span> : null}
-					</p>
-					<p className="text-caption text-muted tabular mt-1">{facts.join(' · ')}</p>
-					{recording ? <p className="text-caption text-live mt-1 font-medium">{t.player.growing}</p> : null}
+						{stream.game ? <Fact icon={<Gamepad2 size={15} />}>{stream.game}</Fact> : null}
+						<Fact icon={<CalendarDays size={15} />}>{formatDate(stream.started_at)}</Fact>
+						<span className="max-md:hidden contents">
+							{quality ? <Fact icon={<MonitorPlay size={15} />}>{quality}</Fact> : null}
+							<Fact icon={<HardDrive size={15} />}>{formatBytes(stream.size_bytes)}</Fact>
+							{stream.chat_messages > 0 ? (
+								<Fact icon={<MessageSquare size={15} />}>{formatNumber(stream.chat_messages)}</Fact>
+							) : null}
+							{stream.ads_skipped_ms > 0 ? (
+								<Fact icon={<FastForward size={15} />}>
+									{t.stream.ads(formatDuration(stream.ads_skipped_ms))}
+								</Fact>
+							) : null}
+						</span>
+					</div>
+					{recording ? <p className="text-small text-live mt-1 font-semibold">{t.player.growing}</p> : null}
 					{stream.error ? (
-						<p className="text-caption text-danger mt-1">
+						<p className="text-small mt-1 text-red-300">
 							{t.stream.error}: {stream.error}
 						</p>
 					) : null}
 				</div>
-			</div>
-			{stream.parts.length > 1 ? (
-				<div className="mt-3 flex flex-wrap gap-1.5">
-					{stream.parts.map(([id, part]) => (
-						<Link
-							key={id}
-							to="/streams/$id"
-							params={{ id: String(id) }}
-							aria-current={id === stream.id ? 'page' : undefined}
-							className="text-small bg-surface hover:bg-surface-2 aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent-text rounded-xs px-2.5 py-1 font-medium"
-						>
-							{t.stream.part(part)}
-						</Link>
-					))}
-				</div>
-			) : null}
-			{stream.chapters.length > 1 ? (
-				<div className="mt-4">
-					<h2 className="text-caption text-muted mb-1.5 font-medium">{t.player.chapters}</h2>
-					<ol className="flex flex-col">
-						{stream.chapters.map((chapter) => (
-							<li key={chapter.at_ms}>
-								<button
-									type="button"
-									onClick={() => {
-										onSeek(chapter.at_ms / 1000);
-									}}
-									className="text-small hover:bg-surface flex w-full items-baseline gap-3 rounded-xs px-2 py-1.5 text-left"
-								>
-									<span className="text-accent-text tabular w-16 flex-none font-mono">
-										{formatClock(chapter.at_ms / 1000)}
-									</span>
-									<span className="min-w-0 truncate">
-										{chapter.game ? <span className="font-medium">{chapter.game}</span> : null}
-										{chapter.game && chapter.title ? <span className="text-muted"> · </span> : null}
-										<span className="text-ink-2">{chapter.title}</span>
-									</span>
-								</button>
-							</li>
+				{stream.parts.length > 1 ? (
+					<div className="flex flex-none flex-wrap justify-end gap-1.5">
+						{stream.parts.map(([id, part]) => (
+							<Link
+								key={id}
+								to="/$login/$id"
+								params={{ login, id: String(id) }}
+								aria-current={id === stream.id ? 'page' : undefined}
+								className="text-small rounded-full bg-white/15 px-3 py-1 font-medium backdrop-blur-sm hover:bg-white/25 aria-[current=page]:bg-white aria-[current=page]:text-black"
+							>
+								{t.stream.part(part)}
+							</Link>
 						))}
-					</ol>
-				</div>
-			) : null}
+					</div>
+				) : null}
+			</div>
 		</div>
 	);
 }

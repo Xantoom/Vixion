@@ -16,7 +16,13 @@ export function useCan(permission: Permission): boolean {
 	return me.admin || me.permissions.includes(permission);
 }
 
-/** The id in `/streamers/$id` or `/streams/$id`, read from the address. */
-export function useRouteId(): string {
-	return useRouterState({ select: (state) => state.location.pathname.split('/')[2] ?? '' });
+/** `login` and `id` from `/$login/$id`, read from the address. */
+export function useRouteParams(): { login: string; id: string } {
+	return useRouterState({
+		select: (state) => {
+			const [, login = '', id = ''] = state.location.pathname.split('/');
+			return { login: decodeURIComponent(login).toLowerCase(), id };
+		},
+		structuralSharing: true,
+	});
 }

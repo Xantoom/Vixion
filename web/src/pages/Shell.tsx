@@ -3,16 +3,17 @@ import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import {
 	BarChart3,
 	Check,
-	Globe,
 	KeyRound,
 	LogOut,
 	Monitor,
 	Moon,
 	ScrollText,
 	Settings,
+	Search,
 	Sun,
 	Tv,
 	Users,
+	X,
 } from 'lucide-react';
 import { type FormEvent, type ReactNode, Suspense, useState } from 'react';
 import { LOCALES, type Locale, useLocale, useT } from '@/i18n';
@@ -20,13 +21,15 @@ import { type Alert, type Permission, api } from '@/lib/api';
 import { meQuery, useCan, useMe } from '@/lib/session';
 import { type Theme, usePrefs } from '@/stores/prefs';
 import { Avatar } from '@/ui/Avatar';
-import { Button } from '@/ui/Button';
+import { Button, IconButton } from '@/ui/Button';
 import { Dialog } from '@/ui/Dialog';
 import { Field, TextInput } from '@/ui/Field';
+import { Flag } from '@/ui/Flag';
 import { Logo } from '@/ui/Logo';
 import { Menu, MenuDivider, MenuItem, MenuLabel } from '@/ui/Menu';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
+import { ChannelSearch } from './ChannelSearch';
 
 interface NavEntry {
 	to: '/' | '/stats' | '/logs' | '/settings' | '/users';
@@ -39,11 +42,11 @@ function useNav(): NavEntry[] {
 	const t = useT();
 	const me = useMe();
 	const entries: NavEntry[] = [
-		{ to: '/', label: t.nav.streamers, icon: <Tv size={18} /> },
-		{ to: '/stats', label: t.nav.stats, icon: <BarChart3 size={18} />, permission: 'stats.view' },
-		{ to: '/logs', label: t.nav.logs, icon: <ScrollText size={18} />, permission: 'logs.view' },
-		{ to: '/users', label: t.nav.users, icon: <Users size={18} />, permission: 'users.manage' },
-		{ to: '/settings', label: t.nav.settings, icon: <Settings size={18} />, permission: 'settings.manage' },
+		{ to: '/', label: t.nav.streamers, icon: <Tv size={19} /> },
+		{ to: '/stats', label: t.nav.stats, icon: <BarChart3 size={19} />, permission: 'stats.view' },
+		{ to: '/logs', label: t.nav.logs, icon: <ScrollText size={19} />, permission: 'logs.view' },
+		{ to: '/users', label: t.nav.users, icon: <Users size={19} />, permission: 'users.manage' },
+		{ to: '/settings', label: t.nav.settings, icon: <Settings size={19} />, permission: 'settings.manage' },
 	];
 	return entries.filter((entry) => !entry.permission || me.admin || me.permissions.includes(entry.permission));
 }
@@ -61,7 +64,7 @@ function useOpenAlerts(): number {
 }
 
 function isActive(path: string, to: string): boolean {
-	if (to === '/') return path === '/' || path.startsWith('/streamers') || path.startsWith('/streams');
+	if (to === '/') return !['/stats', '/logs', '/users', '/settings'].some((page) => path.startsWith(page));
 	return path.startsWith(to);
 }
 
@@ -70,34 +73,77 @@ export function Shell() {
 	const t = useT();
 	const path = useRouterState({ select: (state) => state.location.pathname });
 	const alerts = useOpenAlerts();
+	const [searching, setSearching] = useState(false);
 	// The player takes the whole screen on a phone: no tab bar under it.
-	const studio = path.startsWith('/streams/');
+	const studio = /^\/[^/]+\/\d+$/.test(path);
 
 	return (
 		<div className="flex min-h-dvh flex-col">
 			<header className="bg-bg/85 border-line sticky top-0 z-40 border-b backdrop-blur-md">
-				<div className="mx-auto flex h-14 max-w-[110rem] items-center gap-2 px-3 sm:px-5">
-					<Link to="/" className="mr-3 flex items-center gap-2.5 rounded-sm" aria-label="Vixion">
-						<Logo size={28} />
-						<span className="text-lead hidden font-semibold tracking-tight sm:inline">Vixion</span>
-					</Link>
-					<nav className="hidden items-center gap-0.5 md:flex" aria-label={t.nav.menu}>
-						{nav.map((entry) => (
-							<Link
-								key={entry.to}
-								to={entry.to}
-								aria-current={isActive(path, entry.to) ? 'page' : undefined}
-								className="text-ui text-muted hover:text-ink aria-[current=page]:text-ink aria-[current=page]:bg-surface relative flex h-9 items-center gap-2 rounded-sm px-3 font-medium transition-colors duration-150"
+				<div className="mx-auto flex h-16 max-w-[120rem] items-center gap-2 px-3 sm:gap-3 sm:px-5">
+					{searching ? (
+						<>
+							<ChannelSearch
+								onDone={() => {
+									setSearching(false);
+								}}
+							/>
+							<IconButton
+								label={t.common.close}
+								onClick={() => {
+									setSearching(false);
+								}}
 							>
-								{entry.label}
-								{entry.to === '/logs' && alerts > 0 ? (
-									<span className="bg-danger size-1.5 rounded-full" aria-hidden />
-								) : null}
+								<X size={20} />
+							</IconButton>
+						</>
+					) : (
+						<>
+							<Link to="/" className="flex flex-none items-center gap-2.5 rounded-sm" aria-label="Vixion">
+								<Logo size={30} />
+								<span className="text-lead hidden font-semibold tracking-tight lg:inline">Vixion</span>
 							</Link>
-						))}
-					</nav>
-					<div className="flex-1" />
-					<AccountMenu />
+							<nav className="ml-2 hidden items-center gap-0.5 md:flex" aria-label={t.nav.menu}>
+								{nav.map((entry) => (
+									<Link
+										key={entry.to}
+										to={entry.to}
+										title={entry.label}
+										aria-label={entry.label}
+										aria-current={isActive(path, entry.to) ? 'page' : undefined}
+										className="text-ui text-muted hover:text-ink hover:bg-surface aria-[current=page]:text-ink aria-[current=page]:bg-surface relative flex h-10 items-center gap-2 rounded-sm px-2.5 font-medium transition-colors duration-150 xl:px-3"
+									>
+										{entry.icon}
+										<span className="hidden xl:inline">{entry.label}</span>
+										{entry.to === '/logs' && alerts > 0 ? (
+											<span
+												className="bg-danger absolute top-2 right-1.5 size-2 rounded-full"
+												aria-hidden
+											/>
+										) : null}
+									</Link>
+								))}
+							</nav>
+							<div className="mx-auto hidden w-full max-w-xl px-2 sm:block">
+								<ChannelSearch />
+							</div>
+							<div className="flex-1 sm:hidden" />
+							<IconButton
+								label={t.search.label}
+								className="sm:hidden"
+								onClick={() => {
+									setSearching(true);
+								}}
+							>
+								<Search size={20} />
+							</IconButton>
+							<div className="hidden items-center gap-2 md:flex">
+								<ThemeSwitch />
+								<LocaleSwitch />
+							</div>
+							<AccountMenu />
+						</>
+					)}
 				</div>
 			</header>
 			<main className={`flex-1 ${studio ? '' : 'pb-20 md:pb-0'}`}>
@@ -115,7 +161,7 @@ export function Shell() {
 							key={entry.to}
 							to={entry.to}
 							aria-current={isActive(path, entry.to) ? 'page' : undefined}
-							className="text-muted aria-[current=page]:text-accent-text relative flex h-16 flex-1 flex-col items-center justify-center gap-1 text-[0.6875rem] font-medium"
+							className="text-muted aria-[current=page]:text-accent-text relative flex h-16 flex-1 flex-col items-center justify-center gap-1 text-[0.75rem] font-medium"
 						>
 							{entry.icon}
 							<span className="max-w-full truncate px-1">{entry.label}</span>
@@ -130,6 +176,92 @@ export function Shell() {
 	);
 }
 
+/** A row of icons where one is chosen: the theme, the language. */
+function Choice<T extends string>({
+	label,
+	value,
+	options,
+	onChange,
+}: {
+	label: string;
+	value: T;
+	options: { value: T; label: string; icon: ReactNode }[];
+	onChange: (value: T) => void;
+}) {
+	return (
+		<div role="radiogroup" aria-label={label} className="bg-surface flex items-center rounded-full p-1">
+			{options.map((option) => (
+				<button
+					key={option.value}
+					type="button"
+					role="radio"
+					aria-checked={value === option.value}
+					aria-label={option.label}
+					title={option.label}
+					onClick={() => {
+						onChange(option.value);
+					}}
+					className="text-muted hover:text-ink aria-checked:bg-bg aria-checked:text-ink grid size-8 place-items-center rounded-full transition-[color,background-color,box-shadow] duration-150 aria-checked:shadow-(--shadow-card)"
+				>
+					{option.icon}
+				</button>
+			))}
+		</div>
+	);
+}
+
+function useThemeOptions() {
+	const t = useT();
+	return [
+		{ value: 'system' as Theme, label: t.nav.themeSystem, icon: <Monitor size={16} /> },
+		{ value: 'light' as Theme, label: t.nav.themeLight, icon: <Sun size={16} /> },
+		{ value: 'dark' as Theme, label: t.nav.themeDark, icon: <Moon size={16} /> },
+	];
+}
+
+function usePickLocale() {
+	const setPrefs = usePrefs((state) => state.set);
+	return (next: Locale) => {
+		setPrefs({ locale: next });
+		// Remembered on the account too, for other devices.
+		void api.patch('/me', { locale: next }).catch(() => undefined);
+	};
+}
+
+function ThemeSwitch() {
+	const t = useT();
+	const theme = usePrefs((state) => state.theme);
+	const setPrefs = usePrefs((state) => state.set);
+	return (
+		<Choice
+			label={t.nav.theme}
+			value={theme}
+			options={useThemeOptions()}
+			onChange={(value) => {
+				setPrefs({ theme: value });
+			}}
+		/>
+	);
+}
+
+function LocaleSwitch() {
+	const t = useT();
+	const locale = useLocale();
+	const pick = usePickLocale();
+	return (
+		<Choice
+			label={t.nav.language}
+			value={locale}
+			options={(Object.keys(LOCALES) as Locale[]).map((value) => ({
+				value,
+				label: LOCALES[value],
+				icon: <Flag locale={value} />,
+			}))}
+			onChange={pick}
+		/>
+	);
+}
+
 function AccountMenu() {
 	const t = useT();
 	const me = useMe();
@@ -137,13 +269,9 @@ function AccountMenu() {
 	const theme = usePrefs((state) => state.theme);
 	const locale = useLocale();
 	const setPrefs = usePrefs((state) => state.set);
+	const pickLocale = usePickLocale();
+	const themes = useThemeOptions();
 	const [password, setPassword] = useState(false);
-
-	const pickLocale = (next: Locale) => {
-		setPrefs({ locale: next });
-		// Remembered on the account too, for other devices.
-		void api.patch('/me', { locale: next }).catch(() => undefined);
-	};
 
 	const signOut = async () => {
 		await api.post('/auth/logout').catch(() => undefined);
@@ -151,12 +279,6 @@ function AccountMenu() {
 		client.setQueryData(['setup'], { needed: false });
 		client.setQueryData(meQuery.queryKey, null);
 	};
-
-	const themes: { value: Theme; label: string; icon: ReactNode }[] = [
-		{ value: 'system', label: t.nav.themeSystem, icon: <Monitor size={15} /> },
-		{ value: 'light', label: t.nav.themeLight, icon: <Sun size={15} /> },
-		{ value: 'dark', label: t.nav.themeDark, icon: <Moon size={15} /> },
-	];
 
 	return (
 		<>
@@ -166,10 +288,10 @@ function AccountMenu() {
 					<button
 						type="button"
 						aria-label={t.nav.account}
-						className={`hover:bg-surface flex h-10 items-center gap-2 rounded-sm pr-3 pl-1.5 transition-colors ${open ? 'bg-surface' : ''}`}
+						className={`hover:bg-surface flex h-11 flex-none items-center gap-2.5 rounded-full pr-1.5 pl-1.5 transition-colors lg:pr-4 ${open ? 'bg-surface' : ''}`}
 					>
-						<Avatar src={null} name={me.username} size={28} />
-						<span className="text-ui hidden max-w-32 truncate font-medium sm:inline">{me.username}</span>
+						<Avatar src={null} name={me.username} size={32} />
+						<span className="text-ui hidden max-w-36 truncate font-medium lg:inline">{me.username}</span>
 					</button>
 				)}
 			>
@@ -177,46 +299,48 @@ function AccountMenu() {
 					<div className="text-ui font-semibold">{me.username}</div>
 					<div className="text-caption text-muted">{t.users.roleNames[me.role] ?? me.role}</div>
 				</div>
-				<MenuDivider />
-				<MenuLabel>{t.nav.theme}</MenuLabel>
-				{themes.map((option) => (
-					<MenuItem
-						key={option.value}
-						icon={option.icon}
-						checked={theme === option.value}
-						onSelect={() => {
-							setPrefs({ theme: option.value });
-						}}
-					>
-						{option.label}
-					</MenuItem>
-				))}
-				<MenuLabel>{t.nav.language}</MenuLabel>
-				{(Object.keys(LOCALES) as Locale[]).map((value) => (
-					<MenuItem
-						key={value}
-						icon={<Globe size={15} />}
-						checked={locale === value}
-						onSelect={() => {
-							pickLocale(value);
-						}}
-					>
-						{LOCALES[value]}
-					</MenuItem>
-				))}
+				<div className="md:hidden">
+					<MenuDivider />
+					<MenuLabel>{t.nav.theme}</MenuLabel>
+					{themes.map((option) => (
+						<MenuItem
+							key={option.value}
+							icon={option.icon}
+							checked={theme === option.value}
+							onSelect={() => {
+								setPrefs({ theme: option.value });
+							}}
+						>
+							{option.label}
+						</MenuItem>
+					))}
+					<MenuLabel>{t.nav.language}</MenuLabel>
+					{(Object.keys(LOCALES) as Locale[]).map((value) => (
+						<MenuItem
+							key={value}
+							icon={<Flag locale={value} size={16} />}
+							checked={locale === value}
+							onSelect={() => {
+								pickLocale(value);
+							}}
+						>
+							{LOCALES[value]}
+						</MenuItem>
+					))}
+				</div>
 				<MenuDivider />
 				<MenuItem
-					icon={<KeyRound size={15} />}
+					icon={<KeyRound size={16} />}
 					onSelect={() => {
 						setPassword(true);
 					}}
 				>
 					{t.nav.password}
 				</MenuItem>
-				<MenuItem icon={<LogOut size={15} />} onSelect={() => void signOut()}>
+				<MenuItem icon={<LogOut size={16} />} onSelect={() => void signOut()}>
 					{t.nav.signOut}
 				</MenuItem>
-				<div className="text-caption text-muted px-2.5 pt-1.5 pb-1 font-mono">{t.nav.version(me.version)}</div>
+				<div className="text-caption text-muted px-2.5 pt-1.5 pb-1">{t.nav.version(me.version)}</div>
 			</Menu>
 			<PasswordDialog
 				open={password}
