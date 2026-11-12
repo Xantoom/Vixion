@@ -159,6 +159,7 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
     let alerts = alerts::Alerts::new(db.clone(), settings.clone(), http.clone());
     let app: AppState = Arc::new(App {
         twitch: twitch::api::TwitchApi::new(http.clone()),
+        chat_assets: twitch::emotes::ChatAssetCache::default(),
         http,
         alerts,
         settings,

@@ -3,6 +3,8 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 
 use super::streams::{SUMMARY_COLUMNS, StreamSummary, summary_from_row};
@@ -12,7 +14,7 @@ use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::recorder::LiveProgress;
 use crate::recorder::retention::delete_stream;
-use crate::twitch::api::valid_login;
+use crate::twitch::api::{Profile, SearchHit, valid_login};
 
 #[derive(Debug, Serialize)]
 pub struct Streamer {
@@ -21,6 +23,9 @@ pub struct Streamer {
     login: String,
     display_name: String,
     avatar_url: Option<String>,
+    banner_url: Option<String>,
+    /// The newest recording with a picture, for the streamer's cover.
+    cover_stream_id: Option<i64>,
     monitored: bool,
     retention_days: Option<i64>,
     live: Option<LiveInfo>,
@@ -36,12 +41,15 @@ pub struct Streamer {
 struct LiveInfo {
     title: Option<String>,
     game: Option<String>,
+    viewers: Option<i64>,
     since: i64,
 }
 
 const STREAMER_QUERY: &str = "SELECT st.id, st.twitch_id, st.login, st.display_name, st.avatar_url, st.monitored,
     st.retention_days, st.live_title, st.live_game, st.live_since, st.created_at,
-    COUNT(s.id), COALESCE(SUM(s.size_bytes), 0), COALESCE(SUM(s.duration_ms), 0), MAX(s.started_at)
+    COUNT(s.id), COALESCE(SUM(s.size_bytes), 0), COALESCE(SUM(s.duration_ms), 0), MAX(s.started_at),
+    st.banner_url, st.live_viewers,
+    (SELECT c.id FROM streams c WHERE c.streamer_id = st.id AND c.has_thumbnail ORDER BY c.started_at DESC LIMIT 1)
     FROM streamers st LEFT JOIN streams s ON s.streamer_id = st.id";
 
 fn streamer_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Streamer> {
@@ -52,11 +60,14 @@ fn streamer_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Streamer> {
         login: row.get(2)?,
         display_name: row.get(3)?,
         avatar_url: row.get(4)?,
+        banner_url: row.get(15)?,
+        cover_stream_id: row.get(17)?,
         monitored: row.get::<_, i64>(5)? != 0,
         retention_days: row.get(6)?,
         live: live_since.map(|since| LiveInfo {
             title: row.get(7).ok().flatten(),
             game: row.get(8).ok().flatten(),
+            viewers: row.get(16).ok().flatten(),
             since,
         }),
         recording: None,
@@ -88,32 +99,97 @@ pub async fn list(State(app): State<AppState>, user: CurrentUser) -> AppResult<J
 }
 
 #[derive(Serialize)]
-pub struct StreamerDetail {
-    streamer: Streamer,
+pub struct ChannelPage {
+    /// What Twitch says of the channel; null when Twitch can't be reached.
+    profile: Option<Profile>,
+    /// The channel as watched here; null when it isn't.
+    streamer: Option<Streamer>,
     streams: Vec<StreamSummary>,
 }
 
-/// A streamer and their recordings, newest first.
-pub async fn detail(
+/// A channel's page by its login: Twitch's profile, and what was recorded of it if it is watched.
+pub async fn channel(
     State(app): State<AppState>,
     user: CurrentUser,
-    Path(id): Path<i64>,
-) -> AppResult<Json<StreamerDetail>> {
+    Path(login): Path<String>,
+) -> AppResult<Json<ChannelPage>> {
     user.require("streams.view")?;
-    let (mut streamer, streams) = app
-        .db
-        .read(move |conn| {
-            let streamer =
-                conn.query_row(&format!("{STREAMER_QUERY} WHERE st.id = ?1 GROUP BY st.id"), [id], streamer_from_row)?;
+    let login = login.to_ascii_lowercase();
+    if !valid_login(&login) {
+        return Err(AppError::not_found());
+    }
+    let key = login.clone();
+    let (local, profile) = tokio::join!(
+        app.db.read(move |conn| {
+            let streamer = conn
+                .query_row(&format!("{STREAMER_QUERY} WHERE st.login = ?1 GROUP BY st.id"), [&key], streamer_from_row)
+                .optional()?;
+            let Some(streamer) = streamer else { return Ok((None, Vec::new())) };
             let mut statement = conn.prepare_cached(&format!(
                 "SELECT {SUMMARY_COLUMNS} FROM streams s WHERE s.streamer_id = ?1 ORDER BY s.started_at DESC, s.part DESC"
             ))?;
-            let rows = statement.query_map([id], summary_from_row)?;
-            Ok((streamer, rows.collect::<Result<Vec<_>, _>>()?))
+            let rows = statement.query_map([streamer.id], summary_from_row)?;
+            Ok((Some(streamer), rows.collect::<Result<Vec<_>, _>>()?))
+        }),
+        app.twitch.profile(&login),
+    );
+    let (mut streamer, streams) = local?;
+    let profile = profile.unwrap_or_else(|error| {
+        tracing::debug!(%error, %login, "no Twitch profile");
+        None
+    });
+    if streamer.is_none() && profile.is_none() {
+        return Err(AppError::not_found());
+    }
+    if let Some(streamer) = &mut streamer {
+        streamer.recording = app.recorder.live().remove(&streamer.id);
+    }
+    Ok(Json(ChannelPage { profile, streamer, streams }))
+}
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    q: String,
+}
+
+/// Twitch channels matching what is typed in the search box.
+pub async fn search(
+    State(app): State<AppState>,
+    user: CurrentUser,
+    Query(query): Query<SearchQuery>,
+) -> AppResult<Json<Vec<SearchHit>>> {
+    user.require("streams.view")?;
+    let q = query.q.trim();
+    if q.is_empty() || q.len() > 50 {
+        return Ok(Json(Vec::new()));
+    }
+    let hits = app
+        .twitch
+        .search(q)
+        .await
+        .map_err(|error| AppError::new(StatusCode::BAD_GATEWAY, "upstream", error.to_string()))?;
+    Ok(Json(hits))
+}
+
+/// Badge pictures and third-party emotes for a recording's chat.
+pub async fn chat_assets(
+    State(app): State<AppState>,
+    user: CurrentUser,
+    Path(stream_id): Path<i64>,
+) -> AppResult<Response> {
+    user.require("streams.view")?;
+    let channel_id: String = app
+        .db
+        .read(move |conn| {
+            Ok(conn.query_row(
+                "SELECT st.twitch_id FROM streams s JOIN streamers st ON st.id = s.streamer_id WHERE s.id = ?1",
+                [stream_id],
+                |row| row.get(0),
+            )?)
         })
         .await?;
-    streamer.recording = app.recorder.live().remove(&id);
-    Ok(Json(StreamerDetail { streamer, streams }))
+    let assets = app.chat_assets.get(&app.twitch, &app.http, &channel_id).await;
+    Ok(Json(&*assets).into_response())
 }
 
 #[derive(Deserialize)]

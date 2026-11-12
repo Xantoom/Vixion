@@ -209,14 +209,26 @@ async fn update_streamer(app: &AppState, streamer_id: i64, channel: &Channel) {
         live.map(|stream| {
             stream.created_at.as_deref().and_then(crate::twitch::hls::parse_iso8601).unwrap_or_else(now_ms)
         }),
+        channel.banner_image_url.clone(),
+        live.and_then(|stream| stream.viewers_count),
     );
     let result = app
         .db
         .write(move |conn| {
             conn.execute(
                 "UPDATE streamers SET login = ?2, display_name = ?3, avatar_url = ?4, live_title = ?5, live_game = ?6,
-                 live_since = ?7 WHERE id = ?1",
-                rusqlite::params![streamer_id, values.0, values.1, values.2, values.3, values.4, values.5],
+                 live_since = ?7, banner_url = ?8, live_viewers = ?9 WHERE id = ?1",
+                rusqlite::params![
+                    streamer_id,
+                    values.0,
+                    values.1,
+                    values.2,
+                    values.3,
+                    values.4,
+                    values.5,
+                    values.6,
+                    values.7
+                ],
             )?;
             Ok(())
         })

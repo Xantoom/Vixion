@@ -12,7 +12,8 @@ use rusqlite::{Connection, OpenFlags};
 use crate::error::AppError;
 
 /// Schema versions, applied in order. Never edit a shipped entry: append a new one.
-const MIGRATIONS: &[&str] = &[include_str!("../migrations/001_initial.sql")];
+const MIGRATIONS: &[&str] =
+    &[include_str!("../migrations/001_initial.sql"), include_str!("../migrations/002_channel_art.sql")];
 
 const READERS: usize = 3;
 

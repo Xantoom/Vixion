@@ -5,7 +5,9 @@
 
 use std::time::Duration;
 
-use serde::Deserialize;
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::hls::{self, Variant};
@@ -64,6 +66,8 @@ pub struct LiveStream {
     pub game: Option<Game>,
     #[serde(default, rename = "previewImageURL")]
     pub preview_image_url: Option<String>,
+    #[serde(default)]
+    pub viewers_count: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -79,6 +83,8 @@ pub struct Channel {
     pub display_name: String,
     #[serde(default, rename = "profileImageURL")]
     pub profile_image_url: Option<String>,
+    #[serde(default, rename = "bannerImageURL")]
+    pub banner_image_url: Option<String>,
     #[serde(default)]
     pub stream: Option<LiveStream>,
 }
@@ -90,7 +96,7 @@ impl Channel {
     }
 }
 
-const CHANNEL_FIELDS: &str = "id login displayName profileImageURL(width: 300) \
+const CHANNEL_FIELDS: &str = "id login displayName profileImageURL(width: 300) bannerImageURL \
     stream { id title createdAt type viewersCount game { name } previewImageURL(width: 640, height: 360) }";
 
 #[derive(Clone)]
@@ -231,6 +237,174 @@ impl TwitchApi {
             return Err(TwitchError::Status(response.status().as_u16()));
         }
         Ok(response.bytes().await?)
+    }
+}
+
+/// A channel found by name, for the search box.
+#[derive(Debug, Serialize)]
+pub struct SearchHit {
+    pub login: String,
+    pub display_name: String,
+    pub avatar_url: Option<String>,
+    pub followers: i64,
+    pub live: bool,
+    pub game: Option<String>,
+}
+
+/// What a channel page shows of a channel, watched or not.
+#[derive(Debug, Serialize)]
+pub struct Profile {
+    pub id: String,
+    pub login: String,
+    pub display_name: String,
+    pub avatar_url: Option<String>,
+    pub banner_url: Option<String>,
+    pub description: Option<String>,
+    pub followers: i64,
+    pub partner: bool,
+    pub created_at: Option<i64>,
+    pub live: Option<ProfileLive>,
+    pub last_broadcast: Option<i64>,
+    /// Past broadcasts Twitch still keeps.
+    pub videos: Vec<Video>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProfileLive {
+    pub title: Option<String>,
+    pub game: Option<String>,
+    pub viewers: i64,
+    pub since: Option<i64>,
+    pub preview_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Video {
+    pub id: String,
+    pub title: String,
+    pub duration_s: i64,
+    pub created_at: Option<i64>,
+    pub views: i64,
+    pub thumbnail_url: Option<String>,
+    pub game: Option<String>,
+}
+
+fn text(value: &Value, pointer: &str) -> Option<String> {
+    value.pointer(pointer).and_then(Value::as_str).filter(|text| !text.is_empty()).map(str::to_owned)
+}
+
+fn number(value: &Value, pointer: &str) -> i64 {
+    value.pointer(pointer).and_then(Value::as_i64).unwrap_or(0)
+}
+
+fn time(value: &Value, pointer: &str) -> Option<i64> {
+    value.pointer(pointer).and_then(Value::as_str).and_then(super::hls::parse_iso8601)
+}
+
+impl TwitchApi {
+    /// Channels whose name starts like the query, the most followed first.
+    pub async fn search(&self, query: &str) -> Result<Vec<SearchHit>, TwitchError> {
+        let body = json!({
+            "query": "query($q: String!) { searchUsers(userQuery: $q, first: 8) { edges { node { \
+                login displayName profileImageURL(width: 70) followers { totalCount } stream { id game { name } } } } } }",
+            "variables": { "q": query },
+        });
+        let value = self.gql(body, None).await?;
+        let edges = value.pointer("/data/searchUsers/edges").and_then(Value::as_array).cloned().unwrap_or_default();
+        Ok(edges
+            .iter()
+            .filter_map(|edge| {
+                let node = edge.get("node")?;
+                Some(SearchHit {
+                    login: text(node, "/login")?,
+                    display_name: text(node, "/displayName")?,
+                    avatar_url: text(node, "/profileImageURL"),
+                    followers: number(node, "/followers/totalCount"),
+                    live: node.get("stream").is_some_and(|stream| !stream.is_null()),
+                    game: text(node, "/stream/game/name"),
+                })
+            })
+            .collect())
+    }
+
+    /// A channel's public page: who they are, whether they are live, their recent broadcasts.
+    pub async fn profile(&self, login: &str) -> Result<Option<Profile>, TwitchError> {
+        let body = json!({
+            "query": "query($login: String!) { user(login: $login) { id login displayName description \
+                profileImageURL(width: 300) bannerImageURL createdAt followers { totalCount } roles { isPartner } \
+                lastBroadcast { startedAt } \
+                stream { id title createdAt type viewersCount game { name } previewImageURL(width: 640, height: 360) } \
+                videos(first: 12, type: ARCHIVE, sort: TIME) { edges { node { id title lengthSeconds createdAt \
+                viewCount previewThumbnailURL(width: 640, height: 360) game { name } } } } } }",
+            "variables": { "login": login },
+        });
+        let value = self.gql(body, None).await?;
+        let Some(user) = value.pointer("/data/user").filter(|user| !user.is_null()) else { return Ok(None) };
+        let (Some(id), Some(login), Some(display_name)) =
+            (text(user, "/id"), text(user, "/login"), text(user, "/displayName"))
+        else {
+            return Ok(None);
+        };
+        let live = user.get("stream").filter(|stream| {
+            !stream.is_null() && stream.get("type").and_then(Value::as_str).is_none_or(|kind| kind == "live")
+        });
+        let videos = user.pointer("/videos/edges").and_then(Value::as_array).cloned().unwrap_or_default();
+        Ok(Some(Profile {
+            id,
+            login,
+            display_name,
+            avatar_url: text(user, "/profileImageURL"),
+            banner_url: text(user, "/bannerImageURL"),
+            description: text(user, "/description"),
+            followers: number(user, "/followers/totalCount"),
+            partner: user.pointer("/roles/isPartner").and_then(Value::as_bool).unwrap_or(false),
+            created_at: time(user, "/createdAt"),
+            live: live.map(|stream| ProfileLive {
+                title: text(stream, "/title"),
+                game: text(stream, "/game/name"),
+                viewers: number(stream, "/viewersCount"),
+                since: time(stream, "/createdAt"),
+                preview_url: text(stream, "/previewImageURL"),
+            }),
+            last_broadcast: time(user, "/lastBroadcast/startedAt"),
+            videos: videos
+                .iter()
+                .filter_map(|edge| {
+                    let node = edge.get("node")?;
+                    Some(Video {
+                        id: text(node, "/id")?,
+                        title: text(node, "/title").unwrap_or_default(),
+                        duration_s: number(node, "/lengthSeconds"),
+                        created_at: time(node, "/createdAt"),
+                        views: number(node, "/viewCount"),
+                        // Twitch gives a placeholder while a broadcast is still running.
+                        thumbnail_url: text(node, "/previewThumbnailURL").filter(|url| !url.contains("404_processing")),
+                        game: text(node, "/game/name"),
+                    })
+                })
+                .collect(),
+        }))
+    }
+
+    /// Chat badge images, `set/version` to URL: the global ones, overridden by the channel's own.
+    pub async fn badges(&self, channel_id: &str) -> Result<HashMap<String, String>, TwitchError> {
+        const FIELDS: &str = "setID version imageURL(size: DOUBLE)";
+        let body = json!({
+            "query": format!("query($id: ID!) {{ badges {{ {FIELDS} }} user(id: $id) {{ broadcastBadges {{ {FIELDS} }} }} }}"),
+            "variables": { "id": channel_id },
+        });
+        let value = self.gql(body, None).await?;
+        let mut out = HashMap::new();
+        for pointer in ["/data/badges", "/data/user/broadcastBadges"] {
+            for badge in value.pointer(pointer).and_then(Value::as_array).into_iter().flatten() {
+                if let (Some(set), Some(version), Some(url)) =
+                    (text(badge, "/setID"), text(badge, "/version"), text(badge, "/imageURL"))
+                {
+                    out.insert(format!("{set}/{version}"), url);
+                }
+            }
+        }
+        Ok(out)
     }
 }
 

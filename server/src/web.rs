@@ -78,7 +78,8 @@ pub async fn security_headers(State(app): State<AppState>, request: Request, nex
     let media = &app.config.media_public_url;
     let csp = format!(
         "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; \
-         img-src 'self' data: blob: https://static-cdn.jtvnw.net; font-src 'self'; \
+         img-src 'self' data: blob: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net \
+         https://cdn.frankerfacez.com; font-src 'self'; \
          connect-src 'self' {media}; media-src 'self' blob: {media}; worker-src 'self' blob:; \
          object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     );

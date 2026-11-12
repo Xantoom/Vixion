@@ -11,6 +11,7 @@ use crate::logs::LogBuffer;
 use crate::recorder::Recorder;
 use crate::settings::SettingsStore;
 use crate::twitch::api::TwitchApi;
+use crate::twitch::emotes::ChatAssetCache;
 
 pub struct App {
     pub config: Config,
@@ -20,6 +21,7 @@ pub struct App {
     pub alerts: Alerts,
     pub logs: LogBuffer,
     pub twitch: TwitchApi,
+    pub chat_assets: ChatAssetCache,
     /// For everything outside Twitch: webhooks, Cloudflare.
     pub http: reqwest::Client,
     pub recorder: Recorder,
