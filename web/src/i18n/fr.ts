@@ -282,7 +282,7 @@ export const fr: Messages = {
 	logs: {
 		title: 'Journaux',
 		alerts: 'Alertes',
-		noAlerts: 'Aucune alerte. Tout va bien.',
+		noAlerts: 'Aucune alerte.',
 		dismiss: 'Ignorer',
 		resolved: 'Résolue',
 		console: 'Console',

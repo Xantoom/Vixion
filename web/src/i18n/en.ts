@@ -277,7 +277,7 @@ export const en = {
 	logs: {
 		title: 'Logs',
 		alerts: 'Alerts',
-		noAlerts: 'No alerts. All is well.',
+		noAlerts: 'No alerts.',
 		dismiss: 'Dismiss',
 		resolved: 'Resolved',
 		console: 'Console',

@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { CircleDot, Clock3, Film, HardDrive } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useT } from '@/i18n';
 import { type Stats, api } from '@/lib/api';
 import { formatBytes, formatDuration, formatNumber } from '@/lib/format';
@@ -9,12 +11,14 @@ import { PageLoading } from '@/ui/Spinner';
 import { NotFound } from './NotFound';
 import { PageHeader } from './Streamers';
 
-function Tile({ label, value, detail }: { label: string; value: string; detail?: string }) {
+function Tile({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
 	return (
 		<div className="bg-surface flex flex-col gap-1 rounded-md px-4 py-3.5">
-			<span className="text-caption text-muted font-medium">{label}</span>
+			<span className="text-small text-muted flex items-center gap-2 font-medium">
+				{icon}
+				{label}
+			</span>
 			<span className="text-heading tabular font-semibold tracking-tight">{value}</span>
-			{detail ? <span className="text-caption text-muted tabular">{detail}</span> : null}
 		</div>
 	);
 }
@@ -46,10 +50,10 @@ export function StatsPage() {
 		<div className="panel-in mx-auto max-w-6xl px-4 pb-12 sm:px-6">
 			<PageHeader title={t.stats.title} />
 			<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-				<Tile label={t.stats.space} value={formatBytes(data.bytes)} />
-				<Tile label={t.stats.recordings} value={formatNumber(data.streams)} />
-				<Tile label={t.stats.watchTime} value={formatDuration(data.duration_ms)} />
-				<Tile label={t.stats.recordingNow} value={String(data.recording)} />
+				<Tile icon={<HardDrive size={16} />} label={t.stats.space} value={formatBytes(data.bytes)} />
+				<Tile icon={<Film size={16} />} label={t.stats.recordings} value={formatNumber(data.streams)} />
+				<Tile icon={<Clock3 size={16} />} label={t.stats.watchTime} value={formatDuration(data.duration_ms)} />
+				<Tile icon={<CircleDot size={16} />} label={t.stats.recordingNow} value={String(data.recording)} />
 			</div>
 
 			<section className="mt-8">
