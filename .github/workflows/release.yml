@@ -9,7 +9,20 @@ permissions:
   packages: write
 
 jobs:
+  # The tag, the crate and the web package must say the same version, and the changelog must
+  # have a section for it: `bun scripts/release.ts` does all of this.
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: |
+          version=${GITHUB_REF_NAME#v}
+          grep -q "^version = \"$version\"" server/Cargo.toml || { echo "server/Cargo.toml is not $version"; exit 1; }
+          grep -q "\"version\": \"$version\"" web/package.json || { echo "web/package.json is not $version"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $version"; exit 1; }
+
   web:
+    needs: check
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -84,16 +97,26 @@ jobs:
           version=${GITHUB_REF_NAME#v}
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          # A pre-release (1.2.0-rc.1) never becomes `latest`.
+          if [[ $version == *-* ]]; then
+            echo "tags=$image:$version" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=$image:$version,$image:${version%.*},$image:latest" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          # The release notes are the version's section of the changelog.
+          awk -v v="$version" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on && /^\[[^]]+\]: / {exit} on' CHANGELOG.md > notes.md
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: .github/release.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
-            ${{ steps.meta.outputs.image }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
       - uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          name: Vixion ${{ steps.meta.outputs.version }}
+          body_path: notes.md
+          prerelease: ${{ steps.meta.outputs.prerelease }}
           files: vixion-linux-*

@@ -12,7 +12,10 @@
 
 - **Records every broadcast** of the channels you add, at source quality, as soon as they go live. HEVC and AV1 are
   kept as Twitch sends them, or H.264 only if you prefer.
-- **Records the chat** and replays it in sync with the video, emotes included.
+- **Records the chat** and replays it in sync with the video: badges, Twitch, 7TV, BetterTTV and FrankerFaceZ
+  emotes, timestamps that jump to the moment.
+- **Find channels** from the search bar; each has a page with its live broadcast, recordings and past broadcasts,
+  and is added from there.
 - **Skips ads**: with a Turbo or subscriber token Twitch sends none; without one, Vixion switches players when an ad
   starts, leaving short gaps instead of ads.
 - **Plays back** in a studio view: video and chat side by side, ±5 s, volume, full screen, and a compressor that evens
@@ -114,8 +117,9 @@ Application → Cookies) in *Settings → Twitch*. It is stored encrypted and on
 
 ## Player shortcuts
 
-`Space` or `K` play/pause · `←` `→` 5 s · `J` `L` 10 s · `↑` `↓` volume · `M` mute · `F` full screen · `C` chat ·
-`Home` `End` start and end. On a touchscreen, double-tap the sides to jump 5 s.
+`Space` or `K` play/pause · `←` `→` 5 s · `J` `L` 10 s · `↑` `↓` volume · `M` mute · `F` full screen ·
+`Home` `End` start and end · `/` search. Clicking the timeline jumps at once; chapters follow the broadcast's
+categories. On a touchscreen, double-tap the sides to jump 5 s.
 
 The player decodes with [Mediabunny](https://mediabunny.dev) and WebCodecs on HTTPS pages, and falls back to the
 browser's video element on plain HTTP, where WebCodecs isn't available. A browser that can't decode HEVC or AV1 offers
@@ -136,6 +140,24 @@ cargo run -- serve
 cargo fmt --check && cargo clippy --all-targets && cargo test --profile ci
 cd web && bun run fmt:check && bun run typecheck && bun run lint
 ```
+
+## Versions
+
+Vixion follows [Semantic Versioning](https://semver.org): a patch release fixes, a minor release adds, a major
+release asks you to change something (configuration, data) before upgrading, and says what in the changelog.
+[CHANGELOG.md](CHANGELOG.md) lists every change. Images are tagged with the full version (`0.2.1`), the minor line
+(`0.2`) and `latest`; pin the minor line to get fixes without surprises.
+
+To cut a release, write the changes under *Unreleased* in the changelog, then:
+
+```bash
+bun scripts/release.ts minor   # or patch, major, or an exact version such as 1.0.0-rc.1
+git push origin HEAD v0.2.0
+```
+
+The script sets the version in the crate and the web package, dates the changelog section, commits and tags. The
+pushed tag builds the binaries and images and publishes the GitHub release with that section as its notes.
+Pre-releases (`-rc.1`) never move `latest`.
 
 ## Built with
 
