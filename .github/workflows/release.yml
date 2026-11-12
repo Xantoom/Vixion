@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+        working-directory: web
+      - run: bun run build
+        working-directory: web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+  # Static binaries, each built on its own architecture: no emulation, no cross toolchain.
+  binary:
+    needs: web
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            docker: amd64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            docker: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: web-dist
+          path: web/dist
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.arch }}-unknown-linux-musl
+      - run: sudo apt-get install -y --no-install-recommends musl-tools
+      - run: cargo build --release --locked --target ${{ matrix.arch }}-unknown-linux-musl
+      - run: |
+          mkdir -p out/${{ matrix.docker }}
+          cp target/${{ matrix.arch }}-unknown-linux-musl/release/vixion out/${{ matrix.docker }}/vixion
+          cp target/${{ matrix.arch }}-unknown-linux-musl/release/vixion vixion-linux-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.docker }}
+          path: |
+            out
+            vixion-linux-${{ matrix.arch }}
+
+  publish:
+    needs: binary
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: binary-*
+          merge-multiple: true
+      - name: Make the binaries executable
+        run: chmod +x out/*/vixion vixion-linux-*
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        run: |
+          image=ghcr.io/${GITHUB_REPOSITORY,,}
+          version=${GITHUB_REF_NAME#v}
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/release.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image }}:latest
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: vixion-linux-*

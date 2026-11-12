@@ -1,0 +1,98 @@
+//! The interface: built by Bun into `web/dist`, embedded in the binary, served with the
+//! security headers every page gets.
+
+use axum::body::Body;
+use axum::extract::{Request, State};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri, header};
+use axum::middleware::Next;
+use axum::response::{IntoResponse, Response};
+use rust_embed::Embed;
+
+use crate::app::AppState;
+
+#[derive(Embed)]
+#[folder = "../web/dist"]
+#[allow_missing = true]
+#[exclude = "*.map"]
+struct Assets;
+
+fn accepts(headers: &HeaderMap, encoding: &str) -> bool {
+    headers
+        .get(header::ACCEPT_ENCODING)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.split(',').any(|part| part.trim().starts_with(encoding)))
+}
+
+/// Serves a built file, precompressed when the browser takes it; unknown paths get the app,
+/// which routes them itself.
+pub async fn serve(uri: Uri, headers: HeaderMap) -> Response {
+    let path = uri.path().trim_start_matches('/');
+    if path.starts_with("api/") || path.starts_with("media/") {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let (path, found) = match Assets::get(path) {
+        Some(file) if !path.is_empty() => (path, Some(file)),
+        // A missing file with an extension is a missing file, not a page.
+        _ if path.rsplit('/').next().is_some_and(|name| name.contains('.')) => (path, None),
+        _ => ("index.html", Assets::get("index.html")),
+    };
+    let Some(file) = found else {
+        let fallback = if Assets::get("index.html").is_none() {
+            "The interface was not built: run `bun run build` in web/, then build the server again."
+        } else {
+            "not found"
+        };
+        return (StatusCode::NOT_FOUND, fallback).into_response();
+    };
+
+    let mut response_headers = HeaderMap::new();
+    let mime = file.metadata.mimetype().to_owned();
+    if let Ok(value) = HeaderValue::from_str(&mime) {
+        response_headers.insert(header::CONTENT_TYPE, value);
+    }
+    response_headers.insert(header::VARY, HeaderValue::from_static("Accept-Encoding"));
+    response_headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static(if path.starts_with("assets/") {
+            "public, max-age=31536000, immutable"
+        } else {
+            "no-cache"
+        }),
+    );
+    let mut body = file.data;
+    for (encoding, extension) in [("br", "br"), ("gzip", "gz")] {
+        if accepts(&headers, encoding)
+            && let Some(compressed) = Assets::get(&format!("{path}.{extension}"))
+        {
+            body = compressed.data;
+            response_headers.insert(header::CONTENT_ENCODING, HeaderValue::from_static(encoding));
+            break;
+        }
+    }
+    (StatusCode::OK, response_headers, Body::from(body.into_owned())).into_response()
+}
+
+/// Headers that keep pages from being framed, sniffed or made to load foreign code.
+pub async fn security_headers(State(app): State<AppState>, request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    let media = &app.config.media_public_url;
+    let csp = format!(
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; \
+         img-src 'self' data: blob: https://static-cdn.jtvnw.net; font-src 'self'; \
+         connect-src 'self' {media}; media-src 'self' blob: {media}; worker-src 'self' blob:; \
+         object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+    );
+    let headers = response.headers_mut();
+    if let Ok(value) = HeaderValue::from_str(&csp) {
+        headers.insert(header::CONTENT_SECURITY_POLICY, value);
+    }
+    headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    headers.insert(header::REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    headers.insert(
+        "permissions-policy",
+        HeaderValue::from_static("camera=(), microphone=(), geolocation=(), payment=(), usb=()"),
+    );
+    headers.insert("cross-origin-opener-policy", HeaderValue::from_static("same-origin"));
+    response
+}

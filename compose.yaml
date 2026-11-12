@@ -1,0 +1,30 @@
+# Vixion with Docker Compose. Copy this file, adjust the environment, then `docker compose up -d`.
+services:
+  vixion:
+    image: ghcr.io/xantoom/vixion:latest
+    container_name: vixion
+    restart: unless-stopped
+    # The user that owns ./data on the host.
+    user: "${PUID:-1000}:${PGID:-1000}"
+    # Lets running recordings close their files cleanly on `docker compose down`.
+    stop_grace_period: 30s
+    ports:
+      # The interface. Put it behind your reverse proxy or Cloudflare Tunnel.
+      - "8080:8080"
+      # Video, served apart from the interface (see VIXION_MEDIA_* below). Remove it in `same` mode.
+      - "8443:8443"
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: Europe/Paris
+      # How videos reach the browser:
+      #   same  - through the interface's address (simplest, fine on a local network)
+      #   https - on their own port, with a Let's Encrypt certificate (keeps video off a Cloudflare Tunnel)
+      #   http  - on their own port, behind your own TLS proxy (set VIXION_MEDIA_PUBLIC_URL)
+      VIXION_MEDIA_MODE: same
+      # For https mode:
+      # VIXION_MEDIA_DOMAIN: media.example.com
+      # VIXION_CLOUDFLARE_API_TOKEN: your-token   # Zone:Zone:Read + Zone:DNS:Edit, for the certificate (and DDNS)
+      # VIXION_ACME_EMAIL: you@example.com
+      # VIXION_DDNS: "true"                       # keep media.example.com pointing at this machine
+      # VIXION_MEDIA_PUBLIC_PORT: "8443"          # the port the browser uses, if forwarded differently

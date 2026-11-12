@@ -1,0 +1,509 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { type FormEvent, useState } from 'react';
+import { useT } from '@/i18n';
+import { type Permission, type Role, type User, api } from '@/lib/api';
+import { formatRelative } from '@/lib/format';
+import { useCan, useMe } from '@/lib/session';
+import { Avatar } from '@/ui/Avatar';
+import { Button, IconButton } from '@/ui/Button';
+import { Confirm, Dialog } from '@/ui/Dialog';
+import { Field, Segmented, Select, Switch, TextInput } from '@/ui/Field';
+import { PageLoading } from '@/ui/Spinner';
+import { toast } from '@/ui/Toasts';
+import { NotFound } from './NotFound';
+import { PageHeader } from './Streamers';
+
+interface RolesResponse {
+	roles: Role[];
+	permissions: Permission[];
+}
+
+function useRoleName() {
+	const t = useT();
+	return (role: Role | undefined) =>
+		role ? (role.builtin ? (t.users.roleNames[role.builtin] ?? role.name) : role.name) : '';
+}
+
+export function UsersPage() {
+	const t = useT();
+	const can = useCan('users.manage');
+	const me = useMe();
+	const users = useQuery({ queryKey: ['users'], queryFn: async () => api.get<User[]>('/users'), enabled: can });
+	const roles = useQuery({
+		queryKey: ['roles'],
+		queryFn: async () => api.get<RolesResponse>('/roles'),
+		enabled: can,
+	});
+	const roleName = useRoleName();
+	const [editing, setEditing] = useState<User | 'new' | null>(null);
+	const [deleting, setDeleting] = useState<User | null>(null);
+	const [roleEditing, setRoleEditing] = useState<Role | 'new' | null>(null);
+	const [roleDeleting, setRoleDeleting] = useState<Role | null>(null);
+	const client = useQueryClient();
+	const refresh = async () =>
+		Promise.all([
+			client.invalidateQueries({ queryKey: ['users'] }),
+			client.invalidateQueries({ queryKey: ['roles'] }),
+		]);
+
+	if (!can) return <NotFound forbidden />;
+	if (users.isPending || roles.isPending) return <PageLoading />;
+	if (users.error || roles.error) return <p className="text-danger p-6">{(users.error ?? roles.error)?.message}</p>;
+
+	const roleById = new Map(roles.data.roles.map((role) => [role.id, role]));
+
+	return (
+		<div className="panel-in mx-auto max-w-5xl px-4 pb-12 sm:px-6">
+			<PageHeader title={t.users.title}>
+				<Button
+					variant="accent"
+					onClick={() => {
+						setEditing('new');
+					}}
+				>
+					<Plus size={17} strokeWidth={2.4} />
+					<span className="hidden sm:inline">{t.users.add}</span>
+				</Button>
+			</PageHeader>
+
+			<ul className="border-line divide-line divide-y rounded-md border">
+				{users.data.map((user) => (
+					<li key={user.id} className="flex items-center gap-3 px-4 py-3">
+						<Avatar src={null} name={user.username} size={36} />
+						<div className="min-w-0 flex-1">
+							<div className="text-ui flex items-center gap-2 font-semibold">
+								<span className="truncate">{user.username}</span>
+								{user.id === me.id ? (
+									<span className="text-caption text-muted font-normal">({t.users.you})</span>
+								) : null}
+								{user.disabled ? (
+									<span className="bg-surface-2 text-caption text-muted rounded-xs px-1.5 font-medium">
+										{t.users.disabled}
+									</span>
+								) : null}
+							</div>
+							<div className="text-caption text-muted truncate">
+								{roleName(roleById.get(user.role_id))}
+								{Object.keys(user.overrides).length > 0 ? ' +' : ''} · {t.users.lastLogin}:{' '}
+								{user.last_login_at ? formatRelative(user.last_login_at) : t.common.never}
+							</div>
+						</div>
+						<IconButton
+							label={t.common.edit}
+							onClick={() => {
+								setEditing(user);
+							}}
+						>
+							<Pencil size={17} />
+						</IconButton>
+						<IconButton
+							label={t.common.delete}
+							disabled={user.id === me.id}
+							className="hover:!text-danger"
+							onClick={() => {
+								setDeleting(user);
+							}}
+						>
+							<Trash2 size={17} />
+						</IconButton>
+					</li>
+				))}
+			</ul>
+
+			<div className="mt-12 flex items-center justify-between gap-3 pb-4">
+				<h2 className="text-title font-semibold">{t.users.roles}</h2>
+				<Button
+					onClick={() => {
+						setRoleEditing('new');
+					}}
+				>
+					<Plus size={16} />
+					{t.users.addRole}
+				</Button>
+			</div>
+			<ul className="grid gap-3 sm:grid-cols-2">
+				{roles.data.roles.map((role) => (
+					<li key={role.id} className="border-line flex flex-col gap-2 rounded-md border p-4">
+						<div className="flex items-start gap-2">
+							<div className="min-w-0 flex-1">
+								<div className="text-ui font-semibold">{roleName(role)}</div>
+								<div className="text-caption text-muted">
+									{t.users.roleUsers(role.users)}
+									{role.builtin ? ` · ${t.users.builtin}` : ''}
+								</div>
+							</div>
+							{role.builtin === 'admin' ? null : (
+								<IconButton
+									size="sm"
+									label={t.common.edit}
+									onClick={() => {
+										setRoleEditing(role);
+									}}
+								>
+									<Pencil size={15} />
+								</IconButton>
+							)}
+							{role.builtin ? null : (
+								<IconButton
+									size="sm"
+									label={t.common.delete}
+									className="hover:!text-danger"
+									onClick={() => {
+										setRoleDeleting(role);
+									}}
+								>
+									<Trash2 size={15} />
+								</IconButton>
+							)}
+						</div>
+						<p className="text-small text-ink-2">
+							{role.builtin === 'admin'
+								? t.users.adminRole
+								: role.permissions.length === 0
+									? t.common.none
+									: role.permissions
+											.map((permission) => t.users.perm[permission] ?? permission)
+											.join(', ')}
+						</p>
+					</li>
+				))}
+			</ul>
+
+			{editing ? (
+				<UserDialog
+					user={editing === 'new' ? null : editing}
+					roles={roles.data}
+					onClose={() => {
+						setEditing(null);
+					}}
+					onSaved={refresh}
+				/>
+			) : null}
+			{roleEditing ? (
+				<RoleDialog
+					role={roleEditing === 'new' ? null : roleEditing}
+					permissions={roles.data.permissions}
+					onClose={() => {
+						setRoleEditing(null);
+					}}
+					onSaved={refresh}
+				/>
+			) : null}
+			<Confirm
+				open={deleting !== null}
+				onClose={() => {
+					setDeleting(null);
+				}}
+				title={t.users.deleteTitle(deleting?.username ?? '')}
+				confirm={t.common.delete}
+				onConfirm={async () => {
+					try {
+						await api.delete(`/users/${deleting?.id}`);
+						await refresh();
+					} catch (error) {
+						toast.error(error);
+						throw error;
+					}
+				}}
+			>
+				{t.users.deleteLead}
+			</Confirm>
+			<Confirm
+				open={roleDeleting !== null}
+				onClose={() => {
+					setRoleDeleting(null);
+				}}
+				title={t.users.deleteRoleTitle(roleDeleting?.name ?? '')}
+				confirm={t.common.delete}
+				onConfirm={async () => {
+					try {
+						await api.delete(`/roles/${roleDeleting?.id}`);
+						await refresh();
+					} catch (error) {
+						toast.error(error);
+						throw error;
+					}
+				}}
+			>
+				{t.users.deleteRoleLead}
+			</Confirm>
+		</div>
+	);
+}
+
+type Override = 'role' | 'allow' | 'deny';
+
+function UserDialog({
+	user,
+	roles,
+	onClose,
+	onSaved,
+}: {
+	user: User | null;
+	roles: RolesResponse;
+	onClose: () => void;
+	onSaved: () => Promise<unknown>;
+}) {
+	const t = useT();
+	const me = useMe();
+	const roleName = useRoleName();
+	const fallbackRole = roles.roles.find((role) => role.builtin === 'user')?.id ?? roles.roles[0]?.id ?? 0;
+	const [username, setUsername] = useState(user?.username ?? '');
+	const [password, setPassword] = useState('');
+	const [roleId, setRoleId] = useState(user?.role_id ?? fallbackRole);
+	const [disabled, setDisabled] = useState(user?.disabled ?? false);
+	const [overrides, setOverrides] = useState<Partial<Record<Permission, boolean>>>(user?.overrides ?? {});
+	const [error, setError] = useState<string | null>(null);
+	const [busy, setBusy] = useState(false);
+	const role = roles.roles.find((entry) => entry.id === roleId);
+	const isAdminRole = role?.builtin === 'admin';
+
+	const submit = async (event: FormEvent) => {
+		event.preventDefault();
+		setBusy(true);
+		setError(null);
+		try {
+			if (user) {
+				const changes: Record<Permission, boolean | null> = {} as Record<Permission, boolean | null>;
+				for (const permission of roles.permissions) changes[permission] = overrides[permission] ?? null;
+				await api.patch(`/users/${user.id}`, {
+					role_id: roleId,
+					disabled,
+					overrides: changes,
+					...(password ? { password } : {}),
+				});
+			} else {
+				await api.post('/users', { username: username.trim(), password, role_id: roleId });
+			}
+			await onSaved();
+			toast.ok(t.common.saved);
+			onClose();
+		} catch (caught) {
+			setError(caught instanceof Error ? caught.message : t.common.error);
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<Dialog open onClose={onClose} title={user ? t.users.editTitle(user.username) : t.users.add} wide>
+			<form className="flex flex-col gap-5" onSubmit={(event) => void submit(event)}>
+				{user ? null : (
+					<Field label={t.users.username}>
+						{(id) => (
+							<TextInput
+								id={id}
+								required
+								autoFocus
+								autoComplete="off"
+								autoCapitalize="none"
+								value={username}
+								onChange={(event) => {
+									setUsername(event.target.value);
+								}}
+							/>
+						)}
+					</Field>
+				)}
+				<Field
+					label={user ? t.users.newPassword : t.users.password}
+					hint={user ? t.users.newPasswordHint : t.auth.passwordHint}
+				>
+					{(id, describedBy) => (
+						<TextInput
+							id={id}
+							type="password"
+							autoComplete="new-password"
+							required={!user}
+							minLength={8}
+							aria-describedby={describedBy}
+							value={password}
+							onChange={(event) => {
+								setPassword(event.target.value);
+							}}
+						/>
+					)}
+				</Field>
+				<Field label={t.users.role}>
+					{(id) => (
+						<Select
+							id={id}
+							value={roleId}
+							onChange={(event) => {
+								setRoleId(Number(event.target.value));
+							}}
+						>
+							{roles.roles
+								.filter((entry) => entry.builtin !== 'admin' || me.admin)
+								.map((entry) => (
+									<option key={entry.id} value={entry.id}>
+										{roleName(entry)}
+									</option>
+								))}
+						</Select>
+					)}
+				</Field>
+				{user && user.id !== me.id ? (
+					<Switch checked={disabled} onChange={setDisabled} label={t.users.disabled} />
+				) : null}
+				{user && !isAdminRole ? (
+					<div className="flex flex-col gap-2">
+						<span className="text-ui font-medium">{t.users.permissions}</span>
+						<span className="text-small text-muted -mt-1">{t.users.permissionsHint}</span>
+						<ul className="divide-line border-line divide-y rounded-sm border">
+							{roles.permissions.map((permission) => {
+								const fromRole = role?.permissions.includes(permission) ?? false;
+								const value: Override =
+									overrides[permission] === undefined
+										? 'role'
+										: overrides[permission]
+											? 'allow'
+											: 'deny';
+								return (
+									<li
+										key={permission}
+										className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+									>
+										<span className="text-small">
+											{t.users.perm[permission] ?? permission}
+											{value === 'role' ? (
+												<span className={fromRole ? 'text-ok' : 'text-muted'}>
+													{' '}
+													· {fromRole ? t.common.on : t.common.off}
+												</span>
+											) : null}
+										</span>
+										<Segmented
+											label={t.users.perm[permission] ?? permission}
+											value={value}
+											onChange={(next) => {
+												const copy = { ...overrides };
+												if (next === 'role') delete copy[permission];
+												else copy[permission] = next === 'allow';
+												setOverrides(copy);
+											}}
+											options={[
+												{ value: 'role', label: t.users.followRole },
+												{ value: 'allow', label: t.users.allow },
+												{ value: 'deny', label: t.users.deny },
+											]}
+										/>
+									</li>
+								);
+							})}
+						</ul>
+					</div>
+				) : null}
+				{error ? (
+					<p className="text-small text-danger" role="alert">
+						{error}
+					</p>
+				) : null}
+				<div className="flex justify-end gap-2">
+					<Button variant="ghost" onClick={onClose}>
+						{t.common.cancel}
+					</Button>
+					<Button type="submit" variant="primary" busy={busy}>
+						{user ? t.common.save : t.common.create}
+					</Button>
+				</div>
+			</form>
+		</Dialog>
+	);
+}
+
+function RoleDialog({
+	role,
+	permissions,
+	onClose,
+	onSaved,
+}: {
+	role: Role | null;
+	permissions: Permission[];
+	onClose: () => void;
+	onSaved: () => Promise<unknown>;
+}) {
+	const t = useT();
+	const [name, setName] = useState(role?.name ?? '');
+	const [granted, setGranted] = useState<Set<Permission>>(new Set(role?.permissions ?? ['streams.view']));
+	const [error, setError] = useState<string | null>(null);
+	const [busy, setBusy] = useState(false);
+
+	const submit = async (event: FormEvent) => {
+		event.preventDefault();
+		setBusy(true);
+		setError(null);
+		try {
+			const body = {
+				name: name.trim(),
+				permissions: permissions.filter((permission) => granted.has(permission)),
+			};
+			if (role) await api.patch(`/roles/${role.id}`, role.builtin ? { permissions: body.permissions } : body);
+			else await api.post('/roles', body);
+			await onSaved();
+			toast.ok(t.common.saved);
+			onClose();
+		} catch (caught) {
+			setError(caught instanceof Error ? caught.message : t.common.error);
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<Dialog
+			open
+			onClose={onClose}
+			title={role ? (role.builtin ? (t.users.roleNames[role.builtin] ?? role.name) : role.name) : t.users.addRole}
+		>
+			<form className="flex flex-col gap-5" onSubmit={(event) => void submit(event)}>
+				{role?.builtin ? null : (
+					<Field label={t.users.roleName}>
+						{(id) => (
+							<TextInput
+								id={id}
+								required
+								autoFocus
+								maxLength={40}
+								value={name}
+								onChange={(event) => {
+									setName(event.target.value);
+								}}
+							/>
+						)}
+					</Field>
+				)}
+				<div className="flex flex-col gap-3.5">
+					<span className="text-ui font-medium">{t.users.permissions}</span>
+					{permissions.map((permission) => (
+						<Switch
+							key={permission}
+							checked={granted.has(permission)}
+							label={<span className="font-normal">{t.users.perm[permission] ?? permission}</span>}
+							onChange={(checked) => {
+								const next = new Set(granted);
+								if (checked) next.add(permission);
+								else next.delete(permission);
+								setGranted(next);
+							}}
+						/>
+					))}
+				</div>
+				{error ? (
+					<p className="text-small text-danger" role="alert">
+						{error}
+					</p>
+				) : null}
+				<div className="flex justify-end gap-2">
+					<Button variant="ghost" onClick={onClose}>
+						{t.common.cancel}
+					</Button>
+					<Button type="submit" variant="primary" busy={busy}>
+						{role ? t.common.save : t.common.create}
+					</Button>
+				</div>
+			</form>
+		</Dialog>
+	);
+}

@@ -1,0 +1,262 @@
+//! Streamers: the channels watched, with what was recorded of them.
+
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
+use serde::{Deserialize, Serialize};
+
+use super::streams::{SUMMARY_COLUMNS, StreamSummary, summary_from_row};
+use crate::app::AppState;
+use crate::auth::CurrentUser;
+use crate::db::now_ms;
+use crate::error::{AppError, AppResult};
+use crate::recorder::LiveProgress;
+use crate::recorder::retention::delete_stream;
+use crate::twitch::api::valid_login;
+
+#[derive(Debug, Serialize)]
+pub struct Streamer {
+    id: i64,
+    twitch_id: String,
+    login: String,
+    display_name: String,
+    avatar_url: Option<String>,
+    monitored: bool,
+    retention_days: Option<i64>,
+    live: Option<LiveInfo>,
+    recording: Option<LiveProgress>,
+    stream_count: i64,
+    total_bytes: i64,
+    total_duration_ms: i64,
+    last_stream_at: Option<i64>,
+    created_at: i64,
+}
+
+#[derive(Debug, Serialize)]
+struct LiveInfo {
+    title: Option<String>,
+    game: Option<String>,
+    since: i64,
+}
+
+const STREAMER_QUERY: &str = "SELECT st.id, st.twitch_id, st.login, st.display_name, st.avatar_url, st.monitored,
+    st.retention_days, st.live_title, st.live_game, st.live_since, st.created_at,
+    COUNT(s.id), COALESCE(SUM(s.size_bytes), 0), COALESCE(SUM(s.duration_ms), 0), MAX(s.started_at)
+    FROM streamers st LEFT JOIN streams s ON s.streamer_id = st.id";
+
+fn streamer_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Streamer> {
+    let live_since: Option<i64> = row.get(9)?;
+    Ok(Streamer {
+        id: row.get(0)?,
+        twitch_id: row.get(1)?,
+        login: row.get(2)?,
+        display_name: row.get(3)?,
+        avatar_url: row.get(4)?,
+        monitored: row.get::<_, i64>(5)? != 0,
+        retention_days: row.get(6)?,
+        live: live_since.map(|since| LiveInfo {
+            title: row.get(7).ok().flatten(),
+            game: row.get(8).ok().flatten(),
+            since,
+        }),
+        recording: None,
+        created_at: row.get(10)?,
+        stream_count: row.get(11)?,
+        total_bytes: row.get(12)?,
+        total_duration_ms: row.get(13)?,
+        last_stream_at: row.get(14)?,
+    })
+}
+
+/// Every streamer, alphabetically.
+pub async fn list(State(app): State<AppState>, user: CurrentUser) -> AppResult<Json<Vec<Streamer>>> {
+    user.require("streams.view")?;
+    let mut streamers = app
+        .db
+        .read(|conn| {
+            let mut statement = conn
+                .prepare_cached(&format!("{STREAMER_QUERY} GROUP BY st.id ORDER BY st.display_name COLLATE NOCASE"))?;
+            let rows = statement.query_map([], streamer_from_row)?;
+            Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        })
+        .await?;
+    let live = app.recorder.live();
+    for streamer in &mut streamers {
+        streamer.recording = live.get(&streamer.id).cloned();
+    }
+    Ok(Json(streamers))
+}
+
+#[derive(Serialize)]
+pub struct StreamerDetail {
+    streamer: Streamer,
+    streams: Vec<StreamSummary>,
+}
+
+/// A streamer and their recordings, newest first.
+pub async fn detail(
+    State(app): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<i64>,
+) -> AppResult<Json<StreamerDetail>> {
+    user.require("streams.view")?;
+    let (mut streamer, streams) = app
+        .db
+        .read(move |conn| {
+            let streamer =
+                conn.query_row(&format!("{STREAMER_QUERY} WHERE st.id = ?1 GROUP BY st.id"), [id], streamer_from_row)?;
+            let mut statement = conn.prepare_cached(&format!(
+                "SELECT {SUMMARY_COLUMNS} FROM streams s WHERE s.streamer_id = ?1 ORDER BY s.started_at DESC, s.part DESC"
+            ))?;
+            let rows = statement.query_map([id], summary_from_row)?;
+            Ok((streamer, rows.collect::<Result<Vec<_>, _>>()?))
+        })
+        .await?;
+    streamer.recording = app.recorder.live().remove(&id);
+    Ok(Json(StreamerDetail { streamer, streams }))
+}
+
+#[derive(Deserialize)]
+pub struct NewStreamer {
+    login: String,
+}
+
+/// Starts watching a channel, by the name in its URL (or the URL itself).
+pub async fn add(
+    State(app): State<AppState>,
+    user: CurrentUser,
+    Json(body): Json<NewStreamer>,
+) -> AppResult<(StatusCode, Json<Streamer>)> {
+    user.require("streamers.manage")?;
+    let login = body
+        .login
+        .trim()
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .trim_start_matches('@')
+        .to_ascii_lowercase();
+    if !valid_login(&login) {
+        return Err(AppError::bad_request("invalid_login", "not a Twitch channel name"));
+    }
+    let channel = app
+        .twitch
+        .channel_by_login(&login)
+        .await
+        .map_err(|error| AppError::new(StatusCode::BAD_GATEWAY, "upstream", error.to_string()))?
+        .ok_or_else(|| AppError::new(StatusCode::NOT_FOUND, "unknown_channel", "no such Twitch channel"))?;
+    let id = app
+        .db
+        .write(move |conn| {
+            conn.execute(
+                "INSERT INTO streamers (twitch_id, login, display_name, avatar_url, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![channel.id, channel.login, channel.display_name, channel.profile_image_url, now_ms()],
+            )?;
+            Ok(conn.last_insert_rowid())
+        })
+        .await?;
+    tracing::info!(%login, by = %user.username, "streamer added");
+    app.recorder.check_now();
+    let streamer = app
+        .db
+        .read(move |conn| {
+            Ok(conn.query_row(&format!("{STREAMER_QUERY} WHERE st.id = ?1 GROUP BY st.id"), [id], streamer_from_row)?)
+        })
+        .await?;
+    Ok((StatusCode::CREATED, Json(streamer)))
+}
+
+#[derive(Deserialize)]
+pub struct StreamerUpdate {
+    #[serde(default)]
+    monitored: Option<bool>,
+    #[serde(default, deserialize_with = "super::double_option")]
+    retention_days: Option<Option<u32>>,
+}
+
+pub async fn update(
+    State(app): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<i64>,
+    Json(body): Json<StreamerUpdate>,
+) -> AppResult<StatusCode> {
+    user.require("streamers.manage")?;
+    let changed = app
+        .db
+        .write(move |conn| {
+            let mut changed = 0;
+            if let Some(monitored) = body.monitored {
+                changed += conn
+                    .execute("UPDATE streamers SET monitored = ?2 WHERE id = ?1", rusqlite::params![id, monitored])?;
+            }
+            if let Some(days) = body.retention_days {
+                changed += conn.execute(
+                    "UPDATE streamers SET retention_days = ?2 WHERE id = ?1",
+                    rusqlite::params![id, days.map(|d| d.min(3650))],
+                )?;
+            }
+            Ok(changed)
+        })
+        .await?;
+    if body.monitored == Some(false) {
+        app.recorder.stop(id);
+    }
+    app.recorder.check_now();
+    if changed == 0 { Err(AppError::not_found()) } else { Ok(StatusCode::NO_CONTENT) }
+}
+
+#[derive(Deserialize)]
+pub struct RemoveQuery {
+    #[serde(default)]
+    recordings: bool,
+}
+
+/// Stops watching a streamer. With `?recordings=true` their recordings go too, even kept ones.
+pub async fn remove(
+    State(app): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<i64>,
+    Query(query): Query<RemoveQuery>,
+) -> AppResult<StatusCode> {
+    user.require("streamers.manage")?;
+    if query.recordings && !user.can("streams.delete") {
+        return Err(AppError::forbidden());
+    }
+    if app.recorder.is_recording(id) {
+        return Err(AppError::conflict("recording", "stop the recording first"));
+    }
+    let streams: Vec<i64> = app
+        .db
+        .read(move |conn| {
+            let mut statement = conn.prepare("SELECT id FROM streams WHERE streamer_id = ?1")?;
+            let rows = statement.query_map([id], |row| row.get(0))?;
+            Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        })
+        .await?;
+    if !streams.is_empty() && !query.recordings {
+        return Err(AppError::conflict("has_recordings", "this streamer still has recordings"));
+    }
+    for stream in streams {
+        delete_stream(&app, stream).await?;
+    }
+    app.db
+        .write(move |conn| {
+            conn.execute("DELETE FROM streamers WHERE id = ?1", [id])?;
+            Ok(())
+        })
+        .await?;
+    tracing::info!(id, by = %user.username, "streamer removed");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Stops the recording in progress, keeping what was recorded.
+pub async fn stop(State(app): State<AppState>, user: CurrentUser, Path(id): Path<i64>) -> AppResult<StatusCode> {
+    user.require("streamers.manage")?;
+    if !app.recorder.is_recording(id) {
+        return Err(AppError::conflict("not_recording", "nothing is being recorded"));
+    }
+    app.recorder.stop(id);
+    tracing::info!(id, by = %user.username, "recording stopped by hand");
+    Ok(StatusCode::NO_CONTENT)
+}

@@ -1,0 +1,12 @@
+# Personal notes and design documents, kept out of the repository.
+/docs/
+/.claude/
+/.impeccable/
+
+# Build output
+/target/
+/web/dist/
+node_modules/
+
+# Local data when running from source
+/data/
