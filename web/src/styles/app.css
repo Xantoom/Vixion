@@ -42,6 +42,9 @@
 	--shadow-lift: light-dark(0 12px 28px -12px rgb(16 16 24 / 0.22), 0 14px 32px -14px rgb(0 0 0 / 0.7));
 	--scroll-thumb: light-dark(rgb(17 17 19 / 0.2), rgb(243 243 245 / 0.2));
 	--scroll-thumb-hover: light-dark(rgb(17 17 19 / 0.42), rgb(243 243 245 / 0.42));
+	/* The logo: Vixeeny's near-black tile, turned light on a dark page. */
+	--logo-tile: light-dark(#131416, #f3f3f5);
+	--logo-mark: light-dark(#ffffff, #131416);
 }
 
 :root[data-theme='light'] {

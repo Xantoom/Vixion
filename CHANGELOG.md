@@ -40,6 +40,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ### Changed
 
+- A new logo in the family of Vixeeny: a V in a ring running back to a red recording dot, dark on
+  light pages and light on dark ones, with a home-screen icon.
 - API answers are compressed (Brotli or gzip) and carry ETags, so unchanged lists come back empty.
 - Chat is served from the file through a small index: a long, busy chat takes a few megabytes of
   memory instead of hundreds, and chat downloads start at once.

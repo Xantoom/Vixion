@@ -1,6 +1,9 @@
 <div align="center">
 
-<img alt="Vixion" src="web/public/favicon.svg" width="64" height="64" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.svg" />
+  <img alt="Vixion" src=".github/logo-light.svg" width="72" height="72" />
+</picture>
 
 # Vixion
 
