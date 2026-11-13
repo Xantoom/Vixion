@@ -1,6 +1,19 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Trash2, Users as UsersIcon } from 'lucide-react';
-import { type FormEvent, type ReactNode, useState } from 'react';
+import {
+	Ban,
+	CircleCheck,
+	Ellipsis,
+	Film,
+	Lock,
+	Pencil,
+	Plus,
+	RotateCcw,
+	ShieldCheck,
+	Trash2,
+	Tv,
+	Users as UsersIcon,
+} from 'lucide-react';
+import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { useT } from '@/i18n';
 import { type Permission, type Role, type User, api } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
@@ -9,7 +22,8 @@ import { Avatar } from '@/ui/Avatar';
 import { Button, IconButton } from '@/ui/Button';
 import { Card } from '@/ui/Card';
 import { Confirm, Dialog } from '@/ui/Dialog';
-import { Field, PasswordInput, Segmented, Select, Switch, TextInput } from '@/ui/Field';
+import { Field, KNOB, PasswordInput, SWITCH, Switch, TextInput } from '@/ui/Field';
+import { Menu, MenuDivider, MenuItem } from '@/ui/Menu';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
@@ -19,6 +33,35 @@ interface RolesResponse {
 	permissions: Permission[];
 }
 
+type GroupKey = 'recordings' | 'channels' | 'admin';
+
+/** Permissions by what they are about, in the order they are shown. */
+const GROUPS: { key: GroupKey; icon: ReactNode; permissions: Permission[] }[] = [
+	{
+		key: 'recordings',
+		icon: <Film size={15} />,
+		permissions: ['streams.view', 'streams.download', 'streams.keep', 'streams.delete'],
+	},
+	{ key: 'channels', icon: <Tv size={15} />, permissions: ['streamers.manage'] },
+	{
+		key: 'admin',
+		icon: <ShieldCheck size={15} />,
+		permissions: ['stats.view', 'logs.view', 'users.manage', 'settings.manage'],
+	},
+];
+
+/** The groups, keeping only the permissions the server knows, and any it knows that no group has. */
+function grouped(known: Permission[]) {
+	const listed = new Set(GROUPS.flatMap((group) => group.permissions));
+	const groups = GROUPS.map((group) => ({
+		...group,
+		permissions: group.permissions.filter((permission) => known.includes(permission)),
+	}));
+	const rest = known.filter((permission) => !listed.has(permission));
+	groups.at(-1)?.permissions.push(...rest);
+	return groups.filter((group) => group.permissions.length > 0);
+}
+
 function Chip({ children, tone = 'plain' }: { children: ReactNode; tone?: 'plain' | 'accent' | 'muted' }) {
 	const tones = {
 		plain: 'bg-surface-2 text-ink-2',
@@ -26,7 +69,9 @@ function Chip({ children, tone = 'plain' }: { children: ReactNode; tone?: 'plain
 		muted: 'bg-surface-2 text-muted',
 	};
 	return (
-		<span className={`text-caption inline-flex items-center rounded-xs px-1.5 py-0.5 font-semibold ${tones[tone]}`}>
+		<span
+			className={`text-caption inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 font-semibold whitespace-nowrap ${tones[tone]}`}
+		>
 			{children}
 		</span>
 	);
@@ -36,6 +81,38 @@ function useRoleName() {
 	const t = useT();
 	return (role: Role | undefined) =>
 		role ? (role.builtin ? (t.users.roleNames[role.builtin] ?? role.name) : role.name) : '';
+}
+
+/** What a role allows, a line per group: "Recordings watch, download". */
+function RoleSummary({ role, known }: { role: Role; known: Permission[] }) {
+	const t = useT();
+	if (role.builtin === 'admin') {
+		return (
+			<span className="text-small text-ink-2 inline-flex items-center gap-1.5">
+				<ShieldCheck size={14} className="text-accent-text" />
+				{t.users.adminRole}
+			</span>
+		);
+	}
+	const lines = grouped(known)
+		.map((group) => ({ ...group, granted: group.permissions.filter((p) => role.permissions.includes(p)) }))
+		.filter((group) => group.granted.length > 0);
+	if (lines.length === 0) return <span className="text-small text-muted">{t.users.noPermission}</span>;
+	return (
+		<ul className="text-small flex flex-col gap-1">
+			{lines.map((group) => (
+				<li key={group.key} className="flex min-w-0 items-baseline gap-2">
+					<span className="text-muted inline-flex flex-none items-center gap-1.5 self-center">
+						{group.icon}
+						<span className="sr-only sm:not-sr-only">{t.users.groups[group.key]}</span>
+					</span>
+					<span className="text-ink-2 min-w-0">
+						{group.granted.map((p) => t.users.permShort[p] ?? p).join(', ')}
+					</span>
+				</li>
+			))}
+		</ul>
+	);
 }
 
 export function UsersPage() {
@@ -65,6 +142,18 @@ export function UsersPage() {
 	if (users.error || roles.error) return <p className="text-danger p-6">{(users.error ?? roles.error)?.message}</p>;
 
 	const roleById = new Map(roles.data.roles.map((role) => [role.id, role]));
+	const setDisabled = async (user: User, disabled: boolean) => {
+		try {
+			await api.patch(`/users/${user.id}`, { disabled });
+			await refresh();
+			toast.ok(t.common.saved);
+		} catch (error) {
+			toast.error(error);
+		}
+	};
+	// The whole row opens the editor; the buttons inside it keep their own clicks.
+	const row =
+		'hover:bg-surface/60 flex cursor-pointer items-center gap-3.5 px-5 py-3.5 transition-colors duration-100';
 
 	return (
 		<div className="panel-in flex flex-col gap-6">
@@ -86,51 +175,88 @@ export function UsersPage() {
 				flush
 			>
 				<ul className="divide-line divide-y">
-					{users.data.map((user) => (
-						<li key={user.id} className="flex items-center gap-3.5 px-5 py-3">
-							<Avatar src={null} name={user.username} size={36} />
-							<div className="flex min-w-0 flex-1 flex-col gap-1.5">
-								<div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-									<span className="text-ui truncate font-semibold">{user.username}</span>
-									{user.id === me.id ? <Chip>{t.users.you}</Chip> : null}
-									{user.disabled ? <Chip tone="muted">{t.users.disabled}</Chip> : null}
+					{users.data.map((user) => {
+						const exceptions = Object.keys(user.overrides).length;
+						const self = user.id === me.id;
+						return (
+							<li
+								key={user.id}
+								className={row}
+								onClick={(event) => {
+									if (!(event.target as HTMLElement).closest('button, a')) setEditing(user);
+								}}
+							>
+								<span className={user.disabled ? 'opacity-45 grayscale' : ''}>
+									<Avatar src={null} name={user.username} size={36} />
+								</span>
+								<div className="flex min-w-0 flex-1 flex-col gap-1.5">
+									<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+										<button
+											type="button"
+											className="text-ui hover:text-accent-text truncate text-left font-semibold transition-colors"
+											onClick={() => {
+												setEditing(user);
+											}}
+										>
+											{user.username}
+										</button>
+										{self ? <Chip>{t.users.you}</Chip> : null}
+										{user.disabled ? (
+											<Chip tone="muted">
+												<Ban size={12} />
+												{t.users.disabled}
+											</Chip>
+										) : null}
+									</div>
+									<div className="text-small text-muted flex flex-wrap items-center gap-x-2 gap-y-1">
+										<Chip tone="accent">{roleName(roleById.get(user.role_id))}</Chip>
+										{exceptions > 0 ? <Chip>{t.users.exceptions(exceptions)}</Chip> : null}
+										<span className="ml-1">
+											{user.last_login_at
+												? t.users.lastLoginAt(formatRelative(user.last_login_at))
+												: t.users.neverSignedIn}
+										</span>
+									</div>
 								</div>
-								<div className="text-small text-muted flex flex-wrap items-center gap-x-3 gap-y-1">
-									<Chip tone="accent">
-										{roleName(roleById.get(user.role_id))}
-										{Object.keys(user.overrides).length > 0 ? ' +' : ''}
-									</Chip>
-									<span>
-										{user.last_login_at
-											? t.users.lastLoginAt(formatRelative(user.last_login_at))
-											: t.users.neverSignedIn}
-									</span>
-								</div>
-							</div>
-							<div className="flex flex-none">
-								<IconButton
-									size="sm"
-									label={t.common.edit}
-									onClick={() => {
-										setEditing(user);
-									}}
+								<Menu
+									label={t.users.actionsFor(user.username)}
+									trigger={() => (
+										<IconButton size="sm" label={t.users.actionsFor(user.username)}>
+											<Ellipsis size={18} />
+										</IconButton>
+									)}
 								>
-									<Pencil size={16} />
-								</IconButton>
-								<IconButton
-									size="sm"
-									label={user.id === me.id ? t.users.cantDeleteSelf : t.common.delete}
-									aria-disabled={user.id === me.id || undefined}
-									className="aria-disabled:cursor-not-allowed aria-disabled:opacity-40 [&:not([aria-disabled])]:hover:!text-danger"
-									onClick={() => {
-										if (user.id !== me.id) setDeleting(user);
-									}}
-								>
-									<Trash2 size={16} />
-								</IconButton>
-							</div>
-						</li>
-					))}
+									<MenuItem
+										icon={<Pencil size={16} />}
+										onSelect={() => {
+											setEditing(user);
+										}}
+									>
+										{t.common.edit}
+									</MenuItem>
+									{self ? null : (
+										<MenuItem
+											icon={user.disabled ? <CircleCheck size={16} /> : <Ban size={16} />}
+											onSelect={() => void setDisabled(user, !user.disabled)}
+										>
+											{user.disabled ? t.users.enable : t.users.disable}
+										</MenuItem>
+									)}
+									<MenuDivider />
+									<MenuItem
+										icon={<Trash2 size={16} />}
+										danger
+										disabled={self}
+										onSelect={() => {
+											setDeleting(user);
+										}}
+									>
+										{t.common.delete}
+									</MenuItem>
+								</Menu>
+							</li>
+						);
+					})}
 				</ul>
 			</Card>
 
@@ -151,59 +277,84 @@ export function UsersPage() {
 				flush
 			>
 				<ul className="divide-line divide-y">
-					{roles.data.roles.map((role) => (
-						<li key={role.id} className="flex items-center gap-3.5 px-5 py-3.5">
-							<div className="flex min-w-0 flex-1 flex-col gap-2">
-								<div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-									<span className="text-ui font-semibold">{roleName(role)}</span>
-									<span className="text-small text-muted tabular inline-flex items-center gap-1">
-										<UsersIcon size={14} />
-										{t.users.roleUsers(role.users)}
+					{roles.data.roles.map((role) => {
+						const locked = role.builtin === 'admin';
+						return (
+							<li
+								key={role.id}
+								className={locked ? 'flex items-center gap-3.5 px-5 py-3.5' : row}
+								onClick={(event) => {
+									if (!locked && !(event.target as HTMLElement).closest('button, a'))
+										setRoleEditing(role);
+								}}
+							>
+								<div className="flex min-w-0 flex-1 flex-col gap-2">
+									<div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+										{locked ? (
+											<span className="text-ui font-semibold">{roleName(role)}</span>
+										) : (
+											<button
+												type="button"
+												className="text-ui hover:text-accent-text text-left font-semibold transition-colors"
+												onClick={() => {
+													setRoleEditing(role);
+												}}
+											>
+												{roleName(role)}
+											</button>
+										)}
+										<span className="text-small text-muted tabular inline-flex items-center gap-1">
+											<UsersIcon size={14} />
+											{t.users.roleUsers(role.users)}
+										</span>
+									</div>
+									<RoleSummary role={role} known={roles.data.permissions} />
+								</div>
+								{locked ? (
+									<span
+										className="text-muted grid size-8 flex-none place-items-center"
+										data-tip={t.users.adminHint}
+										aria-label={t.users.adminHint}
+										role="img"
+									>
+										<Lock size={15} />
 									</span>
-								</div>
-								<div className="flex flex-wrap gap-1.5">
-									{role.builtin === 'admin' ? (
-										<Chip tone="accent">{t.users.adminRole}</Chip>
-									) : role.permissions.length === 0 ? (
-										<span className="text-small text-muted">{t.common.none}</span>
-									) : (
-										role.permissions.map((permission) => (
-											<Chip key={permission}>{t.users.perm[permission] ?? permission}</Chip>
-										))
-									)}
-								</div>
-							</div>
-							<div className="flex flex-none">
-								{role.builtin === 'admin' ? (
-									<span className="size-8" aria-hidden />
 								) : (
-									<IconButton
-										size="sm"
-										label={t.common.edit}
-										onClick={() => {
-											setRoleEditing(role);
-										}}
+									<Menu
+										label={t.users.actionsFor(roleName(role))}
+										trigger={() => (
+											<IconButton size="sm" label={t.users.actionsFor(roleName(role))}>
+												<Ellipsis size={18} />
+											</IconButton>
+										)}
 									>
-										<Pencil size={16} />
-									</IconButton>
+										<MenuItem
+											icon={<Pencil size={16} />}
+											onSelect={() => {
+												setRoleEditing(role);
+											}}
+										>
+											{t.common.edit}
+										</MenuItem>
+										{role.builtin ? null : (
+											<>
+												<MenuDivider />
+												<MenuItem
+													icon={<Trash2 size={16} />}
+													danger
+													onSelect={() => {
+														setRoleDeleting(role);
+													}}
+												>
+													{t.common.delete}
+												</MenuItem>
+											</>
+										)}
+									</Menu>
 								)}
-								{role.builtin ? (
-									<span className="size-8" aria-hidden />
-								) : (
-									<IconButton
-										size="sm"
-										label={t.common.delete}
-										className="hover:!text-danger"
-										onClick={() => {
-											setRoleDeleting(role);
-										}}
-									>
-										<Trash2 size={16} />
-									</IconButton>
-								)}
-							</div>
-						</li>
-					))}
+							</li>
+						);
+					})}
 				</ul>
 			</Card>
 
@@ -269,7 +420,111 @@ export function UsersPage() {
 	);
 }
 
-type Override = 'role' | 'allow' | 'deny';
+/** One permission with its explanation and a switch; `badge` sits beside the name, `action` under it. */
+function PermissionRow({
+	permission,
+	checked,
+	onChange,
+	badge,
+	action,
+}: {
+	permission: Permission;
+	checked: boolean;
+	onChange: (checked: boolean) => void;
+	badge?: ReactNode;
+	action?: ReactNode;
+}) {
+	const t = useT();
+	const id = useId();
+	return (
+		<li className="flex items-center justify-between gap-4 py-2.5">
+			<div className="flex min-w-0 flex-col gap-0.5">
+				<div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+					<label htmlFor={id} className="text-ui text-ink cursor-pointer">
+						{t.users.perm[permission] ?? permission}
+					</label>
+					{badge}
+				</div>
+				{t.users.permHint[permission] ? (
+					<span className="text-small text-muted">{t.users.permHint[permission]}</span>
+				) : null}
+				{action}
+			</div>
+			<button
+				id={id}
+				type="button"
+				role="switch"
+				aria-checked={checked}
+				onClick={() => {
+					onChange(!checked);
+				}}
+				className={SWITCH}
+			>
+				<span className={`${KNOB} ${checked ? 'translate-x-5' : ''}`} />
+			</button>
+		</li>
+	);
+}
+
+/** The permissions under their group's name; `row` draws each one. */
+function PermissionGroups({ known, row }: { known: Permission[]; row: (permission: Permission) => ReactNode }) {
+	const t = useT();
+	return (
+		<div className="flex flex-col gap-4">
+			{grouped(known).map((group) => (
+				<section key={group.key} className="flex flex-col">
+					<h3 className="text-caption text-muted flex items-center gap-1.5 pb-1 font-semibold tracking-wide uppercase">
+						{group.icon}
+						{t.users.groups[group.key]}
+					</h3>
+					<ul className="divide-line divide-y">{group.permissions.map(row)}</ul>
+				</section>
+			))}
+		</div>
+	);
+}
+
+/** Roles to pick from, each with what it allows. */
+function RolePicker({
+	roles,
+	known,
+	value,
+	onChange,
+}: {
+	roles: Role[];
+	known: Permission[];
+	value: number;
+	onChange: (id: number) => void;
+}) {
+	const t = useT();
+	const roleName = useRoleName();
+	const name = useId();
+	return (
+		<fieldset className="flex flex-col gap-2">
+			<legend className="text-ui mb-2 font-medium">{t.users.role}</legend>
+			{roles.map((role) => (
+				<label
+					key={role.id}
+					className="ring-line has-checked:ring-accent has-checked:bg-accent-soft/40 has-focus-visible:outline-accent flex cursor-pointer items-start gap-3 rounded-sm px-3.5 py-3 ring-1 transition-[background-color,box-shadow] duration-150 has-checked:ring-2 has-focus-visible:outline-2 has-focus-visible:outline-offset-2"
+				>
+					<input
+						type="radio"
+						name={name}
+						checked={role.id === value}
+						onChange={() => {
+							onChange(role.id);
+						}}
+						className="mt-1 size-4 flex-none accent-[var(--accent)]"
+					/>
+					<span className="flex min-w-0 flex-col gap-1">
+						<span className="text-ui font-semibold">{roleName(role)}</span>
+						<RoleSummary role={role} known={known} />
+					</span>
+				</label>
+			))}
+		</fieldset>
+	);
+}
 
 function UserDialog({
 	user,
@@ -284,7 +539,7 @@ function UserDialog({
 }) {
 	const t = useT();
 	const me = useMe();
-	const roleName = useRoleName();
+	const formId = useId();
 	const fallbackRole = roles.roles.find((role) => role.builtin === 'user')?.id ?? roles.roles[0]?.id ?? 0;
 	const [username, setUsername] = useState(user?.username ?? '');
 	const [password, setPassword] = useState('');
@@ -295,6 +550,12 @@ function UserDialog({
 	const [busy, setBusy] = useState(false);
 	const role = roles.roles.find((entry) => entry.id === roleId);
 	const isAdminRole = role?.builtin === 'admin';
+	const fromRole = (permission: Permission) => role?.permissions.includes(permission) ?? false;
+	// An exception the new role already gives is no exception any more.
+	const exception = (permission: Permission) => {
+		const value = overrides[permission];
+		return value !== undefined && value !== fromRole(permission);
+	};
 
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();
@@ -302,8 +563,9 @@ function UserDialog({
 		setError(null);
 		try {
 			if (user) {
-				const changes: Record<Permission, boolean | null> = {} as Record<Permission, boolean | null>;
-				for (const permission of roles.permissions) changes[permission] = overrides[permission] ?? null;
+				const changes = {} as Record<Permission, boolean | null>;
+				for (const permission of roles.permissions)
+					changes[permission] = exception(permission) ? (overrides[permission] ?? null) : null;
 				await api.patch(`/users/${user.id}`, {
 					role_id: roleId,
 					disabled,
@@ -324,125 +586,129 @@ function UserDialog({
 	};
 
 	return (
-		<Dialog open onClose={onClose} title={user ? t.users.editTitle(user.username) : t.users.add} wide>
-			<form className="flex flex-col gap-5" onSubmit={(event) => void submit(event)}>
-				{user ? null : (
-					<Field label={t.users.username}>
-						{(id) => (
-							<TextInput
+		<Dialog
+			open
+			onClose={onClose}
+			title={user ? t.users.editTitle(user.username) : t.users.add}
+			wide
+			footer={
+				<>
+					<Button variant="ghost" onClick={onClose}>
+						{t.common.cancel}
+					</Button>
+					<Button type="submit" form={formId} variant="accent" busy={busy}>
+						{user ? t.common.save : t.common.create}
+					</Button>
+				</>
+			}
+		>
+			<form id={formId} className="flex flex-col gap-6" onSubmit={(event) => void submit(event)}>
+				<div className={`grid gap-5 ${user ? '' : 'sm:grid-cols-2'}`}>
+					{user ? null : (
+						<Field label={t.users.username}>
+							{(id) => (
+								<TextInput
+									id={id}
+									required
+									autoFocus
+									autoComplete="off"
+									autoCapitalize="none"
+									value={username}
+									onChange={(event) => {
+										setUsername(event.target.value);
+									}}
+								/>
+							)}
+						</Field>
+					)}
+					<Field
+						label={user ? t.users.newPassword : t.users.password}
+						hint={user ? t.users.newPasswordHint : t.auth.passwordHint}
+					>
+						{(id, describedBy) => (
+							<PasswordInput
 								id={id}
-								required
-								autoFocus
-								autoComplete="off"
-								autoCapitalize="none"
-								value={username}
+								autoComplete="new-password"
+								required={!user}
+								minLength={8}
+								aria-describedby={describedBy}
+								value={password}
 								onChange={(event) => {
-									setUsername(event.target.value);
+									setPassword(event.target.value);
 								}}
 							/>
 						)}
 					</Field>
-				)}
-				<Field
-					label={user ? t.users.newPassword : t.users.password}
-					hint={user ? t.users.newPasswordHint : t.auth.passwordHint}
-				>
-					{(id, describedBy) => (
-						<PasswordInput
-							id={id}
-							autoComplete="new-password"
-							required={!user}
-							minLength={8}
-							aria-describedby={describedBy}
-							value={password}
-							onChange={(event) => {
-								setPassword(event.target.value);
-							}}
-						/>
-					)}
-				</Field>
-				<Field label={t.users.role}>
-					{(id) => (
-						<Select
-							id={id}
-							value={roleId}
-							onChange={(event) => {
-								setRoleId(Number(event.target.value));
-							}}
-						>
-							{roles.roles
-								.filter((entry) => entry.builtin !== 'admin' || me.admin)
-								.map((entry) => (
-									<option key={entry.id} value={entry.id}>
-										{roleName(entry)}
-									</option>
-								))}
-						</Select>
-					)}
-				</Field>
+				</div>
+				<RolePicker
+					roles={roles.roles.filter((entry) => entry.builtin !== 'admin' || me.admin)}
+					known={roles.permissions}
+					value={roleId}
+					onChange={setRoleId}
+				/>
 				{user && user.id !== me.id ? (
-					<Switch checked={disabled} onChange={setDisabled} label={t.users.disabled} />
+					<Switch
+						checked={disabled}
+						onChange={setDisabled}
+						label={t.users.disabledLabel}
+						hint={t.users.disabledHint}
+					/>
 				) : null}
 				{user && !isAdminRole ? (
-					<div className="flex flex-col gap-2">
-						<span className="text-ui font-medium">{t.users.permissions}</span>
-						<span className="text-small text-muted -mt-1">{t.users.permissionsHint}</span>
-						<ul className="divide-line border-line divide-y rounded-sm border">
-							{roles.permissions.map((permission) => {
-								const fromRole = role?.permissions.includes(permission) ?? false;
-								const value: Override =
-									overrides[permission] === undefined
-										? 'role'
-										: overrides[permission]
-											? 'allow'
-											: 'deny';
+					<div className="flex flex-col gap-3">
+						<div className="flex flex-col gap-0.5">
+							<span className="text-ui font-medium">{t.users.accountPermissions}</span>
+							<span className="text-small text-muted">{t.users.accountPermissionsHint}</span>
+						</div>
+						<PermissionGroups
+							known={roles.permissions}
+							row={(permission) => {
+								const changed = exception(permission);
 								return (
-									<li
+									<PermissionRow
 										key={permission}
-										className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
-									>
-										<span className="text-small">
-											{t.users.perm[permission] ?? permission}
-											{value === 'role' ? (
-												<span className={`ml-2 ${fromRole ? 'text-ok' : 'text-muted'}`}>
-													{fromRole ? t.common.on : t.common.off}
-												</span>
-											) : null}
-										</span>
-										<Segmented
-											label={t.users.perm[permission] ?? permission}
-											value={value}
-											onChange={(next) => {
-												const copy = { ...overrides };
-												if (next === 'role') delete copy[permission];
-												else copy[permission] = next === 'allow';
-												setOverrides(copy);
-											}}
-											options={[
-												{ value: 'role', label: t.users.followRole },
-												{ value: 'allow', label: t.users.allow },
-												{ value: 'deny', label: t.users.deny },
-											]}
-										/>
-									</li>
+										permission={permission}
+										checked={changed ? (overrides[permission] ?? false) : fromRole(permission)}
+										onChange={(checked) => {
+											const copy = { ...overrides };
+											if (checked === fromRole(permission)) delete copy[permission];
+											else copy[permission] = checked;
+											setOverrides(copy);
+										}}
+										badge={changed ? <Chip tone="accent">{t.users.exception}</Chip> : null}
+										action={
+											changed ? (
+												<button
+													type="button"
+													className="text-small text-accent-text mt-1 inline-flex w-fit items-center gap-1 font-medium hover:underline"
+													onClick={() => {
+														const copy = { ...overrides };
+														delete copy[permission];
+														setOverrides(copy);
+													}}
+												>
+													<RotateCcw size={13} />
+													{t.users.backToRole}
+												</button>
+											) : null
+										}
+									/>
 								);
-							})}
-						</ul>
+							}}
+						/>
 					</div>
+				) : null}
+				{user && isAdminRole ? (
+					<p className="text-small text-muted bg-surface flex items-center gap-2 rounded-sm px-3.5 py-3">
+						<ShieldCheck size={16} className="text-accent-text flex-none" />
+						{t.users.adminHint}
+					</p>
 				) : null}
 				{error ? (
 					<p className="text-small text-danger" role="alert">
 						{error}
 					</p>
 				) : null}
-				<div className="flex justify-end gap-2">
-					<Button variant="ghost" onClick={onClose}>
-						{t.common.cancel}
-					</Button>
-					<Button type="submit" variant="accent" busy={busy}>
-						{user ? t.common.save : t.common.create}
-					</Button>
-				</div>
 			</form>
 		</Dialog>
 	);
@@ -460,6 +726,8 @@ function RoleDialog({
 	onSaved: () => Promise<unknown>;
 }) {
 	const t = useT();
+	const roleName = useRoleName();
+	const formId = useId();
 	const [name, setName] = useState(role?.name ?? '');
 	const [granted, setGranted] = useState<Set<Permission>>(new Set(role?.permissions ?? ['streams.view']));
 	const [error, setError] = useState<string | null>(null);
@@ -490,9 +758,20 @@ function RoleDialog({
 		<Dialog
 			open
 			onClose={onClose}
-			title={role ? (role.builtin ? (t.users.roleNames[role.builtin] ?? role.name) : role.name) : t.users.addRole}
+			title={role ? roleName(role) : t.users.addRole}
+			wide
+			footer={
+				<>
+					<Button variant="ghost" onClick={onClose}>
+						{t.common.cancel}
+					</Button>
+					<Button type="submit" form={formId} variant="accent" busy={busy}>
+						{role ? t.common.save : t.common.create}
+					</Button>
+				</>
+			}
 		>
-			<form className="flex flex-col gap-5" onSubmit={(event) => void submit(event)}>
+			<form id={formId} className="flex flex-col gap-6" onSubmit={(event) => void submit(event)}>
 				{role?.builtin ? null : (
 					<Field label={t.users.roleName}>
 						{(id) => (
@@ -509,13 +788,19 @@ function RoleDialog({
 						)}
 					</Field>
 				)}
-				<div className="flex flex-col gap-3.5">
-					<span className="text-ui font-medium">{t.users.permissions}</span>
-					{permissions.map((permission) => (
-						<Switch
+				{role ? (
+					<p className="text-small text-muted -mt-2 inline-flex items-center gap-1.5">
+						<UsersIcon size={14} />
+						{t.users.roleUsers(role.users)}
+					</p>
+				) : null}
+				<PermissionGroups
+					known={permissions}
+					row={(permission) => (
+						<PermissionRow
 							key={permission}
+							permission={permission}
 							checked={granted.has(permission)}
-							label={<span className="font-normal">{t.users.perm[permission] ?? permission}</span>}
 							onChange={(checked) => {
 								const next = new Set(granted);
 								if (checked) next.add(permission);
@@ -523,21 +808,13 @@ function RoleDialog({
 								setGranted(next);
 							}}
 						/>
-					))}
-				</div>
+					)}
+				/>
 				{error ? (
 					<p className="text-small text-danger" role="alert">
 						{error}
 					</p>
 				) : null}
-				<div className="flex justify-end gap-2">
-					<Button variant="ghost" onClick={onClose}>
-						{t.common.cancel}
-					</Button>
-					<Button type="submit" variant="accent" busy={busy}>
-						{role ? t.common.save : t.common.create}
-					</Button>
-				</div>
 			</form>
 		</Dialog>
 	);

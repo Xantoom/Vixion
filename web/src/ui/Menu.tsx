@@ -5,6 +5,8 @@ const CloseContext = createContext<() => void>(() => {});
 
 /** The gap kept between a menu and the screen's edges. */
 const EDGE = 8;
+/** The gap between the button and its menu. */
+const GAP = 8;
 
 /**
  * A button that opens a short list of actions or choices. The panel lines up with an edge of the
@@ -29,7 +31,7 @@ export function Menu({
 }) {
 	const [open, setOpen] = useState(false);
 	const [up, setUp] = useState(false);
-	const [place, setPlace] = useState<{ shift: number; maxHeight?: number }>({ shift: 0 });
+	const [place, setPlace] = useState<{ top: number; left: number; maxHeight?: number } | null>(null);
 	const root = useRef<HTMLDivElement>(null);
 	const panel = useRef<HTMLDivElement>(null);
 	const id = useId();
@@ -55,20 +57,40 @@ export function Menu({
 	}, [open]);
 
 	useLayoutEffect(() => {
-		if (!open || !root.current || !panel.current) return;
-		const box = root.current.getBoundingClientRect();
-		const height = panel.current.scrollHeight;
-		const below = window.innerHeight - box.bottom - EDGE - 8;
-		const above = box.top - EDGE - 8;
-		const opensUp = height > below && above > below;
-		setUp(opensUp);
-		const room = opensUp ? above : below;
-		// Where the panel would sit, and how far to slide it to stay on screen.
-		const width = panel.current.offsetWidth;
-		const left = align === 'end' ? box.right - width : box.left;
-		const shift = Math.min(0, window.innerWidth - EDGE - (left + width)) + Math.max(0, EDGE - left);
-		setPlace({ shift, maxHeight: height > room ? Math.max(room, 120) : undefined });
-		items(panel.current)[0]?.focus({ preventScroll: true });
+		const menu = panel.current;
+		if (!open || !root.current || !menu) return;
+		// In the top layer, the panel is clipped by no card or scrolling box, and shows over dialogs.
+		if (!menu.matches(':popover-open')) menu.showPopover();
+		const measure = () => {
+			if (!root.current) return;
+			const box = root.current.getBoundingClientRect();
+			const height = menu.scrollHeight;
+			const below = window.innerHeight - box.bottom - EDGE - GAP;
+			const above = box.top - EDGE - GAP;
+			const opensUp = height > below && above > below;
+			const room = opensUp ? above : below;
+			const shown = Math.min(height, Math.max(room, 120));
+			const width = menu.offsetWidth;
+			const wanted = align === 'end' ? box.right - width : box.left;
+			setUp(opensUp);
+			setPlace({
+				top: opensUp ? box.top - GAP - shown : box.bottom + GAP,
+				left: Math.max(EDGE, Math.min(wanted, window.innerWidth - EDGE - width)),
+				maxHeight: height > room ? Math.max(room, 120) : undefined,
+			});
+		};
+		measure();
+		items(menu)[0]?.focus({ preventScroll: true });
+		// The button moves with the page: the panel follows it.
+		const onMove = (event: Event) => {
+			if (event.target !== menu) measure();
+		};
+		window.addEventListener('scroll', onMove, true);
+		window.addEventListener('resize', measure);
+		return () => {
+			window.removeEventListener('scroll', onMove, true);
+			window.removeEventListener('resize', measure);
+		};
 	}, [open, align]);
 
 	const onKeyDown = (event: React.KeyboardEvent) => {
@@ -99,10 +121,16 @@ export function Menu({
 					id={id}
 					role="menu"
 					aria-label={label}
+					popover="manual"
 					data-up={up}
 					onKeyDown={onKeyDown}
-					style={{ translate: `${place.shift}px 0`, maxHeight: place.maxHeight }}
-					className={`menu-in bg-bg border-line absolute z-50 max-w-[calc(100vw-1rem)] min-w-56 overflow-y-auto overscroll-contain rounded-sm border p-1 shadow-xl ${up ? 'bottom-full mb-2' : 'top-full mt-2'} ${align === 'end' ? 'right-0' : 'left-0'} ${panelClassName}`}
+					style={{
+						top: place?.top ?? 0,
+						left: place?.left ?? 0,
+						maxHeight: place?.maxHeight,
+						visibility: place ? undefined : 'hidden',
+					}}
+					className={`menu-in bg-bg border-line text-ink fixed m-0 max-w-[calc(100vw-1rem)] min-w-56 overflow-y-auto overscroll-contain rounded-sm border p-1 shadow-xl [inset:auto] ${panelClassName}`}
 				>
 					<CloseContext.Provider
 						value={() => {
