@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Eye, EyeOff } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Copy, Eye, EyeOff, TriangleAlert } from 'lucide-react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useT } from '@/i18n';
-import { type Settings, type SettingsResponse, api } from '@/lib/api';
+import { type Folder, type Settings, type SettingsResponse, type Stats, api } from '@/lib/api';
+import { formatBytes, formatDuration } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import { Button, IconButton } from '@/ui/Button';
-import { Card, SettingRow, Toggle } from '@/ui/Card';
+import { Card, Facts, SettingRow, Toggle } from '@/ui/Card';
 import { NumberInput, Select, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
@@ -156,6 +157,8 @@ export function SettingsPage() {
 				</SettingRow>
 			</Card>
 
+			<ServerCard />
+
 			{dirty ? (
 				<div
 					className="menu-in fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-6"
@@ -242,5 +245,58 @@ function TokenField() {
 				<Copy size={16} />
 			</IconButton>
 		</div>
+	);
+}
+
+/** What runs and where its files live: read-only, at the end of the settings. */
+function ServerCard() {
+	const t = useT();
+	const can = useCan('stats.view');
+	const { data } = useQuery({ queryKey: ['stats'], queryFn: async () => api.get<Stats>('/stats'), enabled: can });
+	if (!data) return null;
+	return (
+		<Card title={t.settings.server} flush className="reveal">
+			<Facts
+				items={[
+					[t.settings.version, data.version],
+					[t.settings.uptime, formatDuration(data.uptime_ms)],
+					...(data.folders
+						? ([
+								[t.settings.configFolder, <FolderFact key="config" folder={data.folders.config} />],
+								[
+									t.settings.recordingsFolder,
+									<FolderFact key="recordings" folder={data.folders.recordings} />,
+								],
+							] as [string, ReactNode][])
+						: []),
+				]}
+			/>
+		</Card>
+	);
+}
+
+/** A folder as Vixion sees it, where it comes from on the host, and the room left on its disk. */
+function FolderFact({ folder }: { folder: Folder }) {
+	const t = useT();
+	return (
+		<span className="flex flex-col items-end gap-1">
+			<code className="font-mono">{folder.path}</code>
+			{folder.source ? (
+				<span className="text-small text-muted">
+					<code className="font-mono">{folder.source}</code> {t.settings.onHost}
+				</span>
+			) : null}
+			{folder.unmapped ? (
+				<span className="text-small text-warn flex items-center gap-1.5">
+					<TriangleAlert size={14} className="flex-none" />
+					{t.stats.unmapped}
+				</span>
+			) : null}
+			{folder.disk.total > 0 ? (
+				<span className="text-small text-muted">
+					{t.stats.diskFree(formatBytes(folder.disk.free), formatBytes(folder.disk.total))}
+				</span>
+			) : null}
+		</span>
 	);
 }

@@ -208,6 +208,12 @@ export const en = {
 		unmapped: 'Not mounted: lost if the container is recreated',
 	},
 	settings: {
+		server: 'Server',
+		version: 'Version',
+		uptime: 'Running for',
+		configFolder: 'Configuration folder',
+		recordingsFolder: 'Recordings folder',
+		onHost: 'on the host',
 		title: 'Settings',
 		recording: 'Recording',
 		h264Only: 'H.264 only',

@@ -212,6 +212,12 @@ export const fr: Messages = {
 		unmapped: 'Non monté : perdu si le conteneur est recréé',
 	},
 	settings: {
+		server: 'Serveur',
+		version: 'Version',
+		uptime: 'En marche depuis',
+		configFolder: 'Dossier de configuration',
+		recordingsFolder: 'Dossier des enregistrements',
+		onHost: 'sur l’hôte',
 		title: 'Réglages',
 		recording: 'Enregistrement',
 		h264Only: 'H.264 uniquement',
