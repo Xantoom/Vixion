@@ -19,7 +19,8 @@
 - **Skips ads**: with a Turbo or subscriber token Twitch sends none; without one, Vixion switches players when an ad
   starts, leaving short gaps instead of ads.
 - **Plays back** in a studio view: video and chat side by side, ±5 s, volume, full screen, and a compressor that evens
-  out quiet talk and loud moments. Downloads the video, the chat (JSON), or the chat as subtitles (ASS).
+  out quiet talk and loud moments. Reopens each recording where you left it. Downloads the video, the chat (JSON),
+  or the chat as subtitles (ASS).
 - **Keeps the disk in check**: recordings expire after 14 days unless kept forever; when space runs low the oldest go
   first. Statistics show what each streamer takes.
 - **Several people**: administrators, users and custom roles, with permissions per role and per person.
@@ -30,96 +31,155 @@ English and French. Phones, tablets, desktops and TVs.
 
 Vixion is not affiliated with Twitch. Record only what you're allowed to keep.
 
-## Install
+## Quick start
 
-### Docker Compose
+Vixion runs as one container. Create a folder, put this `compose.yaml` in it, and start it:
+
+```yaml
+services:
+  vixion:
+    image: ghcr.io/xantoom/vixion:latest
+    container_name: vixion
+    restart: unless-stopped
+    user: "1000:1000"
+    stop_grace_period: 30s
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      VIXION_TWITCH_TOKEN: ""
+```
 
 ```bash
-curl -O https://raw.githubusercontent.com/Xantoom/Vixion/main/compose.yaml
 mkdir data
 docker compose up -d
 ```
 
-Open `http://your-server:8080` and create the administrator account.
+Open `http://your-server:8080`, create the administrator account, then search for a channel and add it. It is
+recorded whenever it goes live, starting right away if it already is.
 
-### Docker
+<details>
+<summary>With <code>docker run</code></summary>
 
 ```bash
+mkdir data
 docker run -d --name vixion --restart unless-stopped --stop-timeout 30 \
-  -p 8080:8080 -v ./data:/data --user "$(id -u):$(id -g)" \
+  --user 1000:1000 -p 8080:8080 -v ./data:/data \
+  -e VIXION_TWITCH_TOKEN="" \
   ghcr.io/xantoom/vixion:latest
 ```
 
-### Binary
+</details>
 
-Static Linux binaries (x86_64, aarch64) are attached to each [release](https://github.com/Xantoom/Vixion/releases).
+Images exist for x86-64 and arm64. Create `data` before the first start so that it belongs to you rather than to
+root.
+
+## Parameters
+
+| Parameter                       | Function                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------- |
+| `-p 8080`                       | The web interface                                                                |
+| `-v /data`                      | Database, recordings and keys. Put it on the disk that holds the recordings      |
+| `--user 1000:1000`              | The owner of the data folder on the host (`id -u`, `id -g`)                       |
+| `-e VIXION_TWITCH_TOKEN`        | A Twitch account's token: no ads, best quality (see below). Recommended          |
+| `-e VIXION_TWITCH_TOKEN_FILE`   | The same, read from a file, for Docker secrets                                   |
+| `-e VIXION_LOG`                 | `error`, `warn`, `info` (default) or `debug`                                     |
+
+Everything else (retention, H.264 only, chat, alerts) is in *Administration → Settings*. Twitch is checked
+automatically, every 30 seconds with a few channels and less often with hundreds, within what Twitch allows.
+
+## Twitch token
+
+Without a token Vixion records anyway: it skips ads by switching players, which leaves a few seconds missing where each
+ad was, and may not get the best qualities (1440p, HEVC). With the token of an account that has **Turbo**, Twitch
+sends no ads at all and the recordings are complete; this is the recommended setup. A subscription to a channel
+removes ads on that channel only.
+
+To get it, on a computer:
+
+1. Sign in on [twitch.tv](https://www.twitch.tv) with that account.
+2. Open the developer tools (`F12`), then *Application* (Chrome, Edge) or *Storage* (Firefox) → *Cookies* →
+   `https://www.twitch.tv`.
+3. Copy the value of `auth-token`, 30 letters and digits.
+
+Put it in `VIXION_TWITCH_TOKEN` and restart the container. *Settings → Twitch* shows it masked, with buttons to reveal
+and copy it. Signing out of twitch.tv in that browser invalidates the token: close the tab instead, or use a private
+window to take it. Vixion only sends it to Twitch, and raises an alert if Twitch refuses it.
+
+## Updating
 
 ```bash
-VIXION_DATA_DIR=/var/lib/vixion ./vixion
+docker compose pull && docker compose up -d
 ```
 
-`vixion reset-password <user> <password>` sets a forgotten password. `vixion healthcheck` exits 0 when the server
-answers.
+Recordings in progress close cleanly and continue as a new part once the container is back. Pin the minor line (`ghcr.io/xantoom/vixion:0.2`) to
+get fixes without surprises; see [Versions](#versions).
 
-## Video and Cloudflare Tunnel
+## Troubleshooting
 
-The interface and the video can be served apart, like Plex does. A Cloudflare Tunnel in front of the interface is fine
-for pages, but its terms don't allow carrying video, and it would slow it down. Three modes:
+- **Logs**: `docker logs -f vixion`, or *Administration → Logs* in the interface.
+- **Forgotten password**: `docker exec vixion vixion reset-password <user> <new-password>`.
+- **Permission denied on /data**: the folder belongs to another user; `sudo chown -R 1000:1000 data` or change `user`.
 
-| `VIXION_MEDIA_MODE` | Video is served                         | Use it when                                                    |
-| ------------------- | --------------------------------------- | -------------------------------------------------------------- |
-| `same` (default)    | by the interface's address, under /media | on a local network, or behind your own reverse proxy           |
-| `https`             | on its own port with its own certificate | the interface is behind a Cloudflare Tunnel                    |
-| `http`              | on its own port, plain HTTP              | your own proxy (Caddy, Traefik) handles TLS for that port      |
+## Video outside a Cloudflare Tunnel
 
-For `https`, give Vixion a domain and a Cloudflare API token (permissions *Zone → Zone → Read* and
-*Zone → DNS → Edit*). It gets a Let's Encrypt certificate by DNS challenge (nothing to open but the video port) and
-renews it. With `VIXION_DDNS=true` it also keeps the domain's A record on your public address, unproxied.
+A Cloudflare Tunnel in front of the interface is fine for pages, but its terms don't allow carrying video, and it
+would slow it down. Like Plex, Vixion can serve the video on its own port:
+
+| `VIXION_MEDIA_MODE` | Video is served                          | Use it when                                               |
+| ------------------- | ---------------------------------------- | --------------------------------------------------------- |
+| `same` (default)    | by the interface, under `/media`         | on a local network, or behind your own reverse proxy      |
+| `https`             | on port 8443, with its own certificate   | the interface is behind a Cloudflare Tunnel               |
+| `http`              | on port 8443, plain HTTP                 | your own proxy (Caddy, Traefik) handles TLS for that port |
+
+For `https`, give Vixion a domain and a Cloudflare API token with *Zone → Zone → Read* and *Zone → DNS → Edit*. It
+gets a Let's Encrypt certificate by DNS challenge and renews it; with `VIXION_DDNS=true` it also keeps the domain's A
+record on your public address. Publish port 8443 and forward it on your router:
 
 ```yaml
-environment:
-  VIXION_MEDIA_MODE: https
-  VIXION_MEDIA_DOMAIN: media.example.com
-  VIXION_CLOUDFLARE_API_TOKEN: your-token
-  VIXION_DDNS: "true"
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    environment:
+      VIXION_MEDIA_MODE: https
+      VIXION_MEDIA_DOMAIN: media.example.com
+      VIXION_CLOUDFLARE_API_TOKEN: your-cloudflare-token
+      VIXION_DDNS: "true"
 ```
 
-Then forward port 8443 to the server on your router. Video links are signed and expire after 12 hours: nobody can
-watch without signing in to the interface first.
+Video links are signed and expire after 12 hours: nobody can watch without signing in first.
 
-## Configuration
+<details>
+<summary>All video variables</summary>
 
-Everything that changes while the app runs (retention, codecs, webhooks) is in the **Settings** page. The environment
-wires the process and holds the Twitch token:
+| Variable                      | Default        | Function                                                    |
+| ----------------------------- | -------------- | ----------------------------------------------------------- |
+| `VIXION_MEDIA_MODE`           | `same`         | `same`, `https` or `http`                                   |
+| `VIXION_MEDIA_DOMAIN`         |                | The video domain, in `https` mode                           |
+| `VIXION_MEDIA_PUBLIC_PORT`    | 8443           | The port browsers use, when the router forwards another one |
+| `VIXION_MEDIA_PUBLIC_URL`     |                | The video origin browsers use (required in `http` mode)     |
+| `VIXION_CLOUDFLARE_API_TOKEN` |                | Let's Encrypt by DNS challenge, and DDNS                    |
+| `VIXION_ACME_EMAIL`           |                | Contact for Let's Encrypt                                   |
+| `VIXION_ACME_STAGING`         | `false`        | Let's Encrypt's staging server, while testing               |
+| `VIXION_ACME_DIRECTORY`       | Let's Encrypt  | Another ACME authority's directory URL                      |
+| `VIXION_TLS_CERT`, `_KEY`     |                | Your own certificate files instead of Let's Encrypt         |
+| `VIXION_DDNS`                 | `false`        | Keep the video domain's A record on the public address      |
+| `VIXION_HTTP_ADDR`            | `0.0.0.0:8080` | Where the interface listens                                 |
+| `VIXION_MEDIA_ADDR`           | `0.0.0.0:8443` | Where the video listens                                     |
+| `VIXION_LOG_FORMAT`           | text           | `json` for log collectors                                   |
 
-| Variable                      | Default        | What it does                                                          |
-| ----------------------------- | -------------- | --------------------------------------------------------------------- |
-| `VIXION_DATA_DIR`             | `./data`       | Database, recordings and keys                                         |
-| `VIXION_HTTP_ADDR`            | `0.0.0.0:8080` | The interface                                                         |
-| `VIXION_MEDIA_MODE`           | `same`         | `same`, `http` or `https` (see above)                                 |
-| `VIXION_MEDIA_ADDR`           | `0.0.0.0:8443` | The video listener, in `http` and `https` modes                       |
-| `VIXION_MEDIA_DOMAIN`         |                | The video domain, in `https` mode                                     |
-| `VIXION_MEDIA_PUBLIC_PORT`    | listener port  | The port browsers use, when the router forwards another one          |
-| `VIXION_MEDIA_PUBLIC_URL`     |                | The video origin browsers use (required in `http` mode)               |
-| `VIXION_CLOUDFLARE_API_TOKEN` |                | Let's Encrypt by DNS challenge, and DDNS                              |
-| `VIXION_ACME_EMAIL`           |                | Contact for Let's Encrypt                                             |
-| `VIXION_ACME_STAGING`         | `false`        | Use Let's Encrypt's staging server while testing                      |
-| `VIXION_ACME_DIRECTORY`       | Let's Encrypt  | Another ACME certificate authority's directory URL                    |
-| `VIXION_TLS_CERT`, `_KEY`     |                | Your own certificate files instead of Let's Encrypt                   |
-| `VIXION_DDNS`                 | `false`        | Keep the video domain's A record on the public address                |
-| `VIXION_LOG`                  | `info`         | Log level: `error`, `warn`, `info`, `debug`                           |
-| `VIXION_LOG_FORMAT`           | text           | `json` for log collectors                                             |
-| `VIXION_TWITCH_TOKEN`         |                | A Twitch account's `auth-token` cookie (see below)                    |
-| `VIXION_TWITCH_TOKEN_FILE`    |                | The same, read from a file (Docker secrets)                           |
+</details>
 
-### Twitch token (no ads)
+## Without Docker
 
-With a Turbo or subscribed account, take the value of the `auth-token` cookie of twitch.tv (browser developer tools →
-Application → Cookies) and give it to Vixion at startup, with `VIXION_TWITCH_TOKEN`, `VIXION_TWITCH_TOKEN_FILE` or
-`vixion --twitch-token <token>` (an argument shows in the process list: prefer the environment). It is only sent to
-Twitch. *Settings → Twitch* shows it masked, with buttons to reveal and copy it; it can't be changed there.
+Static Linux binaries (x86-64, arm64) are attached to each [release](https://github.com/Xantoom/Vixion/releases):
 
-A token saved from the interface by an earlier version keeps working until one is configured, which replaces it.
+```bash
+VIXION_DATA_DIR=/var/lib/vixion VIXION_TWITCH_TOKEN=... ./vixion
+```
+
+`--twitch-token <token>` also works, but shows in the process list.
 
 ## Player shortcuts
 

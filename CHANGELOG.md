@@ -11,6 +11,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ### Added
 
+- Checks Twitch on its own, every 30 seconds with a few channels and less often with hundreds, backing off
+  when Twitch asks to.
 - Records every broadcast of the channels you add, at source quality, H.264, HEVC or AV1 as
   Twitch sends it, with an H.264-only option. 1440p HEVC needs a Twitch account token.
 - Skips ads, either with a Turbo or subscriber token or by switching players. The token is set with
