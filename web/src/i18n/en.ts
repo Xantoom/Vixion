@@ -38,7 +38,6 @@ export const en = {
 		themeDark: 'Dark',
 		password: 'Change password',
 		signOut: 'Sign out',
-		version: (v: string) => `Vixion ${v}`,
 	},
 	auth: {
 		wrongPassword: 'Wrong name or password',
@@ -147,7 +146,6 @@ export const en = {
 		recordingLead: 'The broadcast is still on. Its recording opens here once it ends.',
 		recording: 'Recording',
 		failed: 'Failed',
-		part: (n: number) => `Part ${n}`,
 		ads: (duration: string) => `${duration} of ads skipped`,
 		messages: (n: string) => `${n} messages`,
 		gaps: (n: number) => (n === 1 ? '1 gap' : `${n} gaps`),

@@ -43,7 +43,7 @@ export function StatsPage() {
 	const share = (value: number) => (disk.total > 0 ? (value / disk.total) * 100 : 0);
 	const biggest = Math.max(1, ...data.streamers.map((s) => s.bytes));
 	const segments = [
-		{ label: t.stats.usedByVixion, value: data.bytes, className: 'bg-accent' },
+		{ label: t.stats.usedByVixion, value: data.bytes, className: 'bg-accent-fill' },
 		{ label: t.stats.otherFiles, value: other, className: 'bg-line-2' },
 	];
 
@@ -116,7 +116,7 @@ export function StatsPage() {
 							</div>
 							<div className="h-1.5">
 								<div
-									className="bg-accent h-full min-w-0.5 rounded-xs"
+									className="bg-accent-fill h-full min-w-0.5 rounded-xs"
 									style={{ width: `${(streamer.bytes / biggest) * 100}%` }}
 								/>
 							</div>
@@ -168,7 +168,7 @@ export function StatsPage() {
 											</span>
 											<div className="hidden h-1.5 flex-1 sm:block">
 												<div
-													className="bg-accent h-full min-w-0.5 rounded-xs"
+													className="bg-accent-fill h-full min-w-0.5 rounded-xs"
 													style={{ width: `${(streamer.bytes / biggest) * 100}%` }}
 												/>
 											</div>

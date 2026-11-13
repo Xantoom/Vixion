@@ -118,10 +118,7 @@ export function Timeline({
 							className={`relative h-full overflow-hidden rounded-[1px] transition-colors ${lit ? 'bg-white/55' : 'bg-white/30'}`}
 							style={{ flexGrow: span, flexBasis: 0 }}
 						>
-							<div
-								className="absolute inset-y-0 left-0 bg-[var(--accent)]"
-								style={{ width: `${filled}%` }}
-							/>
+							<div className="absolute inset-y-0 left-0 bg-accent-fill" style={{ width: `${filled}%` }} />
 						</div>
 					);
 				})}

@@ -175,7 +175,7 @@ export function NumberInput({
 
 /** The switch's track and knob, shared with the settings' Toggle. Its touch area reaches 44 px. */
 export const SWITCH =
-	'bg-line-2 aria-checked:bg-accent relative h-7 w-12 flex-none rounded-sm transition-colors duration-200 before:absolute before:-inset-2 before:content-[""] disabled:opacity-50';
+	'bg-line-2 aria-checked:bg-accent-fill relative h-7 w-12 flex-none rounded-sm transition-colors duration-200 before:absolute before:-inset-2 before:content-[""] disabled:opacity-50';
 export const KNOB =
 	'absolute top-1 left-1 size-5 rounded-xs bg-white shadow-sm transition-transform duration-200 ease-(--ease-spring)';
 

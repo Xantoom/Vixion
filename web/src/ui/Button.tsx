@@ -4,7 +4,7 @@ import { Spinner } from './Spinner';
 type Variant = 'accent' | 'secondary' | 'ghost' | 'danger';
 
 const VARIANTS: Record<Variant, string> = {
-	accent: 'bg-accent text-accent-ink font-semibold hover:brightness-[1.07] disabled:opacity-45',
+	accent: 'bg-accent-fill text-accent-ink font-semibold hover:brightness-[1.07] disabled:opacity-45',
 	// Edged like the fields it often sits beside.
 	secondary: 'text-ink font-medium shadow-[inset_0_0_0_1px_var(--field-line)] hover:bg-surface disabled:opacity-45',
 	ghost: 'text-ink-2 font-medium hover:bg-surface hover:text-ink disabled:opacity-45',

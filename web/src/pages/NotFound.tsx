@@ -18,7 +18,7 @@ export function NotFound({ forbidden = false }: { forbidden?: boolean }) {
 			</div>
 			<Link
 				to="/"
-				className="text-ui bg-accent text-accent-ink inline-flex h-10 items-center rounded-sm px-4.5 font-semibold transition-[filter] hover:brightness-[1.07]"
+				className="text-ui bg-accent-fill text-accent-ink inline-flex h-10 items-center rounded-sm px-4.5 font-semibold transition-[filter] hover:brightness-[1.07]"
 			>
 				{t.errors.home}
 			</Link>

@@ -317,7 +317,6 @@ function AccountMenu({ admin, alerts }: { admin: AdminPath | null; alerts: numbe
 				<MenuItem icon={<LogOut size={16} />} onSelect={() => void signOut()}>
 					{t.nav.signOut}
 				</MenuItem>
-				<div className="text-caption text-muted px-2.5 pt-1.5 pb-1">{t.nav.version(me.version)}</div>
 			</Menu>
 			<PasswordDialog
 				open={password}

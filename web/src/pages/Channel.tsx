@@ -160,7 +160,7 @@ function Tab({
 			role="tab"
 			aria-selected={selected}
 			onClick={onSelect}
-			className="text-ui text-muted hover:text-ink aria-selected:text-ink relative -mb-px flex h-12 items-center gap-2 px-3 font-semibold transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-transparent aria-selected:after:bg-[var(--accent)]"
+			className="text-ui text-muted hover:text-ink aria-selected:text-ink relative -mb-px flex h-12 items-center gap-2 px-3 font-semibold transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-transparent aria-selected:after:bg-accent-fill"
 		>
 			{children}
 			<span className="text-caption bg-surface tabular rounded-xs px-1.5 py-0.5 font-medium">{count}</span>
@@ -516,7 +516,6 @@ function StreamCard({ stream, login }: { stream: StreamSummary; login: string })
 					{stream.status === 'failed' ? (
 						<Pill className="bg-danger text-white">{t.stream.failed}</Pill>
 					) : null}
-					{stream.part > 1 ? <Pill>{t.stream.part(stream.part)}</Pill> : null}
 				</span>
 				{!recording && (canKeep || canDelete) ? (
 					<span className="absolute top-2.5 right-2.5 flex gap-1.5">
@@ -549,7 +548,7 @@ function StreamCard({ stream, login }: { stream: StreamSummary; login: string })
 				) : null}
 				{progress ? (
 					<span className="absolute inset-x-0 bottom-0 h-1 bg-black/50">
-						<span className="block h-full bg-[var(--accent)]" style={{ width: `${progress * 100}%` }} />
+						<span className="block h-full bg-accent-fill" style={{ width: `${progress * 100}%` }} />
 					</span>
 				) : null}
 				<span className="pointer-events-none absolute inset-x-2.5 bottom-3 flex items-end justify-between gap-2">

@@ -134,6 +134,9 @@ export function StudioPage() {
 	);
 }
 
+/** The part that should start playing on its own: the next one, once the previous ended. */
+let playNext: number | null = null;
+
 function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () => Promise<StreamDetail | null> }) {
 	const t = useT();
 	const canDownload = useCan('streams.download');
@@ -222,7 +225,9 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	}, [open]);
 
 	useEffect(() => {
-		open(initial.video_url, initial.duration_ms, resumeAt(initial.id), false);
+		const carryOn = playNext === initial.id;
+		playNext = null;
+		open(initial.video_url, initial.duration_ms, carryOn ? 0 : resumeAt(initial.id), carryOn);
 		return () => {
 			engine.current?.dispose();
 			engine.current = null;
@@ -236,6 +241,17 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	useEffect(() => {
 		engine.current?.setCompressor(prefs.compressor);
 	}, [prefs.compressor]);
+
+	// A broadcast cut in parts (the server restarted, the picture changed) plays on into the next one.
+	const navigate = useNavigate();
+	useEffect(() => {
+		if (!state.ended) return;
+		const index = stream.parts.findIndex(([id]) => id === stream.id);
+		const next = index >= 0 ? stream.parts[index + 1] : undefined;
+		if (!next) return;
+		playNext = next[0];
+		void navigate({ to: '/$login/$id', params: { login: stream.streamer_login, id: String(next[0]) } });
+	}, [state.ended, stream, navigate]);
 
 	const togglePlay = useCallback(() => {
 		const current = engine.current;
@@ -671,7 +687,7 @@ function StreamOverlay({ stream, visible }: { stream: StreamDetail; visible: boo
 		<div
 			className={`absolute inset-x-0 top-0 bg-gradient-to-b from-black/85 via-black/45 to-transparent px-2.5 pt-2 pb-8 text-white transition-opacity duration-300 @md:px-3 @md:pt-3 @md:pb-16 @2xl:px-5 @2xl:pt-4 ${visible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
 		>
-			{/* On a small player: the title, who, and the parts; the rest waits for room. */}
+			{/* On a small player: the title and who; the rest waits for room. */}
 			<div className="flex items-center gap-3.5">
 				<Link
 					to="/$login"
@@ -713,21 +729,6 @@ function StreamOverlay({ stream, visible }: { stream: StreamDetail; visible: boo
 						</p>
 					) : null}
 				</div>
-				{stream.parts.length > 1 ? (
-					<div className="flex flex-none flex-wrap justify-end gap-1.5">
-						{stream.parts.map(([id, part]) => (
-							<Link
-								key={id}
-								to="/$login/$id"
-								params={{ login, id: String(id) }}
-								aria-current={id === stream.id ? 'page' : undefined}
-								className="text-small touch-target relative rounded-sm bg-white/15 px-2 py-0.5 font-semibold backdrop-blur-sm transition-colors hover:bg-white/25 aria-[current=page]:bg-white aria-[current=page]:text-black @md:px-2.5 @md:py-1"
-							>
-								{t.stream.part(part)}
-							</Link>
-						))}
-					</div>
-				) : null}
 			</div>
 		</div>
 	);

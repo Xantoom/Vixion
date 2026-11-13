@@ -275,15 +275,22 @@ export function ChatPanel({
 	useEffect(() => {
 		const element = scroller.current;
 		if (!element) return;
+		let lastTop = element.scrollTop;
 		const onScroll = () => {
 			const current = latest.current;
-			const bottom = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
-			if (bottom !== current.following) {
-				setFollowing(bottom);
+			const top = element.scrollTop;
+			const bottom = element.scrollHeight - top - element.clientHeight < 40;
+			// Only the reader going up stops following. Lines and emotes that load at once (a jump,
+			// resuming a recording) make the panel taller before it catches up: that is no reason.
+			const wentUp = top < lastTop - 2;
+			lastTop = top;
+			const follow = current.following ? bottom || !wentUp : bottom;
+			if (follow !== current.following) {
+				setFollowing(follow);
 				// Reading back: the lines stay put while new ones arrive below.
-				current.pin(bottom ? null : (current.lines[0] ?? null));
+				current.pin(follow ? null : (current.lines[0] ?? null));
 			}
-			if (!bottom && element.scrollTop < 300) current.showOlder();
+			if (!follow && top < 300) current.showOlder();
 		};
 		element.addEventListener('scroll', onScroll, { passive: true });
 		return () => {

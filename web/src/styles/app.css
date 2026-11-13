@@ -4,7 +4,7 @@
  * Design tokens.
  *
  * The interface is neutral and flat; colour only carries meaning. One accent marks what is
- * active or primary, red means live (and only live), amber means a recording will expire soon.
+ * active or primary (a warm pastel gradient), red means live (and only live), amber means a recording will expire soon.
  * The recordings themselves (thumbnails, video) are the only vivid things on screen.
  *
  * Light and dark values live side by side through light-dark(). The theme follows the system
@@ -25,9 +25,15 @@
 	--ink: light-dark(#111113, #f3f3f5);
 	--ink-2: light-dark(#3a3a40, #c8c8ce);
 	--muted: light-dark(#66666e, #8e8e97);
-	--accent: light-dark(#6a4bff, #8c72ff);
-	--accent-ink: light-dark(#ffffff, #0d0921);
-	--accent-text: light-dark(#5537ee, #b5a3ff);
+	/*
+	 * The accent: a pastel sunset, butter yellow to apricot to candy pink. Fills wear the
+	 * gradient with dark ink; the solid accent is its apricot middle, for thin marks; text takes
+	 * a deeper coral on a light page so it can be read.
+	 */
+	--accent-gradient: linear-gradient(115deg, #ffd36e 0%, #ffa574 48%, #ff94bf 100%);
+	--accent: light-dark(#ff9a72, #ffa574);
+	--accent-ink: #2a1508;
+	--accent-text: light-dark(#a8461c, #ffb08f);
 	--live: light-dark(#e5262f, #ff4d55);
 	--live-ink: #ffffff;
 	--warn: light-dark(#a45d00, #ffb547);
@@ -106,7 +112,7 @@
 	--color-accent: var(--accent);
 	--color-accent-ink: var(--accent-ink);
 	--color-accent-text: var(--accent-text);
-	--color-accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
+	--color-accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
 	--color-live: var(--live);
 	--color-live-ink: var(--live-ink);
 	--color-warn: var(--warn);
@@ -226,6 +232,12 @@
 			scrollbar-color: var(--scroll-thumb) transparent;
 		}
 	}
+}
+
+/* What the accent fills: a button, a switch that is on, a bar. */
+@utility bg-accent-fill {
+	background-color: var(--accent);
+	background-image: var(--accent-gradient);
 }
 
 @utility tabular {
@@ -380,14 +392,18 @@ dialog::backdrop {
 .seek-range::-webkit-slider-runnable-track {
 	height: var(--track-height);
 	border-radius: 1px;
-	background: linear-gradient(to right, var(--accent) var(--progress), rgb(255 255 255 / 0.32) var(--progress));
+	background:
+		var(--accent-gradient) 0 0 / var(--progress) 100% no-repeat,
+		rgb(255 255 255 / 0.32);
 	transition: height 120ms var(--ease-out-soft);
 }
 
 .seek-range::-moz-range-track {
 	height: var(--track-height);
 	border-radius: 1px;
-	background: linear-gradient(to right, var(--accent) var(--progress), rgb(255 255 255 / 0.32) var(--progress));
+	background:
+		var(--accent-gradient) 0 0 / var(--progress) 100% no-repeat,
+		rgb(255 255 255 / 0.32);
 }
 
 .seek-range::-webkit-slider-thumb {

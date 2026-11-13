@@ -39,7 +39,6 @@ export const fr: Messages = {
 		themeDark: 'Sombre',
 		password: 'Changer le mot de passe',
 		signOut: 'Se déconnecter',
-		version: (v) => `Vixion ${v}`,
 	},
 	auth: {
 		wrongPassword: 'Nom d’utilisateur ou mot de passe incorrect',
@@ -150,7 +149,6 @@ export const fr: Messages = {
 		recordingLead: 'Le live est toujours en cours. Son enregistrement s’ouvrira ici dès qu’il sera terminé.',
 		recording: 'Enregistrement',
 		failed: 'Échec',
-		part: (n) => `Partie ${n}`,
 		ads: (duration) => `${duration} de pub évitées`,
 		messages: (n) => `${n} messages`,
 		gaps: (n) => (n <= 1 ? `${n} coupure` : `${n} coupures`),
