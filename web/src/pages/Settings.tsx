@@ -128,7 +128,7 @@ export function SettingsPage() {
 					tip={draft.twitch_token_source === 'stored' ? t.settings.tokenStoredHint : t.settings.tokenHint}
 				>
 					{draft.twitch_token_source ? (
-						<TokenField stored={draft.twitch_token_source === 'stored'} />
+						<TokenField />
 					) : (
 						<span className="text-small bg-surface-2 text-muted inline-flex h-8 items-center rounded-xs px-2.5 font-semibold">
 							{t.settings.tokenNone}
@@ -214,7 +214,7 @@ export function SettingsPage() {
 }
 
 /** The Twitch token, hidden until asked for. It can be copied but not changed here. */
-function TokenField({ stored }: { stored: boolean }) {
+function TokenField() {
 	const t = useT();
 	const [token, setToken] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -235,11 +235,6 @@ function TokenField({ stored }: { stored: boolean }) {
 
 	return (
 		<div className="flex items-center gap-1">
-			{stored ? (
-				<span className="text-caption bg-warn/15 text-warn mr-1 rounded-xs px-1.5 py-0.5 font-semibold">
-					{t.settings.tokenStored}
-				</span>
-			) : null}
 			<input
 				readOnly
 				aria-label={t.settings.token}

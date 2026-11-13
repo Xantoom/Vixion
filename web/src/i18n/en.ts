@@ -223,7 +223,6 @@ export const en = {
 		tokenHint:
 			'The auth-token cookie of twitch.tv. With Turbo or a subscription Twitch sends no ads. Set with VIXION_TWITCH_TOKEN or --twitch-token at startup',
 		tokenStoredHint: 'Saved from the interface by an earlier version. Copy it into VIXION_TWITCH_TOKEN to keep it',
-		tokenStored: 'To move',
 		tokenReveal: 'Reveal',
 		tokenHide: 'Hide',
 		tokenCopy: 'Copy',
