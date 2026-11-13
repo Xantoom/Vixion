@@ -36,12 +36,21 @@ interface Entry {
 	on: number;
 }
 
+/** A position as it should be: anything else (an older format, a hand edit) is ignored. */
+function valid(entry: unknown): entry is Entry {
+	if (!entry || typeof entry !== 'object') return false;
+	const { at, of } = entry as Partial<Entry>;
+	return typeof at === 'number' && typeof of === 'number' && Number.isFinite(at) && of > 0;
+}
+
 function read(): Record<string, Entry> {
 	if (cache?.key === key) return cache.entries;
 	let entries: Record<string, Entry> = {};
 	try {
 		const parsed: unknown = JSON.parse(localStorage.getItem(key) ?? '{}');
-		if (parsed && typeof parsed === 'object') entries = parsed as Record<string, Entry>;
+		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+			entries = Object.fromEntries(Object.entries(parsed).filter(([, entry]) => valid(entry)));
+		}
 	} catch {
 		// Unreadable: start over.
 	}
