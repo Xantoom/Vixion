@@ -40,6 +40,7 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ### Changed
 
+- The light theme has a light grey page, with white cards and panels.
 - A new logo in the family of Vixeeny: a V in a ring running back to a red recording dot, dark on
   light pages and light on dark ones, with a home-screen icon.
 - API answers are compressed (Brotli or gzip) and carry ETags, so unchanged lists come back empty.

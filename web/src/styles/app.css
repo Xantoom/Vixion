@@ -13,11 +13,11 @@
 :root {
 	color-scheme: light dark;
 
-	--bg: light-dark(#fbfbfc, #111114);
-	--canvas: light-dark(#f1f1f4, #0b0b0d);
-	--surface: light-dark(#f1f1f4, #1a1a1f);
+	--bg: light-dark(#f2f2f5, #111114);
+	--canvas: light-dark(#e9e9ee, #0b0b0d);
+	--surface: light-dark(#ffffff, #1a1a1f);
 	--card: light-dark(#ffffff, #18181d);
-	--surface-2: light-dark(#e7e7ec, #24242a);
+	--surface-2: light-dark(#e5e5ea, #24242a);
 	--line: light-dark(#e4e4ea, #27272e);
 	--line-2: light-dark(#d3d3d9, #36363c);
 	/* The edge of what takes input: 3:1 against the page, so it can be found. */
