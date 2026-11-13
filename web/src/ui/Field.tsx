@@ -1,8 +1,13 @@
-import { ChevronDown } from 'lucide-react';
-import { type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, useId } from 'react';
+import { ChevronDown, Minus, Plus } from 'lucide-react';
+import { type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, useId, useState } from 'react';
 
-const BOX =
-	'h-10 rounded-sm bg-bg px-3 text-ui text-ink shadow-[inset_0_0_0_1px_var(--field-line)] outline-none transition-shadow duration-150 placeholder:text-muted focus:shadow-[inset_0_0_0_2px_var(--focus)] disabled:opacity-50';
+/**
+ * The frame of everything that takes input: white, with an edge that can be found (3:1), a darker
+ * edge under the pointer and a soft ring on focus. 44 px tall on touch screens, 40 with a mouse.
+ */
+export const FRAME =
+	'rounded-sm border border-field bg-card transition-[border-color,box-shadow] duration-150 hover:border-ink-2/70 focus-within:border-focus focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--focus)_22%,transparent)]';
+const BOX = `${FRAME} h-11 px-3.5 text-ui text-ink outline-none placeholder:text-muted disabled:opacity-50 pointer-fine:h-10`;
 const FIELD = `${BOX} w-full`;
 
 export function Field({
@@ -49,47 +54,106 @@ export function Select({ className = '', children, ...props }: SelectHTMLAttribu
 			<select className={`${FIELD} appearance-none pr-9`} {...props}>
 				{children}
 			</select>
-			<ChevronDown size={16} className="text-muted pointer-events-none absolute top-3 right-3" aria-hidden />
+			<ChevronDown
+				size={16}
+				className="text-muted pointer-events-none absolute top-1/2 right-3 -translate-y-1/2"
+				aria-hidden
+			/>
 		</div>
 	);
 }
 
-/** A number with its unit after it, such as days or GB. */
+/**
+ * A number with its unit, and buttons to step it: easy with a thumb, and typed freely with a
+ * keyboard. What is typed is checked against the limits when the field is left, not at every key.
+ */
 export function NumberInput({
 	value,
 	onChange,
 	min,
 	max,
+	step = 1,
 	unit,
 	id,
 	...props
-}: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & {
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'step'> & {
 	value: number;
 	onChange: (value: number) => void;
 	min: number;
 	max: number;
+	step?: number;
 	unit?: string;
 }) {
+	const [text, setText] = useState<string | null>(null);
+	const clamp = (next: number) => Math.min(max, Math.max(min, Math.round(next)));
+	const commit = () => {
+		if (text === null) return;
+		const next = Number(text.replace(',', '.'));
+		if (text.trim() !== '' && Number.isFinite(next)) onChange(clamp(next));
+		setText(null);
+	};
+	const stepper =
+		'text-muted hover:text-ink hover:bg-surface-2 grid h-full w-10 flex-none place-items-center transition-colors disabled:opacity-30 disabled:hover:bg-transparent';
 	return (
-		<div className="bg-bg flex h-10 w-40 items-center rounded-sm shadow-[inset_0_0_0_1px_var(--field-line)] transition-shadow duration-150 focus-within:shadow-[inset_0_0_0_2px_var(--focus)]">
+		<div className={`${FRAME} flex h-11 w-44 items-center overflow-hidden pointer-fine:h-10`}>
+			<button
+				type="button"
+				tabIndex={-1}
+				aria-hidden
+				disabled={value <= min}
+				onClick={() => {
+					onChange(clamp(value - step));
+				}}
+				className={stepper}
+			>
+				<Minus size={16} />
+			</button>
 			<input
 				id={id}
-				type="number"
+				type="text"
 				inputMode="numeric"
-				min={min}
-				max={max}
-				value={Number.isFinite(value) ? value : ''}
+				role="spinbutton"
+				aria-valuemin={min}
+				aria-valuemax={max}
+				aria-valuenow={value}
+				value={text ?? (Number.isFinite(value) ? String(value) : '')}
 				onChange={(event) => {
-					const next = event.target.valueAsNumber;
-					if (Number.isFinite(next)) onChange(Math.min(max, Math.max(min, Math.round(next))));
+					setText(event.target.value.replace(/[^\d.,-]/g, ''));
 				}}
-				className="text-ui text-ink tabular h-full w-full min-w-0 bg-transparent px-3 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				onBlur={commit}
+				onKeyDown={(event) => {
+					if (event.key === 'Enter') commit();
+					else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+						event.preventDefault();
+						setText(null);
+						onChange(clamp(value + (event.key === 'ArrowUp' ? step : -step)));
+					}
+				}}
+				className="text-ui text-ink tabular h-full w-full min-w-0 bg-transparent text-right outline-none"
 				{...props}
 			/>
-			{unit ? <span className="text-small text-muted pr-3 whitespace-nowrap">{unit}</span> : null}
+			{unit ? <span className="text-small text-muted pl-1.5 whitespace-nowrap">{unit}</span> : null}
+			<button
+				type="button"
+				tabIndex={-1}
+				aria-hidden
+				disabled={value >= max}
+				onClick={() => {
+					onChange(clamp(value + step));
+				}}
+				className={stepper}
+			>
+				<Plus size={16} />
+			</button>
 		</div>
 	);
 }
+
+/** The switch's track and knob, shared with the settings' Toggle. Its touch area reaches 44 px. */
+export const SWITCH =
+	'bg-line-2 aria-checked:bg-accent relative h-7 w-12 flex-none rounded-sm transition-colors duration-200 before:absolute before:-inset-2 before:content-[""] disabled:opacity-50';
+export const KNOB =
+	'absolute top-1 left-1 size-5 rounded-xs bg-white shadow-sm transition-transform duration-200 ease-(--ease-spring)';
 
 /** An on/off setting: the label and its explanation, the switch at the end of the row. */
 export function Switch({
@@ -121,11 +185,9 @@ export function Switch({
 				onClick={() => {
 					onChange(!checked);
 				}}
-				className="bg-line-2 aria-checked:bg-accent relative mt-0.5 h-6 w-10 flex-none rounded-sm transition-colors duration-200"
+				className={SWITCH}
 			>
-				<span
-					className={`absolute top-0.5 left-0.5 size-5 rounded-xs bg-white shadow-sm transition-transform duration-200 ease-(--ease-spring) ${checked ? 'translate-x-4' : ''}`}
-				/>
+				<span className={`${KNOB} ${checked ? 'translate-x-5' : ''}`} />
 			</button>
 		</div>
 	);
@@ -155,7 +217,7 @@ export function Segmented<T extends string>({
 					onClick={() => {
 						onChange(option.value);
 					}}
-					className="text-small text-muted hover:text-ink aria-checked:bg-bg aria-checked:text-ink h-8 rounded-[calc(var(--radius-sm)-2px)] px-3 font-medium transition-colors duration-150 disabled:opacity-40 aria-checked:shadow-sm"
+					className="text-small text-muted hover:text-ink aria-checked:bg-card aria-checked:text-ink h-9 rounded-[calc(var(--radius-sm)-2px)] px-3 font-medium transition-colors duration-150 disabled:opacity-40 aria-checked:shadow-sm"
 				>
 					{option.label}
 				</button>

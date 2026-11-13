@@ -230,9 +230,18 @@ export interface Stats {
 	duration_ms: number;
 	recording: number;
 	disk: { total: number; free: number };
-	memory: number | null;
+	/** Only for those who manage the server. */
+	folders: { config: Folder; recordings: Folder } | null;
 	uptime_ms: number;
 	version: string;
+}
+
+/** One of the server's folders, and where it comes from when Vixion runs in a container. */
+export interface Folder {
+	path: string;
+	source: string | null;
+	unmapped: boolean;
+	disk: { total: number; free: number };
 }
 
 export interface Settings {
@@ -249,7 +258,7 @@ export interface Settings {
 
 export interface SettingsResponse {
 	settings: Settings;
-	system: { media_mode: string; media_url: string; data_dir: string; recordings_dir: string };
+	system: { media_mode: string; media_url: string };
 }
 
 export interface User {

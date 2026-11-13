@@ -112,6 +112,7 @@ export function SettingsPage() {
 
 			<Card title={t.settings.twitch} flush>
 				<SettingRow
+					wide
 					label={t.settings.token}
 					tip={draft.twitch_token_source === 'stored' ? t.settings.tokenStoredHint : t.settings.tokenHint}
 				>
@@ -133,15 +134,15 @@ export function SettingsPage() {
 						onChange={(event) => {
 							set({ webhook_kind: event.target.value as Settings['webhook_kind'] });
 						}}
-						className="w-40"
+						className="w-44"
 					>
 						<option value="discord">Discord</option>
 						<option value="ntfy">ntfy</option>
 						<option value="generic">JSON</option>
 					</Select>
 				</SettingRow>
-				<SettingRow label={t.settings.webhook} tip={t.settings.webhookHint}>
-					<div className="w-[26rem] max-w-full">
+				<SettingRow label={t.settings.webhook} tip={t.settings.webhookHint} wide>
+					<div className="w-[26rem] max-w-full max-sm:w-full">
 						<TextInput
 							type="url"
 							aria-label={t.settings.webhook}
@@ -165,13 +166,13 @@ export function SettingsPage() {
 						[
 							t.settings.mediaUrl,
 							data?.system.media_url ? (
-								<code className="font-mono">{data.system.media_url}</code>
+								<code key="url" className="font-mono">
+									{data.system.media_url}
+								</code>
 							) : (
 								t.settings.mediaSame
 							),
 						],
-						[t.settings.dataDir, <code className="font-mono">{data?.system.data_dir}</code>],
-						[t.settings.recordingsDir, <code className="font-mono">{data?.system.recordings_dir}</code>],
 					]}
 				/>
 			</Card>
@@ -223,7 +224,7 @@ function TokenField() {
 	};
 
 	return (
-		<div className="flex items-center gap-1">
+		<div className="flex w-full items-center gap-1 sm:w-auto">
 			<input
 				readOnly
 				aria-label={t.settings.token}
@@ -231,7 +232,7 @@ function TokenField() {
 				onFocus={(event) => {
 					event.currentTarget.select();
 				}}
-				className="text-ui text-ink bg-surface h-10 w-[22rem] max-w-full min-w-0 rounded-sm px-3 font-mono outline-none"
+				className="text-ui text-ink-2 bg-surface-2 border-line h-11 w-[22rem] max-w-full min-w-0 flex-1 rounded-sm border px-3.5 font-mono outline-none pointer-fine:h-10"
 			/>
 			<IconButton
 				size="sm"

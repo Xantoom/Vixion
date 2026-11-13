@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
+	MessageSquareOff,
+	MessageSquareText,
 	AudioLines,
 	CalendarDays,
 	Download,
@@ -53,6 +55,18 @@ function downloadAll(urls: string[]) {
 	});
 }
 
+/** Fingers rather than a mouse: phones and tablets. */
+function touch() {
+	return typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+}
+
+/** `screen.orientation` with `lock`, which TypeScript's DOM types leave out. */
+function screenOrientation() {
+	return (typeof screen === 'undefined' ? undefined : screen.orientation) as
+		| (ScreenOrientation & { lock?: (orientation: string) => Promise<void> })
+		| undefined;
+}
+
 function useFullscreen(target: React.RefObject<HTMLElement | null>) {
 	const [active, setActive] = useState(false);
 	const native = typeof document !== 'undefined' && document.fullscreenEnabled;
@@ -71,8 +85,18 @@ function useFullscreen(target: React.RefObject<HTMLElement | null>) {
 			setActive((value) => !value);
 			return;
 		}
-		if (document.fullscreenElement) void document.exitFullscreen();
-		else void target.current?.requestFullscreen({ navigationUI: 'hide' }).catch(() => undefined);
+		if (document.fullscreenElement) {
+			screenOrientation()?.unlock?.();
+			void document.exitFullscreen();
+			return;
+		}
+		void target.current
+			?.requestFullscreen({ navigationUI: 'hide' })
+			// A phone or tablet turns to landscape, where the browser allows it (Android does).
+			.then(async () => {
+				if (touch()) await screenOrientation()?.lock?.('landscape');
+			})
+			.catch(() => undefined);
 	}, [native, target]);
 	return { active, toggle, native };
 }
@@ -131,6 +155,13 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	const lastTap = useRef(0);
 	const fullscreen = useFullscreen(root);
 	const [chaptersOpen, setChaptersOpen] = useState(false);
+	// The chat shows beside or under the video, except in full screen on a phone or tablet, where
+	// the video takes it all. A choice made with the chat button holds until full screen changes.
+	const [chatChoice, setChatChoice] = useState<{ fullscreen: boolean; hidden: boolean } | null>(null);
+	const chatHidden = chatChoice?.fullscreen === fullscreen.active ? chatChoice.hidden : fullscreen.active && touch();
+	const toggleChat = useCallback(() => {
+		setChatChoice({ fullscreen: fullscreen.active, hidden: !chatHidden });
+	}, [fullscreen.active, chatHidden]);
 
 	const reopen = useRef<
 		(url: string, durationMs: number, at: number, autoplay: boolean, preferElement?: boolean) => void
@@ -311,6 +342,9 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 				case 'f':
 					fullscreen.toggle();
 					break;
+				case 'c':
+					toggleChat();
+					break;
 				case 'Home':
 					seekTo(0);
 					break;
@@ -329,7 +363,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 		return () => {
 			window.removeEventListener('keydown', onKey);
 		};
-	}, [togglePlay, seekBy, seekTo, fullscreen, duration, poke]);
+	}, [togglePlay, seekBy, seekTo, fullscreen, toggleChat, duration, poke]);
 
 	const shown = scrub ?? time;
 	const downloads = {
@@ -345,14 +379,19 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	return (
 		<div
 			ref={root}
-			// The video takes the full height and the chat what is left of the width, within bounds.
-			style={{ '--chat-width': 'clamp(20rem, calc(100vw - 100dvh * 16 / 9), 36rem)' } as React.CSSProperties}
-			className={`bg-bg flex h-dvh flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_var(--chat-width)] ${pseudoFullscreen ? 'fixed inset-0 z-[60]' : ''}`}
+			// Side by side on wide screens and on any screen held sideways: the video takes the full
+			// height and the chat what is left of the width, within bounds. Stacked when held upright.
+			style={
+				{
+					'--chat-width': 'clamp(min(20rem, 32vw), calc(100vw - 100dvh * 16 / 9), 36rem)',
+				} as React.CSSProperties
+			}
+			className={`bg-bg flex h-dvh flex-col ${chatHidden ? '' : 'landscape:grid landscape:grid-cols-[minmax(0,1fr)_var(--chat-width)] lg:grid lg:grid-cols-[minmax(0,1fr)_var(--chat-width)]'} ${pseudoFullscreen ? 'fixed inset-0 z-[60]' : ''}`}
 		>
 			<section
 				ref={stage}
 				aria-label={stream.title || t.stream.untitled}
-				className={`relative flex-none bg-black select-none max-lg:aspect-video max-lg:max-h-[60dvh] lg:h-full lg:min-h-0 ${overlay ? '' : 'cursor-none'}`}
+				className={`@container relative bg-black select-none ${chatHidden ? 'min-h-0 flex-1' : 'flex-none landscape:h-full landscape:min-h-0 lg:h-full lg:min-h-0 max-lg:portrait:aspect-video max-lg:portrait:max-h-[60dvh]'} ${overlay ? '' : 'cursor-none'}`}
 				onPointerMove={() => {
 					setHovering(true);
 					poke();
@@ -402,9 +441,9 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						type="button"
 						aria-label={t.player.play}
 						onClick={togglePlay}
-						className="absolute top-1/2 left-1/2 grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition-transform duration-150 hover:scale-105"
+						className="absolute top-1/2 left-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition-transform duration-150 hover:scale-105 @md:size-20"
 					>
-						<Play size={34} fill="currentColor" className="ml-1" />
+						<Play fill="currentColor" className="ml-1 size-6 @md:size-[34px]" />
 					</button>
 				) : null}
 				{error ? (
@@ -438,7 +477,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 
 				{/* Controls */}
 				<div
-					className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 pt-14 pb-2 text-white transition-opacity duration-300 sm:px-5 sm:pb-3 ${overlay ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+					className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-2 pt-8 pb-1 text-white transition-opacity duration-300 @md:px-3 @md:pt-14 @md:pb-2 @2xl:px-5 @2xl:pb-3 ${overlay ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
 				>
 					<Timeline
 						duration={duration}
@@ -457,7 +496,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						</PlayerButton>
 						<PlayerButton
 							label={t.player.back}
-							className="max-[440px]:hidden"
+							className="@max-md:hidden"
 							onClick={() => {
 								seekBy(-5);
 							}}
@@ -466,7 +505,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						</PlayerButton>
 						<PlayerButton
 							label={t.player.forward}
-							className="max-[440px]:hidden"
+							className="@max-md:hidden"
 							onClick={() => {
 								seekBy(5);
 							}}
@@ -501,6 +540,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						<PlayerButton
 							label={prefs.compressor ? t.player.compressorOn : t.player.compressorOff}
 							pressed={prefs.compressor}
+							className="@max-sm:hidden"
 							onClick={() => {
 								prefs.set({ compressor: !prefs.compressor });
 							}}
@@ -509,7 +549,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						</PlayerButton>
 						<span className="text-ui tabular ml-2 whitespace-nowrap text-white">
 							{formatClock(shown)}
-							<span className="text-white/55 max-sm:hidden"> / {formatClock(duration)}</span>
+							<span className="text-white/55 @max-md:hidden"> / {formatClock(duration)}</span>
 						</span>
 						<div className="flex-1" />
 						{stream.chapters.length > 1 ? (
@@ -553,6 +593,13 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 							</Menu>
 						) : null}
 						<PlayerButton
+							label={chatHidden ? t.player.showChat : t.player.hideChat}
+							pressed={!chatHidden}
+							onClick={toggleChat}
+						>
+							{chatHidden ? <MessageSquareOff size={21} /> : <MessageSquareText size={21} />}
+						</PlayerButton>
+						<PlayerButton
 							label={fullscreen.active ? t.player.exitFullscreen : t.player.fullscreen}
 							onClick={fullscreen.toggle}
 						>
@@ -562,7 +609,9 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 				</div>
 			</section>
 
-			<aside className="border-line relative flex min-h-0 flex-1 flex-col border-t lg:border-t-0 lg:border-l">
+			<aside
+				className={`border-line relative min-h-0 flex-1 flex-col border-t landscape:border-t-0 landscape:border-l lg:border-t-0 lg:border-l ${chatHidden ? 'hidden' : 'flex'}`}
+			>
 				<ChatPanel
 					streamId={stream.id}
 					timeMs={Math.floor(time * 1000)}
@@ -620,19 +669,20 @@ function StreamOverlay({ stream, visible }: { stream: StreamDetail; visible: boo
 	const quality = formatQuality(stream.height, stream.fps, stream.video_codec);
 	return (
 		<div
-			className={`absolute inset-x-0 top-0 bg-gradient-to-b from-black/85 via-black/45 to-transparent px-3 pt-3 pb-16 text-white transition-opacity duration-300 sm:px-5 sm:pt-4 ${visible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+			className={`absolute inset-x-0 top-0 bg-gradient-to-b from-black/85 via-black/45 to-transparent px-2.5 pt-2 pb-8 text-white transition-opacity duration-300 @md:px-3 @md:pt-3 @md:pb-16 @2xl:px-5 @2xl:pt-4 ${visible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
 		>
+			{/* On a small player: the title, who, and the parts; the rest waits for room. */}
 			<div className="flex items-center gap-3.5">
 				<Link
 					to="/$login"
 					params={{ login }}
 					aria-label={stream.streamer_name}
-					className="flex-none rounded-full transition-opacity hover:opacity-85"
+					className="flex-none rounded-full transition-opacity hover:opacity-85 @max-md:hidden"
 				>
 					<Avatar src={stream.streamer_avatar} name={stream.streamer_name} size={48} />
 				</Link>
 				<div className="min-w-0 flex-1">
-					<h1 className="text-body sm:text-lead truncate font-semibold [text-shadow:0_1px_3px_rgb(0_0_0/0.5)]">
+					<h1 className="text-ui @md:text-body @2xl:text-lead truncate font-semibold [text-shadow:0_1px_3px_rgb(0_0_0/0.5)]">
 						{stream.title || t.stream.untitled}
 					</h1>
 					<div className="text-small mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-white/75">
@@ -643,10 +693,16 @@ function StreamOverlay({ stream, visible }: { stream: StreamDetail; visible: boo
 						>
 							{stream.streamer_name}
 						</Link>
-						{stream.game ? <Fact icon={<Gamepad2 size={15} />}>{stream.game}</Fact> : null}
-						<Fact icon={<CalendarDays size={15} />}>{formatDate(stream.started_at)}</Fact>
+						{stream.game ? (
+							<Fact icon={<Gamepad2 size={15} />} className="@max-md:hidden">
+								{stream.game}
+							</Fact>
+						) : null}
+						<Fact icon={<CalendarDays size={15} />} className="@max-md:hidden">
+							{formatDate(stream.started_at)}
+						</Fact>
 						{quality ? (
-							<Fact icon={<MonitorPlay size={15} />} className="max-md:hidden">
+							<Fact icon={<MonitorPlay size={15} />} className="@max-2xl:hidden">
 								{quality}
 							</Fact>
 						) : null}
@@ -665,7 +721,7 @@ function StreamOverlay({ stream, visible }: { stream: StreamDetail; visible: boo
 								to="/$login/$id"
 								params={{ login, id: String(id) }}
 								aria-current={id === stream.id ? 'page' : undefined}
-								className="text-small rounded-sm bg-white/15 px-2.5 py-1 font-semibold backdrop-blur-sm transition-colors hover:bg-white/25 aria-[current=page]:bg-white aria-[current=page]:text-black"
+								className="text-small rounded-sm bg-white/15 px-2 py-0.5 font-semibold backdrop-blur-sm transition-colors hover:bg-white/25 aria-[current=page]:bg-white aria-[current=page]:text-black @md:px-2.5 @md:py-1"
 							>
 								{t.stream.part(part)}
 							</Link>

@@ -73,8 +73,12 @@ pub async fn stats(State(app): State<AppState>, user: CurrentUser) -> AppResult<
         "duration_ms": totals.2,
         "recording": app.recorder.live().len(),
         "disk": disk,
-        "memory": system::memory_used(),
         "uptime_ms": now_ms() - app.started_at,
+        // Host paths are for those who manage the server.
+        "folders": user.can("settings.manage").then(|| json!({
+            "config": system::folder(&app.config.data_dir),
+            "recordings": system::folder(&app.config.streams_dir()),
+        })),
         "version": env!("CARGO_PKG_VERSION"),
     })))
 }
@@ -87,8 +91,6 @@ pub async fn get_settings(State(app): State<AppState>, user: CurrentUser) -> App
         "system": {
             "media_mode": format!("{:?}", app.config.media_mode).to_lowercase(),
             "media_url": app.config.media_public_url,
-            "data_dir": app.config.data_dir.display().to_string(),
-            "recordings_dir": app.config.recordings_dir.display().to_string(),
         },
     })))
 }

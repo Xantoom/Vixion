@@ -1,5 +1,6 @@
 import { Info } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { KNOB, SWITCH } from './Field';
 
 /** A titled block of an administration page: a header with optional actions, then its content. */
 export function Card({
@@ -48,14 +49,27 @@ export function InfoTip({ text }: { text: string }) {
 }
 
 /** One setting: its name on the left, its control on the right, every control ending on the same edge. */
-export function SettingRow({ label, tip, children }: { label: ReactNode; tip?: string; children: ReactNode }) {
+export function SettingRow({
+	label,
+	tip,
+	wide = false,
+	children,
+}: {
+	label: ReactNode;
+	tip?: string;
+	/** A control that needs room (an address): on a phone it takes its own full-width line. */
+	wide?: boolean;
+	children: ReactNode;
+}) {
 	return (
 		<div className="border-line flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5 py-3 first:border-t-0">
 			<span className="text-ui flex min-w-0 items-center gap-1.5 font-medium">
 				{label}
 				{tip ? <InfoTip text={tip} /> : null}
 			</span>
-			<div className="flex max-w-full items-center justify-end gap-2">{children}</div>
+			<div className={`flex max-w-full items-center justify-end gap-2 ${wide ? 'max-sm:w-full' : ''}`}>
+				{children}
+			</div>
 		</div>
 	);
 }
@@ -79,11 +93,9 @@ export function Toggle({
 			onClick={() => {
 				onChange(!checked);
 			}}
-			className="bg-line-2 aria-checked:bg-accent relative h-6 w-10 flex-none rounded-sm transition-colors duration-200"
+			className={SWITCH}
 		>
-			<span
-				className={`absolute top-0.5 left-0.5 size-5 rounded-xs bg-white shadow-sm transition-transform duration-200 ease-(--ease-spring) ${checked ? 'translate-x-4' : ''}`}
-			/>
+			<span className={`${KNOB} ${checked ? 'translate-x-5' : ''}`} />
 		</button>
 	);
 }
@@ -98,7 +110,7 @@ export function Facts({ items }: { items: [string, ReactNode][] }) {
 					className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-1 px-5 py-3"
 				>
 					<dt className="text-ui text-ink-2 font-medium">{label}</dt>
-					<dd className="text-ui min-w-0 text-right break-all">{value}</dd>
+					<dd className="text-ui ml-auto min-w-0 text-right break-all">{value}</dd>
 				</div>
 			))}
 		</dl>

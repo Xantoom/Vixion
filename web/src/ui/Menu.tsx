@@ -3,9 +3,13 @@ import { type ReactNode, createContext, useContext, useEffect, useId, useLayoutE
 
 const CloseContext = createContext<() => void>(() => {});
 
+/** The gap kept between a menu and the screen's edges. */
+const EDGE = 8;
+
 /**
  * A button that opens a short list of actions or choices. The panel lines up with an edge of the
- * button and opens upward when there is no room below (a player's controls).
+ * button and opens upward when there is no room below (a player's controls). It never leaves the
+ * screen: by a side it slides back in, and when it is taller than the room it scrolls.
  */
 export function Menu({
 	trigger,
@@ -25,6 +29,7 @@ export function Menu({
 }) {
 	const [open, setOpen] = useState(false);
 	const [up, setUp] = useState(false);
+	const [place, setPlace] = useState<{ shift: number; maxHeight?: number }>({ shift: 0 });
 	const root = useRef<HTMLDivElement>(null);
 	const panel = useRef<HTMLDivElement>(null);
 	const id = useId();
@@ -52,10 +57,19 @@ export function Menu({
 	useLayoutEffect(() => {
 		if (!open || !root.current || !panel.current) return;
 		const box = root.current.getBoundingClientRect();
-		const height = panel.current.offsetHeight;
-		setUp(box.bottom + height + 8 > window.innerHeight && box.top - height - 8 > 0);
+		const height = panel.current.scrollHeight;
+		const below = window.innerHeight - box.bottom - EDGE - 8;
+		const above = box.top - EDGE - 8;
+		const opensUp = height > below && above > below;
+		setUp(opensUp);
+		const room = opensUp ? above : below;
+		// Where the panel would sit, and how far to slide it to stay on screen.
+		const width = panel.current.offsetWidth;
+		const left = align === 'end' ? box.right - width : box.left;
+		const shift = Math.min(0, window.innerWidth - EDGE - (left + width)) + Math.max(0, EDGE - left);
+		setPlace({ shift, maxHeight: height > room ? Math.max(room, 120) : undefined });
 		panel.current.querySelector<HTMLElement>('[role^=menuitem]')?.focus({ preventScroll: true });
-	}, [open]);
+	}, [open, align]);
 
 	const onKeyDown = (event: React.KeyboardEvent) => {
 		const items = [...(panel.current?.querySelectorAll<HTMLElement>('[role^=menuitem]:not(:disabled)') ?? [])];
@@ -87,7 +101,8 @@ export function Menu({
 					aria-label={label}
 					data-up={up}
 					onKeyDown={onKeyDown}
-					className={`menu-in bg-bg border-line absolute z-50 min-w-56 rounded-sm border p-1 shadow-xl ${up ? 'bottom-full mb-2' : 'top-full mt-2'} ${align === 'end' ? 'right-0' : 'left-0'} ${panelClassName}`}
+					style={{ translate: `${place.shift}px 0`, maxHeight: place.maxHeight }}
+					className={`menu-in bg-bg border-line absolute z-50 max-w-[calc(100vw-1rem)] min-w-56 overflow-y-auto overscroll-contain rounded-sm border p-1 shadow-xl ${up ? 'bottom-full mb-2' : 'top-full mt-2'} ${align === 'end' ? 'right-0' : 'left-0'} ${panelClassName}`}
 				>
 					<CloseContext.Provider
 						value={() => {

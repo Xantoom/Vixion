@@ -40,6 +40,14 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ### Changed
 
+- The player works held sideways on phones and tablets: video and chat side by side. A button
+  (or C) hides the chat; in full screen on a touch screen the video takes it all and turns to
+  landscape. Its title and controls are lighter on a small player.
+- Fields are easier to use: taller on touch screens, white with a clear edge, numbers with − and +
+  buttons and checked when left rather than at every key; larger switches.
+- Menus stay on screen: they slide back in by an edge and scroll when taller than the room.
+- The server card shows the configuration and recordings folders, where they come from on the
+  host (or that they aren't mounted) and their free space, instead of the memory used.
 - The administration pages fit phones and tablets: tabs in a grid, statistics as a list, logs and
   accounts that wrap instead of overflowing.
 - The light theme has a light grey page, with white cards and panels.

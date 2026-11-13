@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { CircleDot, Clock3, Film, HardDrive } from 'lucide-react';
+import { CircleDot, Clock3, Film, HardDrive, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '@/i18n';
-import { type Stats, api } from '@/lib/api';
+import { type Folder, type Stats, api } from '@/lib/api';
 import { formatBytes, formatDuration, formatNumber } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
@@ -190,12 +190,44 @@ export function StatsPage() {
 					items={[
 						[t.stats.version, data.version],
 						[t.stats.uptime, formatDuration(data.uptime_ms)],
-						...(data.memory !== null
-							? ([[t.stats.memory, formatBytes(data.memory)]] as [string, string][])
+						...(data.folders
+							? ([
+									[t.stats.configFolder, <FolderFact key="config" folder={data.folders.config} />],
+									[
+										t.stats.recordingsFolder,
+										<FolderFact key="recordings" folder={data.folders.recordings} />,
+									],
+								] as [string, ReactNode][])
 							: []),
 					]}
 				/>
 			</Card>
 		</div>
+	);
+}
+
+/** A folder as Vixion sees it, where it comes from on the host, and the room left on its disk. */
+function FolderFact({ folder }: { folder: Folder }) {
+	const t = useT();
+	return (
+		<span className="flex flex-col items-end gap-0.5">
+			<code className="font-mono">{folder.path}</code>
+			{folder.source ? (
+				<span className="text-small text-muted">
+					<code className="font-mono">{folder.source}</code> {t.stats.onHost}
+				</span>
+			) : null}
+			{folder.unmapped ? (
+				<span className="text-small text-warn flex items-center gap-1.5">
+					<TriangleAlert size={14} className="flex-none" />
+					{t.stats.unmapped}
+				</span>
+			) : null}
+			{folder.disk.total > 0 ? (
+				<span className="text-small text-muted">
+					{t.stats.diskFree(formatBytes(folder.disk.free), formatBytes(folder.disk.total))}
+				</span>
+			) : null}
+		</span>
 	);
 }
