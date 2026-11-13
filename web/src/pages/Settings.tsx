@@ -5,7 +5,7 @@ import { useT } from '@/i18n';
 import { type Settings, type SettingsResponse, api } from '@/lib/api';
 import { useCan } from '@/lib/session';
 import { Button } from '@/ui/Button';
-import { Card, Facts, InfoTip, SettingRow, Toggle } from '@/ui/Card';
+import { Card, Facts, SettingRow, Toggle } from '@/ui/Card';
 import { NumberInput, Select, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
@@ -134,92 +134,93 @@ export function SettingsPage() {
 				</SettingRow>
 			</Card>
 
-			<Card
-				title={
-					<>
-						{t.settings.token}
-						<InfoTip text={t.settings.tokenHint} />
-					</>
-				}
-				actions={
+			<Card title={t.settings.twitch} flush>
+				<SettingRow label={t.settings.token} tip={t.settings.tokenHint}>
 					<span
-						className={`text-small inline-flex items-center gap-1.5 rounded-xs px-2 py-0.5 font-semibold ${draft.has_twitch_token ? 'bg-ok/15 text-ok' : 'bg-surface-2 text-muted'}`}
+						className={`text-small inline-flex h-8 items-center gap-1.5 rounded-xs px-2.5 font-semibold ${draft.has_twitch_token ? 'bg-ok/15 text-ok' : 'bg-surface-2 text-muted'}`}
 					>
 						{draft.has_twitch_token ? <Check size={14} /> : null}
 						{draft.has_twitch_token ? t.settings.tokenSet : t.settings.tokenNone}
 					</span>
-				}
-			>
-				<form
-					className="flex flex-wrap gap-2"
-					onSubmit={(event) => {
-						event.preventDefault();
-						void saveToken(token.trim());
-					}}
-				>
-					<TextInput
-						type="password"
-						autoComplete="off"
-						spellCheck={false}
-						aria-label={t.settings.token}
-						placeholder={t.settings.tokenPlaceholder}
-						value={token}
-						onChange={(event) => {
-							setToken(event.target.value);
-						}}
-						className="min-w-60 flex-1 font-mono"
-					/>
-					<Button type="submit" disabled={token.trim().length < 20}>
-						{t.settings.tokenSave}
-					</Button>
 					{draft.has_twitch_token ? (
-						<Button variant="ghost" onClick={() => void saveToken(null)}>
+						<Button size="sm" variant="ghost" onClick={() => void saveToken(null)}>
 							{t.settings.tokenClear}
 						</Button>
 					) : null}
-				</form>
+				</SettingRow>
+				<SettingRow label={draft.has_twitch_token ? t.settings.tokenReplace : t.settings.tokenNew}>
+					<form
+						className="flex w-[26rem] max-w-full gap-2"
+						onSubmit={(event) => {
+							event.preventDefault();
+							void saveToken(token.trim());
+						}}
+					>
+						<TextInput
+							type="password"
+							autoComplete="off"
+							spellCheck={false}
+							aria-label={t.settings.token}
+							placeholder={t.settings.tokenPlaceholder}
+							value={token}
+							onChange={(event) => {
+								setToken(event.target.value);
+							}}
+							className="min-w-0 flex-1 font-mono"
+						/>
+						<Button type="submit" disabled={token.trim().length < 20}>
+							{t.settings.tokenSave}
+						</Button>
+					</form>
+				</SettingRow>
 			</Card>
 
-			<Card
-				title={
-					<>
-						{t.settings.alerts}
-						<InfoTip text={t.settings.webhookHint} />
-					</>
-				}
-			>
-				<div className="flex flex-wrap gap-2">
+			<Card title={t.settings.alerts} flush>
+				<SettingRow label={t.settings.webhookKind}>
 					<Select
 						aria-label={t.settings.webhookKind}
 						value={draft.webhook_kind}
 						onChange={(event) => {
 							set({ webhook_kind: event.target.value as Settings['webhook_kind'] });
 						}}
-						className="w-36"
+						className="w-40"
 					>
 						<option value="discord">Discord</option>
 						<option value="ntfy">ntfy</option>
 						<option value="generic">JSON</option>
 					</Select>
-					<TextInput
-						type="url"
-						aria-label={t.settings.webhook}
-						placeholder={t.settings.webhookPlaceholder}
-						value={draft.webhook_url}
-						onChange={(event) => {
-							set({ webhook_url: event.target.value });
-						}}
-						className="min-w-60 flex-1"
-					/>
-				</div>
+				</SettingRow>
+				<SettingRow label={t.settings.webhook} tip={t.settings.webhookHint}>
+					<div className="w-[26rem] max-w-full">
+						<TextInput
+							type="url"
+							aria-label={t.settings.webhook}
+							placeholder={t.settings.webhookPlaceholder}
+							value={draft.webhook_url}
+							onChange={(event) => {
+								set({ webhook_url: event.target.value });
+							}}
+						/>
+					</div>
+				</SettingRow>
 			</Card>
 
 			<Card title={t.settings.system} flush>
 				<Facts
 					items={[
-						[t.settings.mediaMode, data?.system.media_mode ?? ''],
-						[t.settings.mediaUrl, data?.system.media_url || t.settings.mediaSame],
-						[t.settings.dataDir, data?.system.data_dir ?? ''],
+						[
+							t.settings.mediaMode,
+							t.settings.mediaModes[data?.system.media_mode ?? ''] ?? data?.system.media_mode ?? '',
+						],
+						[
+							t.settings.mediaUrl,
+							data?.system.media_url ? (
+								<code className="font-mono">{data.system.media_url}</code>
+							) : (
+								t.settings.mediaSame
+							),
+						],
+						[t.settings.dataDir, <code className="font-mono">{data?.system.data_dir}</code>],
 					]}
 				/>
 			</Card>

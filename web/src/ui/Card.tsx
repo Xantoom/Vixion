@@ -47,25 +47,15 @@ export function InfoTip({ text }: { text: string }) {
 	);
 }
 
-/** One setting: its name on the left, its control on the right. */
-export function SettingRow({
-	label,
-	tip,
-	children,
-	htmlFor,
-}: {
-	label: ReactNode;
-	tip?: string;
-	children: ReactNode;
-	htmlFor?: string;
-}) {
+/** One setting: its name on the left, its control on the right, every control ending on the same edge. */
+export function SettingRow({ label, tip, children }: { label: ReactNode; tip?: string; children: ReactNode }) {
 	return (
-		<div className="border-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5 py-3.5 first:border-t-0">
-			<span className="text-ui flex items-center gap-1.5 font-medium">
-				{htmlFor ? <label htmlFor={htmlFor}>{label}</label> : label}
+		<div className="border-line flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5 py-3 first:border-t-0">
+			<span className="text-ui flex min-w-0 items-center gap-1.5 font-medium">
+				{label}
 				{tip ? <InfoTip text={tip} /> : null}
 			</span>
-			<div className="flex items-center gap-2">{children}</div>
+			<div className="flex max-w-full items-center justify-end gap-2">{children}</div>
 		</div>
 	);
 }
@@ -98,14 +88,17 @@ export function Toggle({
 	);
 }
 
-/** Label and value pairs, for facts that are read rather than changed. */
+/** Label and value pairs, for facts that are read rather than changed; laid out like setting rows. */
 export function Facts({ items }: { items: [string, ReactNode][] }) {
 	return (
 		<dl className="divide-line divide-y">
 			{items.map(([label, value]) => (
-				<div key={label} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-5 py-3">
-					<dt className="text-small text-muted">{label}</dt>
-					<dd className="text-small min-w-0 text-right font-mono break-all">{value}</dd>
+				<div
+					key={label}
+					className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-1 px-5 py-3"
+				>
+					<dt className="text-ui text-ink-2 font-medium">{label}</dt>
+					<dd className="text-ui min-w-0 text-right break-all">{value}</dd>
 				</div>
 			))}
 		</dl>

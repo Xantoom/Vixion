@@ -149,7 +149,7 @@ export function UsersPage() {
 			>
 				<ul className="divide-line divide-y">
 					{roles.data.roles.map((role) => (
-						<li key={role.id} className="flex items-start gap-3.5 px-5 py-3.5">
+						<li key={role.id} className="flex items-center gap-3.5 px-5 py-3.5">
 							<div className="flex min-w-0 flex-1 flex-col gap-2">
 								<div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
 									<span className="text-ui font-semibold">{roleName(role)}</span>
@@ -174,7 +174,9 @@ export function UsersPage() {
 								</div>
 							</div>
 							<div className="flex flex-none">
-								{role.builtin === 'admin' ? null : (
+								{role.builtin === 'admin' ? (
+									<span className="size-8" aria-hidden />
+								) : (
 									<IconButton
 										size="sm"
 										label={t.common.edit}
@@ -185,7 +187,9 @@ export function UsersPage() {
 										<Pencil size={16} />
 									</IconButton>
 								)}
-								{role.builtin ? null : (
+								{role.builtin ? (
+									<span className="size-8" aria-hidden />
+								) : (
 									<IconButton
 										size="sm"
 										label={t.common.delete}

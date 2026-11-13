@@ -71,7 +71,7 @@ export function NumberInput({
 	unit?: string;
 }) {
 	return (
-		<div className="flex items-center gap-2">
+		<div className="bg-bg flex h-10 w-40 items-center rounded-sm shadow-[inset_0_0_0_1px_var(--field-line)] transition-shadow duration-150 focus-within:shadow-[inset_0_0_0_2px_var(--focus)]">
 			<input
 				id={id}
 				type="number"
@@ -83,10 +83,10 @@ export function NumberInput({
 					const next = event.target.valueAsNumber;
 					if (Number.isFinite(next)) onChange(Math.min(max, Math.max(min, Math.round(next))));
 				}}
-				className={`${BOX} tabular w-24`}
+				className="text-ui text-ink tabular h-full w-full min-w-0 bg-transparent px-3 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 				{...props}
 			/>
-			{unit ? <span className="text-ui text-muted">{unit}</span> : null}
+			{unit ? <span className="text-small text-muted pr-3 whitespace-nowrap">{unit}</span> : null}
 		</div>
 	);
 }
