@@ -40,7 +40,10 @@ export function AdminLayout() {
 	};
 	const current = pages.find((page) => path.startsWith(page.to));
 	return (
-		<div className="mx-auto grid max-w-[120rem] grid-cols-[minmax(0,1fr)] gap-x-10 px-4 pt-6 pb-16 sm:px-6 lg:grid-cols-[13rem_minmax(0,72rem)] lg:pt-10">
+		<div
+			data-admin
+			className="mx-auto grid max-w-[calc(13rem+2.5rem+72rem+3rem)] grid-cols-[minmax(0,1fr)] gap-x-10 px-4 pt-6 pb-16 sm:px-6 lg:grid-cols-[13rem_minmax(0,72rem)] lg:pt-10"
+		>
 			<nav aria-label={t.nav.admin} className="max-lg:mb-6 lg:sticky lg:top-24 lg:self-start">
 				<p className="text-caption text-muted mb-2 px-3 font-semibold tracking-wide uppercase max-lg:hidden">
 					{t.nav.admin}

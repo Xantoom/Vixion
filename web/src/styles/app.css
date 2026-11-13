@@ -139,6 +139,11 @@
 		font-size: 100%;
 	}
 
+	/* Administration tabs keep their edges in place, whether the tab scrolls or not. */
+	html:has([data-admin]) {
+		scrollbar-gutter: stable;
+	}
+
 	/*
 	 * Large monitors at high scaling (a 4K screen at 200 % reports about 1700 px): a step up, so
 	 * text keeps its size relative to everything else on such a big surface.
