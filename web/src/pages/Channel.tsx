@@ -11,6 +11,7 @@ import {
 	Eye,
 	Film,
 	Gamepad2,
+	HardDrive,
 	Play,
 	Plus,
 	SlidersHorizontal,
@@ -29,7 +30,7 @@ import {
 	type TwitchVideo,
 	api,
 } from '@/lib/api';
-import { formatClock, formatDate, formatDuration, formatNumber, formatQuality, formatRelative } from '@/lib/format';
+import { formatBytes, formatClock, formatDate, formatDuration, formatNumber, formatQuality, formatRelative } from '@/lib/format';
 import { useNow } from '@/lib/now';
 import { watched } from '@/lib/progress';
 import { useCan, useRouteParams } from '@/lib/session';
@@ -571,6 +572,11 @@ function StreamCard({ stream, login }: { stream: StreamSummary; login: string })
 				<div className="text-caption text-muted flex flex-wrap gap-x-4 gap-y-1">
 					<Meta icon={<CalendarDays size={14} />}>{formatDate(stream.started_at)}</Meta>
 					{stream.game ? <Meta icon={<Gamepad2 size={14} />}>{stream.game}</Meta> : null}
+					{stream.size_bytes > 0 ? (
+						<Meta icon={<HardDrive size={14} />}>
+							<span className="tabular">{formatBytes(stream.size_bytes)}</span>
+						</Meta>
+					) : null}
 				</div>
 			</div>
 			<Confirm
