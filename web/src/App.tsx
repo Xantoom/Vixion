@@ -5,7 +5,7 @@ import { browserLocale, useT } from './i18n';
 import { ApiError, api, setUnauthorizedHandler } from './lib/api';
 import { meQuery } from './lib/session';
 import { LoginPage, SetupPage } from './pages/Auth';
-import { router } from './router';
+import { preloadPages, router } from './router';
 import { usePrefs } from './stores/prefs';
 import { Button } from './ui/Button';
 import { PageLoading } from './ui/Spinner';
@@ -41,6 +41,15 @@ export function App() {
 		}
 		document.documentElement.lang = usePrefs.getState().locale ?? browserLocale();
 	}, [me.data?.locale]);
+
+	// Signed in: the other pages are fetched in the background, so the first visit to each is instant.
+	const signedIn = Boolean(me.data);
+	const admin = Boolean(
+		me.data && (me.data.admin || me.data.permissions.some((p) => /^(stats|logs|users|settings)\./.test(p))),
+	);
+	useEffect(() => {
+		if (signedIn) preloadPages(admin);
+	}, [signedIn, admin]);
 
 	let page;
 	if (setup.isPending || (setup.data?.needed === false && me.isPending)) {

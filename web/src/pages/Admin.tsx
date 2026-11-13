@@ -1,9 +1,10 @@
 import { Link, Navigate, Outlet, useRouterState } from '@tanstack/react-router';
 import { BarChart3, ScrollText, Settings, Users } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, Suspense } from 'react';
 import { useT } from '@/i18n';
 import type { Me, Permission } from '@/lib/api';
 import { useMe } from '@/lib/session';
+import { PageLoading } from '@/ui/Spinner';
 import { NotFound } from './NotFound';
 
 type AdminPath = '/admin/stats' | '/admin/logs' | '/admin/users' | '/admin/settings';
@@ -63,7 +64,9 @@ export function AdminLayout() {
 				{current ? (
 					<h1 className="text-heading mb-6 font-semibold tracking-tight">{labels[current.to]}</h1>
 				) : null}
-				<Outlet />
+				<Suspense fallback={<PageLoading />}>
+					<Outlet />
+				</Suspense>
 			</div>
 		</div>
 	);
