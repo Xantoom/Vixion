@@ -113,6 +113,8 @@ pub struct StreamDetail {
     download_url: Option<String>,
     /// Other parts of the same broadcast, in order.
     parts: Vec<(i64, i64)>,
+    /// Where the broadcast is missing from the video: (video ms, ms missing).
+    cuts: Vec<(i64, i64)>,
 }
 
 struct Located {
@@ -247,6 +249,8 @@ pub async fn detail(
         title: summary.title.clone(),
     };
     let file = download_name(&located, "mp4");
+    let timeline_path = located.dir.join(storage::timeline_file(located.part));
+    let cuts = tokio::task::spawn_blocking(move || Timeline::load(&timeline_path).cuts()).await.unwrap_or_default();
     Ok(Json(StreamDetail {
         video_url: media_link(&app, id, user.id, &file, false),
         download_url: user.can("streams.download").then(|| media_link(&app, id, user.id, &file, true)),
@@ -259,6 +263,7 @@ pub async fn detail(
         error,
         chapters,
         parts,
+        cuts,
     }))
 }
 
@@ -645,7 +650,7 @@ mod tests {
                     {\"t\":1100,\"k\":\"m\",\"u\":\"a\",\"m\":\"first é\"}\n\
                     {\"t\":1200,\"k\":";
         std::fs::write(&path, text).unwrap();
-        let timeline = Timeline { anchors: vec![(0, 1000)] };
+        let timeline = Timeline { anchors: vec![(0, 1000)], cuts: vec![] };
         let entries = index_chat(&path, &timeline, |_| true);
         let mut out = Vec::new();
         read_lines(&path, &entries, |o, line| {

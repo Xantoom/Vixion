@@ -77,6 +77,27 @@ struct Part {
     writer: Writer,
     timeline: Timeline,
     saved: Instant,
+    /// What the part had before this session, when it goes on after a restart.
+    before: Counts,
+}
+
+/// Gaps, skipped ads and chat messages: counted per session, added up per part.
+#[derive(Clone, Copy, Default)]
+struct Counts {
+    gaps: i64,
+    ads_ms: i64,
+    chat: i64,
+}
+
+/// The last part of a broadcast recorded before a restart.
+struct Earlier {
+    row: i64,
+    dir: String,
+    part: i64,
+    gaps: i64,
+    ads_ms: i64,
+    chat: i64,
+    duration_ms: i64,
 }
 
 struct Session<'a> {
@@ -88,6 +109,10 @@ struct Session<'a> {
     parts_done: Vec<i64>,
     /// Parts recorded before this session, when it resumes a broadcast (after a restart).
     earlier_parts: i64,
+    /// The last part recorded before this session, to go on writing when the picture matches.
+    resume: Option<Earlier>,
+    /// The wall-clock moment recorded last before this session: older segments are skipped.
+    recorded_until: Option<i64>,
     progress: Arc<Mutex<LiveProgress>>,
     chat_count: Arc<AtomicU64>,
     ads_ms: i64,
@@ -211,33 +236,49 @@ pub async fn run(
         "recording source picked"
     );
 
-    // A broadcast already partly recorded (the server restarted meanwhile) goes on in its folder.
+    // A broadcast already partly recorded (the server restarted meanwhile) goes on in its folder,
+    // and in its last video file when the picture is the same.
     let (streamer_id, twitch_id) = (broadcast.streamer_id, broadcast.twitch_stream_id.clone());
-    let earlier: Option<(String, i64)> = app
+    let earlier: Option<Earlier> = app
         .db
         .read(move |conn| {
             Ok(conn
                 .query_row(
-                    "SELECT dir, MAX(part) FROM streams WHERE streamer_id = ?1 AND twitch_stream_id = ?2 GROUP BY dir
-                     ORDER BY MAX(started_at) DESC LIMIT 1",
+                    "SELECT id, dir, part, gaps, ads_skipped_ms, chat_messages, duration_ms FROM streams
+                     WHERE streamer_id = ?1 AND twitch_stream_id = ?2 ORDER BY started_at DESC, part DESC LIMIT 1",
                     rusqlite::params![streamer_id, twitch_id],
-                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+                    |row| {
+                        Ok(Earlier {
+                            row: row.get(0)?,
+                            dir: row.get(1)?,
+                            part: row.get(2)?,
+                            gaps: row.get(3)?,
+                            ads_ms: row.get(4)?,
+                            chat: row.get(5)?,
+                            duration_ms: row.get(6)?,
+                        })
+                    },
                 )
                 .ok())
         })
         .await
         .ok()
         .flatten()
-        .filter(|(dir, _)| storage::stream_dir(&app.config.streams_dir(), dir).is_some_and(|path| path.is_dir()));
-    let earlier_parts = earlier.as_ref().map_or(0, |(_, parts)| *parts);
-    let folder = earlier.map_or_else(
+        .filter(|earlier| {
+            storage::stream_dir(&app.config.streams_dir(), &earlier.dir).is_some_and(|path| path.is_dir())
+        });
+    let earlier_parts = earlier.as_ref().map_or(0, |earlier| earlier.part);
+    let folder = earlier.as_ref().map_or_else(
         || format!("{}/{}_{}", login.to_ascii_lowercase(), storage::folder_stamp(now_ms()), broadcast.twitch_stream_id),
-        |(dir, _)| dir,
+        |earlier| earlier.dir.clone(),
     );
     if earlier_parts > 0 {
         tracing::info!(%login, folder, "resuming the broadcast's recording");
     }
     let Some(path) = storage::stream_dir(&app.config.streams_dir(), &folder) else { return Ended::Done };
+    let recorded_until = earlier.as_ref().and_then(|earlier| {
+        Timeline::load(&path.join(storage::timeline_file(earlier.part))).wall_time(earlier.duration_ms)
+    });
     if let Err(error) = tokio::fs::create_dir_all(&path).await {
         app.alerts.raise(Level::Error, "storage", format!("Can't create {}: {error}", path.display())).await;
         return Ended::Done;
@@ -261,6 +302,8 @@ pub async fn run(
         part: None,
         parts_done: Vec::new(),
         earlier_parts,
+        recorded_until,
+        resume: earlier,
         progress,
         chat_count,
         ads_ms: 0,
@@ -288,7 +331,8 @@ impl Session<'_> {
     /// ended it early, if any.
     async fn follow(&mut self, source: &mut Source, stop: &mut watch::Receiver<bool>) -> Option<String> {
         let login = self.broadcast.login.clone();
-        let mut last_date: Option<i64> = None;
+        // After a restart, the playlist starts with seconds already recorded.
+        let mut last_date: Option<i64> = self.recorded_until;
         let mut last_sequence: Option<u64> = None;
         let mut discontinuity = false;
         let mut fresh = Instant::now();
@@ -486,8 +530,9 @@ impl Session<'_> {
             progress.stream_id = part.row;
             progress.duration_ms = written.duration_ms;
             progress.bytes = written.bytes;
-            progress.ads_skipped_ms = self.ads_ms;
-            progress.chat_messages = self.chat_count.load(Ordering::Relaxed);
+            progress.ads_skipped_ms = part.before.ads_ms + self.ads_ms;
+            progress.chat_messages =
+                u64::try_from(part.before.chat).unwrap_or(0) + self.chat_count.load(Ordering::Relaxed);
             progress.fps = written.fps;
         }
         if part.saved.elapsed() >= SAVE_EVERY {
@@ -504,8 +549,12 @@ impl Session<'_> {
                     .await;
                 return Err("the disk is full".into());
             }
-            let (row, ads, chat, gaps) =
-                (part.row, self.ads_ms, self.chat_count.load(Ordering::Relaxed), part.writer.discontinuities);
+            let (row, ads, chat, gaps) = (
+                part.row,
+                part.before.ads_ms + self.ads_ms,
+                part.before.chat + i64::try_from(self.chat_count.load(Ordering::Relaxed)).unwrap_or(0),
+                part.before.gaps + i64::from(part.writer.discontinuities),
+            );
             let _ = self
                 .app
                 .db
@@ -518,7 +567,7 @@ impl Session<'_> {
                             written.duration_ms,
                             i64::try_from(written.bytes).unwrap_or(i64::MAX),
                             ads,
-                            i64::try_from(chat).unwrap_or(0),
+                            chat,
                             gaps,
                             written.fps
                         ],
@@ -530,7 +579,70 @@ impl Session<'_> {
         Ok(())
     }
 
+    /// Opens the last part recorded before a restart again, when this picture can go on in it.
+    async fn resume_part(&mut self, segment: &Segment) -> Option<Part> {
+        let earlier = self.resume.take()?;
+        let file = self.path.join(storage::video_file(earlier.part));
+        let writer = match tokio::task::block_in_place(|| Writer::resume(&file)) {
+            Ok(writer) => writer,
+            Err(error) => {
+                tracing::warn!(login = %self.broadcast.login, %error, "can't go on in the last part");
+                return None;
+            }
+        };
+        if !writer.accepts(segment) {
+            // Another picture: the part is closed again as it was, and a new one starts.
+            let _ = tokio::task::block_in_place(|| writer.finish());
+            return None;
+        }
+        let row = earlier.row;
+        let reopened = self
+            .app
+            .db
+            .write(move |conn| {
+                conn.execute(
+                    "UPDATE streams SET status = 'recording', ended_at = NULL, error = NULL WHERE id = ?1",
+                    [row],
+                )?;
+                Ok(())
+            })
+            .await;
+        if let Err(error) = reopened {
+            tracing::warn!(%error, "can't reopen a recording");
+            let _ = tokio::task::block_in_place(|| writer.finish());
+            return None;
+        }
+        if let Ok(mut progress) = self.progress.lock() {
+            progress.stream_id = row;
+        }
+        // The player shows where the recording stopped and went on.
+        let timeline_path = self.path.join(storage::timeline_file(earlier.part));
+        let mut timeline = Timeline::load(&timeline_path);
+        timeline.cuts.push(writer.progress().duration_ms);
+        let _ = tokio::task::block_in_place(|| timeline.save(&timeline_path));
+        tracing::info!(login = %self.broadcast.login, part = earlier.part, "recording goes on after a cut");
+        self.app.alerts.resolve(&format!("write:{}", self.broadcast.login)).await;
+        self.app.alerts.resolve(&format!("crash:{}", self.broadcast.login)).await;
+        Some(Part {
+            row,
+            number: earlier.part,
+            writer,
+            timeline,
+            saved: Instant::now(),
+            before: Counts { gaps: earlier.gaps, ads_ms: earlier.ads_ms, chat: earlier.chat },
+        })
+    }
+
     async fn start_part(&mut self, segment: &Segment, date: Option<i64>) -> Result<Part, String> {
+        if let Some(part) = self.resume_part(segment).await {
+            if let Ok(mut progress) = self.progress.lock() {
+                let video = segment.video.as_ref().map(|track| &track.config);
+                progress.codec = video.map(|config| config.codec).unwrap_or("audio").to_owned();
+                progress.width = video.map_or(0, |config| config.width);
+                progress.height = video.map_or(0, |config| config.height);
+            }
+            return Ok(part);
+        }
         let number = self.earlier_parts + i64::try_from(self.parts_done.len()).unwrap_or(0) + 1;
         let video = segment.video.as_ref().map(|track| &track.config);
         let audio = segment.audio.as_ref().map(|track| &track.config);
@@ -593,7 +705,14 @@ impl Session<'_> {
         tracing::info!(login = %self.broadcast.login, display = %self.broadcast.display_name, part = number, "recording started");
         self.app.alerts.resolve(&format!("write:{}", self.broadcast.login)).await;
         self.app.alerts.resolve(&format!("crash:{}", self.broadcast.login)).await;
-        Ok(Part { row, number, writer, timeline: Timeline::default(), saved: Instant::now() })
+        Ok(Part {
+            row,
+            number,
+            writer,
+            timeline: Timeline::default(),
+            saved: Instant::now(),
+            before: Counts::default(),
+        })
     }
 
     /// Closes the current part: index, duration, database row.
@@ -601,13 +720,17 @@ impl Session<'_> {
         let Some(part) = self.part.take() else { return };
         let path = self.path.join(storage::timeline_file(part.number));
         let _ = tokio::task::block_in_place(|| part.timeline.save(&path));
-        let gaps = part.writer.discontinuities;
+        let gaps = part.before.gaps + i64::from(part.writer.discontinuities);
         let finished = tokio::task::block_in_place(|| part.writer.finish());
         let (status, written, error) = match finished {
             Ok(written) => (if error.is_some() { "failed" } else { "done" }, written, error),
             Err(failure) => ("failed", crate::media::fmp4::Progress::default(), Some(failure.to_string())),
         };
-        let (row, ads, chat) = (part.row, self.ads_ms, self.chat_count.load(Ordering::Relaxed));
+        let (row, ads, chat) = (
+            part.row,
+            part.before.ads_ms + self.ads_ms,
+            part.before.chat + i64::try_from(self.chat_count.load(Ordering::Relaxed)).unwrap_or(0),
+        );
         let result = self
             .app
             .db
@@ -622,7 +745,7 @@ impl Session<'_> {
                         written.duration_ms,
                         i64::try_from(written.bytes).unwrap_or(i64::MAX),
                         ads,
-                        i64::try_from(chat).unwrap_or(0),
+                        chat,
                         gaps,
                         written.fps,
                         error

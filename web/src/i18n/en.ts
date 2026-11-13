@@ -186,6 +186,7 @@ export const en = {
 		openOnTwitch: (name: string) => `${name} on Twitch`,
 		seekHere: 'Go to this moment',
 		goLive: 'Latest messages',
+		cut: (missing: string) => `Cut: ${missing} missing`,
 	},
 	stats: {
 		title: 'Statistics',

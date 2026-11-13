@@ -4,6 +4,7 @@
 //! follows the number of channels and backs off when Twitch refuses. Each live channel gets a
 //! session task that follows its playlist until the broadcast ends.
 
+mod merge;
 pub mod retention;
 mod session;
 pub mod storage;
@@ -222,6 +223,8 @@ enum Round {
 
 /// Runs the live checks until the process ends.
 pub async fn run(app: AppState) {
+    // Broadcasts left in parts by earlier versions become one recording before anything records.
+    merge::run(&app).await;
     let mut failures = 0u32;
     let mut last = tokio::time::Instant::now() - pace::MIN_GAP;
     loop {

@@ -42,12 +42,18 @@ pub fn folder_stamp(unix_ms: i64) -> String {
     format!("{year:04}-{month:02}-{day:02}_{:02}-{:02}-{:02}", rest / 3600, rest % 3600 / 60, rest % 60)
 }
 
+/// Below this, a jump between two anchors is the clock slipping, not a cut.
+const MIN_CUT_MS: i64 = 2_000;
+
 /// Points where video time and wall-clock time were matched: at the start, and after every
 /// cut (skipped ad, lost segments). Between two points both run at the same pace.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Timeline {
     /// (video milliseconds, wall-clock Unix milliseconds)
     pub anchors: Vec<(i64, i64)>,
+    /// Video milliseconds where the recording stopped and went on again (a restart).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cuts: Vec<i64>,
 }
 
 impl Timeline {
@@ -59,6 +65,37 @@ impl Timeline {
         let temporary = path.with_extension("json.tmp");
         std::fs::write(&temporary, serde_json::to_vec(self)?)?;
         std::fs::rename(temporary, path)
+    }
+
+    /// Where the recording is cut, and how much of the broadcast is missing there: each restart,
+    /// and each jump of the clock (lost segments, a skipped ad). Short slips aren't counted.
+    pub fn cuts(&self) -> Vec<(i64, i64)> {
+        let missing = |at: i64| {
+            let index = self.anchors.partition_point(|&(video, _)| video < at);
+            match (index.checked_sub(1).and_then(|i| self.anchors.get(i)), self.anchors.get(index)) {
+                (Some(&(video, wall)), Some(&(next_video, next_wall))) => {
+                    ((next_wall - wall) - (next_video - video)).max(0)
+                }
+                _ => 0,
+            }
+        };
+        let mut cuts: Vec<(i64, i64)> = self.cuts.iter().map(|&at| (at, missing(at))).collect();
+        for pair in self.anchors.windows(2) {
+            let ((video, wall), (next_video, next_wall)) = (pair[0], pair[1]);
+            let lost = (next_wall - wall) - (next_video - video);
+            if lost >= MIN_CUT_MS && !cuts.iter().any(|&(at, _)| (at - next_video).abs() < 1_000) {
+                cuts.push((next_video, lost));
+            }
+        }
+        cuts.sort_unstable();
+        cuts
+    }
+
+    /// The wall-clock moment of a video time.
+    pub fn wall_time(&self, video: i64) -> Option<i64> {
+        let index = self.anchors.partition_point(|&(anchor_video, _)| anchor_video <= video);
+        let (anchor_video, wall) = *self.anchors.get(index.checked_sub(1)?)?;
+        Some(wall + (video - anchor_video))
     }
 
     /// Video time of a wall-clock moment. What was said during a cut shows at the cut.
@@ -80,12 +117,23 @@ mod tests {
     #[test]
     fn maps_chat_across_cuts() {
         // Recording starts at wall 1000; at video 10 s, 30 s of ads were cut.
-        let timeline = Timeline { anchors: vec![(0, 1_000), (10_000, 41_000)] };
+        let timeline = Timeline { anchors: vec![(0, 1_000), (10_000, 41_000)], cuts: vec![] };
         assert_eq!(timeline.video_time(500), None);
         assert_eq!(timeline.video_time(6_000), Some(5_000));
         // Said during the ad: shown at the cut.
         assert_eq!(timeline.video_time(25_000), Some(10_000));
         assert_eq!(timeline.video_time(51_000), Some(20_000));
+    }
+
+    #[test]
+    fn finds_cuts() {
+        // 30 s of ads at video 10 s, then a clock slip of half a second.
+        let mut timeline = Timeline { anchors: vec![(0, 1_000), (10_000, 41_000), (20_000, 51_500)], cuts: vec![] };
+        assert_eq!(timeline.cuts(), vec![(10_000, 30_000)]);
+        // A restart at video 20 s that lost nothing is a cut too.
+        timeline.cuts.push(20_000);
+        assert_eq!(timeline.cuts(), vec![(10_000, 30_000), (20_000, 500)]);
+        assert_eq!(timeline.wall_time(15_000), Some(46_000));
     }
 
     #[test]

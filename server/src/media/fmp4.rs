@@ -60,6 +60,8 @@ pub struct Writer {
     shift: f64,
     video_frames: u64,
     pub discontinuities: u32,
+    /// Reopened after a stop: the first segment written is a cut, not the start.
+    resumed: bool,
 }
 
 fn timescaled(seconds: f64, timescale: u32) -> i64 {
@@ -98,14 +100,160 @@ impl Writer {
             shift: 0.0,
             video_frames: 0,
             discontinuities: 0,
+            resumed: false,
         })
+    }
+
+    /// Reopens a recording to write on at its end, as after a restart: its index is dropped
+    /// (written again by [`Writer::finish`]) and so is a fragment torn by a crash. The next
+    /// segment starts where the file ends, whatever its source time: that is a cut.
+    ///
+    /// Only the fragment headers are read, never the media, so it is quick on a long recording.
+    pub fn resume(path: &Path) -> std::io::Result<Self> {
+        let file = std::fs::OpenOptions::new().read(true).write(true).open(path)?;
+        let length = file.metadata()?.len();
+        let (head, first) = read_head(&file, length)?;
+        let init = super::mp4read::parse_init(&head).map_err(|error| invalid(&error.0))?;
+        let duration_at = mehd_duration_offset(&head).ok_or_else(|| invalid("no mehd box"))?;
+        let mut tracks: Vec<Track> = init
+            .tracks
+            .iter()
+            .map(|t| Track { id: t.id, config: t.config.clone(), offset: 0, end: 0, index: Vec::new() })
+            .collect();
+        let (mut sequence, mut frames) = (0u32, 0u64);
+        let complete = walk(&file, first, length, |fragment| {
+            sequence += 1;
+            for (number, traf) in trafs(&fragment.moof).into_iter().enumerate() {
+                let Some(track) = tracks.iter_mut().find(|track| track.id == traf.id) else { continue };
+                track.end = traf.base + traf.duration;
+                if track.config.kind == TrackKind::Audio || traf.first_sync {
+                    track.index.push((traf.base, fragment.at, u8::try_from(number + 1).unwrap_or(1)));
+                }
+                if track.config.kind == TrackKind::Video {
+                    frames += u64::from(traf.count);
+                }
+            }
+            Ok(())
+        })?;
+        file.set_len(complete)?;
+        let mut out = BufWriter::with_capacity(1 << 20, file);
+        out.seek(SeekFrom::Start(complete))?;
+        Ok(Self {
+            out,
+            position: complete,
+            tracks,
+            sequence,
+            duration_at,
+            pending: None,
+            expected: None,
+            shift: 0.0,
+            video_frames: frames,
+            discontinuities: 0,
+            resumed: true,
+        })
+    }
+
+    /// Adds the fragments of another recording of the same tracks after this one's end, moved in
+    /// time to follow on: two parts of a broadcast become one file. Its first `skip_ms` are left
+    /// out (what both recorded twice). Returns how far, in milliseconds, the other recording's
+    /// times moved, and how much of its start was left out.
+    pub fn append(&mut self, path: &Path, skip_ms: i64) -> std::io::Result<(i64, i64)> {
+        use std::os::unix::fs::FileExt;
+
+        if let Some(pending) = self.pending.take() {
+            self.write_fragment(pending)?;
+        }
+        let file = File::open(path)?;
+        let length = file.metadata()?.len();
+        let (head, first) = read_head(&file, length)?;
+        let init = super::mp4read::parse_init(&head).map_err(|error| invalid(&error.0))?;
+        // Their track ids, mapped to ours: the same tracks, configured the same, or nothing.
+        let mut ids = Vec::new();
+        for theirs in &init.tracks {
+            let Some(mine) = self.tracks.iter().position(|track| same_track(&track.config, &theirs.config)) else {
+                return Err(invalid("the recordings' tracks differ"));
+            };
+            ids.push((theirs.id, mine));
+        }
+        if ids.len() != self.tracks.len() {
+            return Err(invalid("the recordings' tracks differ"));
+        }
+        let written_end = self
+            .tracks
+            .iter()
+            .map(|track| track.end as f64 / f64::from(track.config.timescale))
+            .reduce(f64::max)
+            .unwrap_or(0.0);
+        let mut origin: Option<f64> = None;
+        let mut shift: Option<f64> = None;
+        let mut skipped = 0.0;
+        let mut copy = vec![0u8; 1 << 20];
+        walk(&file, first, length, |mut fragment| {
+            let infos = trafs(&fragment.moof);
+            let mine = |id: u32| ids.iter().find(|(theirs, _)| *theirs == id).map(|(_, mine)| *mine);
+            let start = infos
+                .iter()
+                .filter_map(|traf| {
+                    let track = &self.tracks[mine(traf.id)?];
+                    Some(traf.base as f64 / f64::from(track.config.timescale))
+                })
+                .reduce(f64::min)
+                .unwrap_or(0.0);
+            let origin = *origin.get_or_insert(start);
+            if shift.is_none() && (start - origin) * 1000.0 < skip_ms as f64 {
+                return Ok(());
+            }
+            let shift = *shift.get_or_insert_with(|| {
+                skipped = start - origin;
+                written_end - start
+            });
+            self.sequence += 1;
+            if let Some(slot) = fragment.moof.get_mut(12..16) {
+                slot.copy_from_slice(&self.sequence.to_be_bytes());
+            }
+            let at = self.position;
+            for (number, traf) in infos.iter().enumerate() {
+                let Some(index) = mine(traf.id) else { continue };
+                let track = &mut self.tracks[index];
+                track.id = traf.id;
+                let base = (traf.base + timescaled(shift, track.config.timescale)).max(0);
+                let Some(slot) = fragment.moof.get_mut(traf.time_at..traf.time_at + 8) else { continue };
+                slot.copy_from_slice(&u64::try_from(base).unwrap_or(0).to_be_bytes());
+                track.end = base + traf.duration;
+                if track.config.kind == TrackKind::Audio || traf.first_sync {
+                    track.index.push((base, at, u8::try_from(number + 1).unwrap_or(1)));
+                }
+                if track.config.kind == TrackKind::Video {
+                    self.video_frames += u64::from(traf.count);
+                }
+            }
+            let size = 8 + fragment.moof.len() as u64;
+            self.out.write_all(&u32::try_from(size).map_err(|_| invalid("moof too large"))?.to_be_bytes())?;
+            self.out.write_all(b"moof")?;
+            self.out.write_all(&fragment.moof)?;
+            let mut from = fragment.at + fragment.moof_header + fragment.moof.len() as u64;
+            while from < fragment.end {
+                let take = usize::try_from((fragment.end - from).min(copy.len() as u64)).unwrap_or(copy.len());
+                file.read_exact_at(&mut copy[..take], from)?;
+                self.out.write_all(&copy[..take])?;
+                from += take as u64;
+            }
+            self.position += size + (fragment.end - fragment.at - fragment.moof_header - fragment.moof.len() as u64);
+            Ok(())
+        })?;
+        self.out.flush()?;
+        self.discontinuities += 1;
+        self.expected = None;
+        Ok(((shift.unwrap_or(0.0) * 1000.0).round() as i64, (skipped * 1000.0).round() as i64))
     }
 
     /// Whether a segment can go in this file: same tracks with the same configuration.
     pub fn accepts(&self, segment: &Segment) -> bool {
         let matches = |kind: TrackKind, data: &Option<TrackData>| match data {
             None => true,
-            Some(data) => self.tracks.iter().any(|track| track.config.kind == kind && track.config == data.config),
+            Some(data) => {
+                self.tracks.iter().any(|track| track.config.kind == kind && same_track(&track.config, &data.config))
+            }
         };
         matches(TrackKind::Video, &segment.video) && matches(TrackKind::Audio, &segment.audio)
     }
@@ -137,7 +285,7 @@ impl Writer {
                 .map(|track| track.end as f64 / f64::from(track.config.timescale))
                 .reduce(f64::max)
                 .unwrap_or(0.0);
-            if self.expected.is_some() {
+            if self.expected.is_some() || std::mem::take(&mut self.resumed) {
                 self.discontinuities += 1;
             }
             self.shift = written_end - start;
@@ -346,8 +494,157 @@ pub fn repair(path: &Path) -> std::io::Result<Progress> {
         shift: 0.0,
         video_frames: frames,
         discontinuities: 0,
+        resumed: false,
     };
     writer.finish()
+}
+
+/// Whether samples of one track can go in a file made for the other: the same decoder setup.
+/// The names and sizes people read are left out: a file read back may describe them otherwise.
+fn same_track(a: &TrackConfig, b: &TrackConfig) -> bool {
+    a.kind == b.kind && a.timescale == b.timescale && a.sample_entry == b.sample_entry
+}
+
+fn invalid(message: &str) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, message.to_owned())
+}
+
+/// A box's kind, size and header length at `position`, if it is whole within `length`.
+fn box_at(file: &File, position: u64, length: u64) -> std::io::Result<Option<([u8; 4], u64, u64)>> {
+    use std::os::unix::fs::FileExt;
+
+    let mut header = [0u8; 16];
+    if position + 8 > length {
+        return Ok(None);
+    }
+    file.read_exact_at(&mut header[..8], position)?;
+    let mut size = u64::from(u32::from_be_bytes([header[0], header[1], header[2], header[3]]));
+    let kind = [header[4], header[5], header[6], header[7]];
+    let mut header_len = 8;
+    if size == 1 {
+        if position + 16 > length {
+            return Ok(None);
+        }
+        file.read_exact_at(&mut header[8..16], position + 8)?;
+        size = u64::from_be_bytes(header[8..16].try_into().unwrap_or_default());
+        header_len = 16;
+    }
+    Ok((size >= header_len && position + size <= length).then_some((kind, size, header_len)))
+}
+
+/// The boxes before the first fragment (the init: `ftyp`, `moov`), and where the fragments start.
+fn read_head(file: &File, length: u64) -> std::io::Result<(Vec<u8>, u64)> {
+    use std::os::unix::fs::FileExt;
+
+    let mut position = 0;
+    while let Some((kind, size, _)) = box_at(file, position, length)? {
+        if &kind == b"moof" {
+            break;
+        }
+        position += size;
+    }
+    if position == 0 || position > 64 << 20 {
+        return Err(invalid("no init segment"));
+    }
+    let mut head = vec![0u8; usize::try_from(position).unwrap_or(0)];
+    file.read_exact_at(&mut head, 0)?;
+    Ok((head, position))
+}
+
+/// A whole fragment of a file: where it starts, its `moof` body, where its `mdat` ends.
+struct OnDisk {
+    at: u64,
+    moof_header: u64,
+    moof: Vec<u8>,
+    end: u64,
+}
+
+/// Reads the fragments from `from` on, up to an index, a torn box or `length`; returns where
+/// the last whole fragment ends.
+fn walk(
+    file: &File,
+    from: u64,
+    length: u64,
+    mut each: impl FnMut(OnDisk) -> std::io::Result<()>,
+) -> std::io::Result<u64> {
+    use std::os::unix::fs::FileExt;
+
+    let mut position = from;
+    let mut complete = from;
+    let mut moof: Option<(u64, u64, Vec<u8>)> = None;
+    while let Some((kind, size, header_len)) = box_at(file, position, length)? {
+        match &kind {
+            b"moof" => {
+                let mut body = vec![0u8; usize::try_from(size - header_len).unwrap_or(0)];
+                file.read_exact_at(&mut body, position + header_len)?;
+                moof = Some((position, header_len, body));
+            }
+            b"mdat" => {
+                if let Some((at, moof_header, body)) = moof.take() {
+                    each(OnDisk { at, moof_header, moof: body, end: position + size })?;
+                    complete = position + size;
+                }
+            }
+            b"mfra" => break,
+            _ => {}
+        }
+        position += size;
+    }
+    Ok(complete)
+}
+
+/// What a fragment holds of one track, read from its `traf`.
+struct TrafInfo {
+    id: u32,
+    /// Decode time of its first sample.
+    base: i64,
+    /// Where that time is written in the `moof` body (a version 1 `tfdt`), to move it.
+    time_at: usize,
+    duration: i64,
+    count: u32,
+    first_sync: bool,
+}
+
+/// The tracks of a fragment this writer wrote: version 1 `tfdt`, durations in the `trun`.
+fn trafs(moof: &[u8]) -> Vec<TrafInfo> {
+    use super::mp4read::boxes;
+
+    let mut found = Vec::new();
+    for (kind, traf, traf_at) in boxes(moof) {
+        if &kind != b"traf" {
+            continue;
+        }
+        let (mut id, mut base, mut time_at, mut duration, mut count, mut first_sync) = (None, None, 0, 0i64, 0, true);
+        for (kind, body, at) in boxes(traf) {
+            match &kind {
+                b"tfhd" => id = body.get(4..8).map(|b| u32::from_be_bytes(b.try_into().unwrap_or_default())),
+                b"tfdt" if body.first() == Some(&1) => {
+                    base = body.get(4..12).map(|b| u64::from_be_bytes(b.try_into().unwrap_or_default()));
+                    time_at = traf_at + 8 + at + 8 + 4;
+                }
+                b"trun" => {
+                    first_sync = first_sample_is_sync(body).unwrap_or(true);
+                    let flags = u32::from_be_bytes(body.get(0..4).and_then(|b| b.try_into().ok()).unwrap_or_default())
+                        & 0x00FF_FFFF;
+                    count = u32::from_be_bytes(body.get(4..8).and_then(|b| b.try_into().ok()).unwrap_or_default());
+                    let mut at = 8 + if flags & 0x01 != 0 { 4 } else { 0 } + if flags & 0x04 != 0 { 4 } else { 0 };
+                    let per_sample = [0x100, 0x200, 0x400, 0x800].iter().filter(|bit| flags & **bit != 0).count() * 4;
+                    if flags & 0x100 != 0 {
+                        for _ in 0..count {
+                            let Some(value) = body.get(at..at + 4) else { break };
+                            duration += i64::from(u32::from_be_bytes(value.try_into().unwrap_or_default()));
+                            at += per_sample;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let (Some(id), Some(base)) = (id, base) {
+            found.push(TrafInfo { id, base: i64::try_from(base).unwrap_or(0), time_at, duration, count, first_sync });
+        }
+    }
+    found
 }
 
 /// The `mfra` box: per track, the time and place of each fragment a reader can start from.
@@ -686,6 +983,82 @@ mod tests {
         std::fs::write(&path, &file[..without_index - 100]).expect("truncate");
         let repaired = repair(&path).expect("repair");
         assert!((1_900..2_100).contains(&repaired.duration_ms), "{}", repaired.duration_ms);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn segment(video_start: i64, audio_start: i64) -> Segment {
+        Segment {
+            video: Some(track(TrackKind::Video, 90_000, b"avc1", video_start, 3000, 60)),
+            audio: Some(track(TrackKind::Audio, 48_000, b"mp4a", audio_start, 1024, 94)),
+        }
+    }
+
+    fn create(path: &Path, first: &Segment) -> Writer {
+        Writer::create(path, first.video.as_ref().map(|t| &t.config), first.audio.as_ref().map(|t| &t.config))
+            .expect("create")
+    }
+
+    /// A recording stopped then reopened goes on in the same file, after a cut.
+    #[test]
+    fn resumes_a_finished_recording() {
+        let dir = std::env::temp_dir().join(format!("vixion-resume-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("out.mp4");
+        let mut writer = create(&path, &segment(0, 0));
+        writer.push(segment(0, 0), false).expect("first");
+        writer.finish().expect("finish");
+
+        let mut writer = Writer::resume(&path).expect("resume");
+        // A new session: the source clock is anywhere.
+        let later = segment(54_000_000, 28_800_000);
+        assert!(writer.accepts(&later));
+        let anchor = writer.push(later, false).expect("push").expect("a new anchor");
+        assert!((1.9..2.1).contains(&anchor), "{anchor}");
+        assert_eq!(writer.discontinuities, 1);
+        let progress = writer.finish().expect("finish");
+        assert!((3_900..4_100).contains(&progress.duration_ms), "{}", progress.duration_ms);
+
+        let file = std::fs::read(&path).expect("read back");
+        assert_eq!(mp4read::boxes(&file).filter(|(k, _, _)| k == b"mfra").count(), 1);
+        let init = mp4read::parse_init(&file).expect("init");
+        let video = mp4read::demux(&file, &init).expect("demux").video.expect("video");
+        assert_eq!(video.samples.len(), 120);
+        assert!((180_000..=181_000).contains(&video.samples[60].dts), "{}", video.samples[60].dts);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Two parts of a broadcast become one file, the second following the first.
+    #[test]
+    fn appends_another_recording() {
+        let dir = std::env::temp_dir().join(format!("vixion-append-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let (one, two) = (dir.join("one.mp4"), dir.join("two.mp4"));
+        let mut writer = create(&one, &segment(0, 0));
+        writer.push(segment(0, 0), false).expect("one");
+        writer.finish().expect("finish one");
+        let mut writer = create(&two, &segment(0, 0));
+        writer.push(segment(0, 0), false).expect("two");
+        writer.push(segment(180_000, 96_256), false).expect("two more");
+        writer.finish().expect("finish two");
+
+        let mut writer = Writer::resume(&one).expect("resume");
+        let (shift, skipped) = writer.append(&two, 0).expect("append");
+        assert!((1_990..2_010).contains(&shift), "{shift}");
+        assert_eq!(skipped, 0);
+        let progress = writer.finish().expect("finish");
+        assert!((5_900..6_100).contains(&progress.duration_ms), "{}", progress.duration_ms);
+
+        let file = std::fs::read(&one).expect("read back");
+        let init = mp4read::parse_init(&file).expect("init");
+        let segment = mp4read::demux(&file, &init).expect("demux");
+        let video = segment.video.expect("video");
+        assert_eq!(video.samples.len(), 180);
+        assert!(video.samples.windows(2).all(|pair| pair[1].dts > pair[0].dts));
+        // The index a player seeks with covers every fragment, the appended ones included.
+        let mut index = FragmentIndex::default();
+        let (_, _, mfra_at) = mp4read::boxes(&file).find(|(k, _, _)| k == b"mfra").expect("mfra");
+        index.extend(&std::fs::File::open(&one).expect("open"), mfra_at as u64).expect("index");
+        assert_eq!(index.complete, mfra_at as u64);
         std::fs::remove_dir_all(&dir).ok();
     }
 

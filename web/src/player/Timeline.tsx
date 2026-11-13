@@ -1,7 +1,8 @@
-import { type PointerEvent as ReactPointerEvent, useMemo, useRef, useState } from 'react';
+import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '@/i18n';
 import type { StreamDetail } from '@/lib/api';
-import { formatClock } from '@/lib/format';
+import { formatClock, formatDuration } from '@/lib/format';
+import type { Preview } from './preview';
 
 type Chapter = StreamDetail['chapters'][number];
 
@@ -25,12 +26,18 @@ export function Timeline({
 	duration,
 	time,
 	chapters,
+	cuts,
+	preview,
 	onSeek,
 	onScrub,
 }: {
 	duration: number;
 	time: number;
 	chapters: Chapter[];
+	/** Where the broadcast is missing: (video ms, ms missing). */
+	cuts: [number, number][];
+	/** Pictures under the pointer, when the browser can decode the video. */
+	preview: Preview | null;
 	onSeek: (seconds: number) => void;
 	/** The time under a dragged handle, or null when the drag ends. */
 	onScrub: (seconds: number | null) => void;
@@ -85,7 +92,29 @@ export function Timeline({
 		onScrub(null);
 	};
 
+	// The picture under the pointer, drawn when it comes; the last one stays until then.
+	const picture = useRef<HTMLCanvasElement>(null);
+	const [pictured, setPictured] = useState(false);
+	const hoverAt = hover?.at ?? null;
+	useEffect(() => {
+		if (hoverAt === null || !preview) return;
+		preview.request(hoverAt, (found) => {
+			const canvas = picture.current;
+			if (!found || !canvas) return;
+			canvas.width = found.width;
+			canvas.height = found.height;
+			canvas.getContext('2d')?.drawImage(found, 0, 0);
+			setPictured(true);
+		});
+	}, [hoverAt, preview]);
+
 	const progress = duration > 0 ? Math.min(100, (time / duration) * 100) : 0;
+	const marks = cuts.filter(([at]) => at / 1000 > 0 && at / 1000 < duration);
+	// A cut under the pointer, within a few pixels.
+	const nearCut =
+		hover && duration > 0
+			? marks.find(([at]) => Math.abs((at / 1000 / duration) * hover.width - hover.x) <= 6)
+			: undefined;
 	const hovered = hover ? segments.find((segment) => hover.at >= segment.start && hover.at < segment.end) : null;
 
 	return (
@@ -103,7 +132,9 @@ export function Timeline({
 			onPointerUp={onPointerUp}
 			onPointerCancel={onPointerUp}
 			onPointerLeave={() => {
-				if (!dragging) setHover(null);
+				if (dragging) return;
+				setHover(null);
+				setPictured(false);
 			}}
 			className="group/timeline relative flex h-6 w-full cursor-pointer touch-none items-center outline-none"
 		>
@@ -118,36 +149,65 @@ export function Timeline({
 							className={`relative h-full overflow-hidden rounded-[1px] transition-colors ${lit ? 'bg-white/55' : 'bg-white/30'}`}
 							style={{ flexGrow: span, flexBasis: 0 }}
 						>
-							<div className="absolute inset-y-0 left-0 bg-accent-fill" style={{ width: `${filled}%` }} />
+							{/* One gradient across the whole bar: each chapter shows its own stretch of it. */}
+							<div
+								className="bg-accent-fill absolute inset-0"
+								style={{
+									clipPath: `inset(0 ${100 - filled}% 0 0)`,
+									backgroundSize: `${(duration / (span || 1)) * 100}% 100%`,
+									backgroundPosition: `${duration > span ? (segment.start / (duration - span)) * 100 : 0}% 0`,
+								}}
+							/>
 						</div>
 					);
 				})}
 			</div>
+			{marks.map(([at, lost]) => (
+				<span
+					key={at}
+					aria-hidden
+					data-lost={lost}
+					className="pointer-events-none absolute top-1/2 h-3 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-[1px] bg-white shadow-[0_0_0_1px_rgb(0_0_0/0.55)] transition-[height] duration-150 group-hover/timeline:h-4"
+					style={{ left: `${(at / 1000 / duration) * 100}%` }}
+				/>
+			))}
 			<span
 				className={`pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_1px_4px_rgb(0_0_0/0.5)] transition-transform duration-150 ${dragging ? 'scale-110' : 'scale-0 group-hover/timeline:scale-100 group-focus-visible/timeline:scale-100'}`}
 				style={{ left: `${progress}%` }}
 			/>
 			{hover ? (
 				<div
-					className="tooltip-in pointer-events-none absolute bottom-full mb-3 flex max-w-72 -translate-x-1/2 items-center gap-2.5 rounded-sm bg-black/85 px-2.5 py-2 text-white shadow-lg backdrop-blur-sm"
-					style={{ left: Math.max(80, Math.min(hover.width - 80, hover.x)) }}
+					className="tooltip-in pointer-events-none absolute bottom-full mb-3 flex w-max max-w-72 -translate-x-1/2 flex-col overflow-hidden rounded-sm bg-black/85 text-white shadow-lg backdrop-blur-sm"
+					style={{ left: Math.max(84, Math.min(hover.width - 84, hover.x)) }}
 				>
-					{hovered?.chapter?.game && segments.length > 1 ? (
-						<img
-							src={boxArt(hovered.chapter.game)}
-							alt=""
-							referrerPolicy="no-referrer"
-							className="h-12 w-9 flex-none rounded-[3px] object-cover"
-						/>
-					) : null}
-					<span className="flex min-w-0 flex-col">
-						{segments.length > 1 && hovered?.chapter ? (
-							<span className="text-small truncate font-semibold">
-								{hovered.chapter.game ?? hovered.chapter.title}
-							</span>
+					<canvas
+						ref={picture}
+						aria-hidden
+						className={`aspect-video w-40 bg-black object-cover ${preview && pictured ? 'block' : 'hidden'}`}
+					/>
+					<div className="flex items-center gap-2.5 px-2.5 py-2">
+						{hovered?.chapter?.game && segments.length > 1 && !(preview && pictured) ? (
+							<img
+								src={boxArt(hovered.chapter.game)}
+								alt=""
+								referrerPolicy="no-referrer"
+								className="h-12 w-9 flex-none rounded-[3px] object-cover"
+							/>
 						) : null}
-						<span className="text-small tabular text-white/80">{formatClock(hover.at)}</span>
-					</span>
+						<span className="flex min-w-0 flex-col">
+							{segments.length > 1 && hovered?.chapter ? (
+								<span className="text-small max-w-36 truncate font-semibold">
+									{hovered.chapter.game ?? hovered.chapter.title}
+								</span>
+							) : null}
+							{nearCut ? (
+								<span className="text-small font-semibold">
+									{t.player.cut(formatDuration(nearCut[1]))}
+								</span>
+							) : null}
+							<span className="text-small tabular text-white/80">{formatClock(hover.at)}</span>
+						</span>
+					</div>
 				</div>
 			) : null}
 		</div>

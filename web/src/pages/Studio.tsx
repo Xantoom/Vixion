@@ -23,7 +23,7 @@ import {
 	Volume2,
 	VolumeX,
 } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '@/i18n';
 import { ApiError, type StreamDetail, api } from '@/lib/api';
 import { formatClock, formatDate, formatDuration, formatQuality } from '@/lib/format';
@@ -31,6 +31,7 @@ import { resumeAt, saveProgress } from '@/lib/progress';
 import { useCan, useRouteParams } from '@/lib/session';
 import { ChatPanel } from '@/player/ChatPanel';
 import { type Engine, type EngineError, type PlaybackState, createEngine } from '@/player/engine';
+import { createPreview } from '@/player/preview';
 import { Timeline, boxArt } from '@/player/Timeline';
 import { usePrefs } from '@/stores/prefs';
 import { Avatar } from '@/ui/Avatar';
@@ -242,7 +243,16 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 		engine.current?.setCompressor(prefs.compressor);
 	}, [prefs.compressor]);
 
-	// A broadcast cut in parts (the server restarted, the picture changed) plays on into the next one.
+	// Pictures for the timeline, from the same file, opened the first time the bar is hovered.
+	const preview = useMemo(() => createPreview(stream.video_url), [stream.video_url]);
+	useEffect(
+		() => () => {
+			preview.close();
+		},
+		[preview],
+	);
+
+	// A broadcast cut in parts (the picture changed) plays on into the next one.
 	const navigate = useNavigate();
 	useEffect(() => {
 		if (!state.ended) return;
@@ -499,6 +509,8 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						duration={duration}
 						time={shown}
 						chapters={stream.chapters}
+						cuts={stream.cuts}
+						preview={preview}
 						onSeek={seekTo}
 						onScrub={setScrub}
 					/>

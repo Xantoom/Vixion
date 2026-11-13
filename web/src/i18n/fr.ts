@@ -190,6 +190,7 @@ export const fr: Messages = {
 		openOnTwitch: (name) => `${name} sur Twitch`,
 		seekHere: 'Aller à ce moment',
 		goLive: 'Derniers messages',
+		cut: (missing) => `Coupure : ${missing} manquant`,
 	},
 	stats: {
 		title: 'Statistiques',

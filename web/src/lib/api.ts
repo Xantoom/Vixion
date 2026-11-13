@@ -196,6 +196,8 @@ export interface StreamDetail extends StreamSummary {
 	download_url: string | null;
 	/** [stream id, part] of every part of the broadcast. */
 	parts: [number, number][];
+	/** Where the broadcast is missing from the video: (video ms, ms missing). */
+	cuts: [number, number][];
 }
 
 /** A chat line, with its time in the video (o, milliseconds). Keys are short: there are millions. */
