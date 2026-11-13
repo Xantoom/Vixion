@@ -34,9 +34,10 @@ pub struct Settings {
     pub disk_reserve_gb: u32,
     pub webhook_url: String,
     pub webhook_kind: WebhookKind,
-    /// Whether a Twitch token is stored; the token itself never leaves the server.
+    /// Where the Twitch token comes from: `config` (environment or argument), `stored` (saved from
+    /// the interface by an earlier version), or none. The token itself is only sent on request.
     #[serde(skip_deserializing)]
-    pub has_twitch_token: bool,
+    pub twitch_token_source: Option<TokenSource>,
 }
 
 impl Default for Settings {
@@ -50,7 +51,7 @@ impl Default for Settings {
             disk_reserve_gb: 5,
             webhook_url: String::new(),
             webhook_kind: WebhookKind::Discord,
-            has_twitch_token: false,
+            twitch_token_source: None,
         }
     }
 }
@@ -70,20 +71,29 @@ impl Settings {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TokenSource {
+    Config,
+    Stored,
+}
+
 /// The current settings, shared and cached in memory.
 #[derive(Clone)]
 pub struct SettingsStore {
     db: Db,
     keys: Keys,
     current: Arc<RwLock<Settings>>,
+    /// The token from the configuration; it takes the place of one stored by an earlier version.
+    config_token: Option<String>,
 }
 
 const KEY: &str = "app";
 const TOKEN_KEY: &str = "twitch_token";
 
 impl SettingsStore {
-    pub async fn load(db: Db, keys: Keys) -> AppResult<Self> {
-        let (stored, has_token) = db
+    pub async fn load(db: Db, keys: Keys, config_token: Option<String>) -> AppResult<Self> {
+        let (stored, has_stored_token) = db
             .read(|conn| {
                 let stored: Option<String> =
                     conn.query_row("SELECT value FROM settings WHERE key = ?1", [KEY], |row| row.get(0)).ok();
@@ -93,8 +103,23 @@ impl SettingsStore {
             })
             .await?;
         let mut settings: Settings = stored.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default();
-        settings.has_twitch_token = has_token;
-        Ok(Self { db, keys, current: Arc::new(RwLock::new(settings)) })
+        settings.twitch_token_source = if config_token.is_some() {
+            // The configuration has its own: the one saved from the interface is no longer needed.
+            if has_stored_token {
+                db.write(|conn| {
+                    conn.execute("DELETE FROM settings WHERE key = ?1", [TOKEN_KEY])?;
+                    Ok(())
+                })
+                .await?;
+                tracing::info!("Twitch token now read from the configuration; the stored one was removed");
+            }
+            Some(TokenSource::Config)
+        } else if has_stored_token {
+            Some(TokenSource::Stored)
+        } else {
+            None
+        };
+        Ok(Self { db, keys, current: Arc::new(RwLock::new(settings)), config_token })
     }
 
     pub async fn get(&self) -> Settings {
@@ -103,7 +128,7 @@ impl SettingsStore {
 
     pub async fn update(&self, mut settings: Settings) -> AppResult<Settings> {
         settings.validate()?;
-        settings.has_twitch_token = self.current.read().await.has_twitch_token;
+        settings.twitch_token_source = self.current.read().await.twitch_token_source;
         let json = serde_json::to_string(&settings)?;
         self.db
             .write(move |conn| {
@@ -118,8 +143,12 @@ impl SettingsStore {
         Ok(settings)
     }
 
-    /// The Twitch `auth-token` cookie of an account (Turbo removes ads), decrypted.
+    /// The Twitch `auth-token` cookie of an account (Turbo removes ads): the configured one, or
+    /// the one an earlier version stored (encrypted) from the interface.
     pub async fn twitch_token(&self) -> Option<String> {
+        if let Some(token) = &self.config_token {
+            return Some(token.clone());
+        }
         let keys = self.keys.clone();
         self.db
             .read(move |conn| {
@@ -130,34 +159,5 @@ impl SettingsStore {
             .await
             .ok()
             .flatten()
-    }
-
-    /// Stores (encrypted) or removes the Twitch token.
-    pub async fn set_twitch_token(&self, token: Option<String>) -> AppResult<()> {
-        let sealed = token
-            .map(|token| token.trim().trim_start_matches("OAuth ").trim().to_owned())
-            .filter(|token| !token.is_empty())
-            .map(|token| {
-                if token.len() > 64 || !token.chars().all(|c| c.is_ascii_alphanumeric()) {
-                    return Err(AppError::bad_request("invalid_token", "a Twitch token is 30 letters and digits"));
-                }
-                Ok(self.keys.seal(&token))
-            })
-            .transpose()?;
-        let has_token = sealed.is_some();
-        self.db
-            .write(move |conn| {
-                match sealed {
-                    Some(sealed) => conn.execute(
-                        "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-                        [TOKEN_KEY, sealed.as_str()],
-                    )?,
-                    None => conn.execute("DELETE FROM settings WHERE key = ?1", [TOKEN_KEY])?,
-                };
-                Ok(())
-            })
-            .await?;
-        self.current.write().await.has_twitch_token = has_token;
-        Ok(())
     }
 }

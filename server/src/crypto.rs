@@ -79,18 +79,7 @@ impl Keys {
         mac.verify_slice(&signature).is_ok()
     }
 
-    /// Encrypts a secret for storage: nonce and ciphertext, base64.
-    pub fn seal(&self, plaintext: &str) -> String {
-        let cipher = ChaCha20Poly1305::new(&Key::from(self.storage));
-        let nonce_bytes = random_bytes::<12>();
-        let sealed = cipher
-            .encrypt(&Nonce::from(nonce_bytes), plaintext.as_bytes())
-            .expect("encryption of a short string does not fail");
-        let mut out = nonce_bytes.to_vec();
-        out.extend_from_slice(&sealed);
-        URL_SAFE_NO_PAD.encode(out)
-    }
-
+    /// Decrypts a secret stored by an earlier version (nonce and ciphertext, base64).
     pub fn open(&self, sealed: &str) -> Option<String> {
         let bytes = URL_SAFE_NO_PAD.decode(sealed).ok()?;
         let (nonce, ciphertext) = bytes.split_at_checked(12)?;

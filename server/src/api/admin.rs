@@ -5,8 +5,9 @@ use std::convert::Infallible;
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::response::{IntoResponse, Response};
 use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -104,22 +105,18 @@ pub async fn put_settings(
     Ok(Json(saved))
 }
 
-#[derive(Deserialize)]
-pub struct TokenBody {
+#[derive(Serialize)]
+pub struct TokenReveal {
     token: Option<String>,
 }
 
-pub async fn put_twitch_token(
-    State(app): State<AppState>,
-    user: CurrentUser,
-    Json(body): Json<TokenBody>,
-) -> AppResult<StatusCode> {
+/// The Twitch token in clear, for an administrator who asks to see it. It is set in the
+/// configuration, never from here.
+pub async fn reveal_twitch_token(State(app): State<AppState>, user: CurrentUser) -> AppResult<Response> {
     user.require("settings.manage")?;
-    let set = body.token.as_deref().is_some_and(|token| !token.trim().is_empty());
-    app.settings.set_twitch_token(body.token).await?;
-    app.alerts.resolve("twitch_token").await;
-    tracing::info!(by = %user.username, set, "Twitch token changed");
-    Ok(StatusCode::NO_CONTENT)
+    tracing::info!(by = %user.username, "Twitch token revealed");
+    let token = app.settings.twitch_token().await;
+    Ok(([(header::CACHE_CONTROL, "no-store")], Json(TokenReveal { token })).into_response())
 }
 
 #[derive(Serialize)]

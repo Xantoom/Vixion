@@ -244,7 +244,8 @@ export interface Settings {
 	disk_reserve_gb: number;
 	webhook_url: string;
 	webhook_kind: 'discord' | 'ntfy' | 'generic';
-	has_twitch_token: boolean;
+	/** Where the Twitch token comes from; it is set in the configuration, never from the interface. */
+	twitch_token_source: 'config' | 'stored' | null;
 }
 
 export interface SettingsResponse {

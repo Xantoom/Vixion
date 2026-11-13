@@ -13,7 +13,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 - Records every broadcast of the channels you add, at source quality, H.264, HEVC or AV1 as
   Twitch sends it, with an H.264-only option. 1440p HEVC needs a Twitch account token.
-- Skips ads, either with a Turbo or subscriber token or by switching players.
+- Skips ads, either with a Turbo or subscriber token or by switching players. The token is set with
+  `VIXION_TWITCH_TOKEN`, `VIXION_TWITCH_TOKEN_FILE` or `--twitch-token`; the settings show it masked.
 - Records chat and replays it in sync, with badges, Twitch, 7TV, BetterTTV and FrankerFaceZ
   emotes, timestamps that jump to the moment, and names linking to Twitch.
 - Downloads of the video, the chat as JSON and as ASS subtitles, or both.

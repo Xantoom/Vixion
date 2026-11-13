@@ -143,7 +143,7 @@ async fn wait_for_source(app: &AppState, login: &str, stop: &mut watch::Receiver
                     .raise(
                         Level::Warning,
                         "twitch_token",
-                        "The Twitch token was refused: recording without it, ads included. Update it in the settings.",
+                        "The Twitch token was refused: recording without it, ads included. Update VIXION_TWITCH_TOKEN.",
                     )
                     .await;
                 token = None;

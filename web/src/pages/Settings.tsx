@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
+import { Copy, Eye, EyeOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useT } from '@/i18n';
 import { type Settings, type SettingsResponse, api } from '@/lib/api';
 import { useCan } from '@/lib/session';
-import { Button } from '@/ui/Button';
+import { Button, IconButton } from '@/ui/Button';
 import { Card, Facts, SettingRow, Toggle } from '@/ui/Card';
 import { NumberInput, Select, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
@@ -21,7 +21,6 @@ export function SettingsPage() {
 		enabled: can,
 	});
 	const [draft, setDraft] = useState<Settings | null>(null);
-	const [token, setToken] = useState('');
 	const [busy, setBusy] = useState(false);
 
 	useEffect(() => {
@@ -46,17 +45,6 @@ export function SettingsPage() {
 			toast.error(caught);
 		} finally {
 			setBusy(false);
-		}
-	};
-
-	const saveToken = async (value: string | null) => {
-		try {
-			await api.put('/settings/twitch-token', { token: value });
-			setToken('');
-			await client.invalidateQueries({ queryKey: ['settings'] });
-			toast.ok(t.common.saved);
-		} catch (caught) {
-			toast.error(caught);
 		}
 	};
 
@@ -135,43 +123,17 @@ export function SettingsPage() {
 			</Card>
 
 			<Card title={t.settings.twitch} flush>
-				<SettingRow label={t.settings.token} tip={t.settings.tokenHint}>
-					<span
-						className={`text-small inline-flex h-8 items-center gap-1.5 rounded-xs px-2.5 font-semibold ${draft.has_twitch_token ? 'bg-ok/15 text-ok' : 'bg-surface-2 text-muted'}`}
-					>
-						{draft.has_twitch_token ? <Check size={14} /> : null}
-						{draft.has_twitch_token ? t.settings.tokenSet : t.settings.tokenNone}
-					</span>
-					{draft.has_twitch_token ? (
-						<Button size="sm" variant="ghost" onClick={() => void saveToken(null)}>
-							{t.settings.tokenClear}
-						</Button>
-					) : null}
-				</SettingRow>
-				<SettingRow label={draft.has_twitch_token ? t.settings.tokenReplace : t.settings.tokenNew}>
-					<form
-						className="flex w-[26rem] max-w-full gap-2"
-						onSubmit={(event) => {
-							event.preventDefault();
-							void saveToken(token.trim());
-						}}
-					>
-						<TextInput
-							type="password"
-							autoComplete="off"
-							spellCheck={false}
-							aria-label={t.settings.token}
-							placeholder={t.settings.tokenPlaceholder}
-							value={token}
-							onChange={(event) => {
-								setToken(event.target.value);
-							}}
-							className="min-w-0 flex-1 font-mono"
-						/>
-						<Button type="submit" disabled={token.trim().length < 20}>
-							{t.settings.tokenSave}
-						</Button>
-					</form>
+				<SettingRow
+					label={t.settings.token}
+					tip={draft.twitch_token_source === 'stored' ? t.settings.tokenStoredHint : t.settings.tokenHint}
+				>
+					{draft.twitch_token_source ? (
+						<TokenField stored={draft.twitch_token_source === 'stored'} />
+					) : (
+						<span className="text-small bg-surface-2 text-muted inline-flex h-8 items-center rounded-xs px-2.5 font-semibold">
+							{t.settings.tokenNone}
+						</span>
+					)}
 				</SettingRow>
 			</Card>
 
@@ -247,6 +209,74 @@ export function SettingsPage() {
 					</div>
 				</div>
 			) : null}
+		</div>
+	);
+}
+
+/** The Twitch token, hidden until asked for. It can be copied but not changed here. */
+function TokenField({ stored }: { stored: boolean }) {
+	const t = useT();
+	const [token, setToken] = useState<string | null>(null);
+	const [busy, setBusy] = useState(false);
+
+	const fetchToken = async () => {
+		if (token !== null) return token;
+		setBusy(true);
+		try {
+			const answer = await api.get<{ token: string | null }>('/settings/twitch-token');
+			return answer.token;
+		} catch (caught) {
+			toast.error(caught);
+			return null;
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="flex items-center gap-1">
+			{stored ? (
+				<span className="text-caption bg-warn/15 text-warn mr-1 rounded-xs px-1.5 py-0.5 font-semibold">
+					{t.settings.tokenStored}
+				</span>
+			) : null}
+			<input
+				readOnly
+				aria-label={t.settings.token}
+				value={token ?? '••••••••••••••••••••••••••••••'}
+				onFocus={(event) => {
+					event.currentTarget.select();
+				}}
+				className="text-ui text-ink bg-surface h-10 w-[22rem] max-w-full min-w-0 rounded-sm px-3 font-mono outline-none"
+			/>
+			<IconButton
+				size="sm"
+				label={token === null ? t.settings.tokenReveal : t.settings.tokenHide}
+				disabled={busy}
+				onClick={() => {
+					if (token !== null) {
+						setToken(null);
+						return;
+					}
+					void fetchToken().then(setToken);
+				}}
+			>
+				{token === null ? <Eye size={16} /> : <EyeOff size={16} />}
+			</IconButton>
+			<IconButton
+				size="sm"
+				label={t.settings.tokenCopy}
+				disabled={busy}
+				onClick={() => {
+					void fetchToken().then(async (value) => {
+						if (!value) return;
+						await navigator.clipboard.writeText(value);
+						toast.ok(t.settings.tokenCopied);
+					});
+				}}
+			>
+				<Copy size={16} />
+			</IconButton>
 		</div>
 	);
 }

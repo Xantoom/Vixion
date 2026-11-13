@@ -31,7 +31,7 @@ use crate::config::{Config, MediaMode};
 use crate::recorder::{Recorder, retention};
 
 const USAGE: &str = "Usage:
-  vixion                              run the server
+  vixion [--twitch-token <token>]     run the server
   vixion healthcheck                  exit 0 when the local server answers (for Docker)
   vixion reset-password <user> <new>  set an account's password and sign it out everywhere
   vixion version
@@ -39,14 +39,33 @@ const USAGE: &str = "Usage:
 Configuration is read from VIXION_* environment variables; see the README.";
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let config = match Config::from_env() {
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let mut config = match Config::from_env() {
         Ok(config) => config,
         Err(error) => {
             eprintln!("configuration error: {error}");
             return ExitCode::from(2);
         }
     };
+    // `--twitch-token <token>` (or `=token`) wins over the environment.
+    if let Some(at) = args.iter().position(|arg| arg == "--twitch-token" || arg.starts_with("--twitch-token=")) {
+        let arg = args.remove(at);
+        let value = match arg.strip_prefix("--twitch-token=") {
+            Some(value) => Some(value.to_owned()),
+            None => (at < args.len()).then(|| args.remove(at)),
+        };
+        match value.as_deref().map(config::parse_twitch_token) {
+            Some(Ok(token)) => config.twitch_token = Some(token),
+            Some(Err(error)) => {
+                eprintln!("configuration error: --twitch-token: {error}");
+                return ExitCode::from(2);
+            }
+            None => {
+                eprintln!("configuration error: --twitch-token needs a value");
+                return ExitCode::from(2);
+            }
+        }
+    }
     match args.first().map(String::as_str) {
         None | Some("serve") => {}
         Some("healthcheck") => return healthcheck(&config),
@@ -149,7 +168,7 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
     let db = db::Db::open(&config.db_path())?;
     let keys = crypto::Keys::load_or_create(&config.data_dir.join("secret.key"))?;
     auth::seed_roles(&db).await?;
-    let settings = settings::SettingsStore::load(db.clone(), keys.clone()).await?;
+    let settings = settings::SettingsStore::load(db.clone(), keys.clone(), config.twitch_token.clone()).await?;
     api_retention(&settings).await;
     let http = reqwest::Client::builder()
         .user_agent(twitch::api::USER_AGENT)

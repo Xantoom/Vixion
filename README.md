@@ -89,8 +89,8 @@ watch without signing in to the interface first.
 
 ## Configuration
 
-Everything that changes while the app runs (retention, codecs, Twitch token, webhooks) is in the **Settings** page.
-The environment only wires the process:
+Everything that changes while the app runs (retention, codecs, webhooks) is in the **Settings** page. The environment
+wires the process and holds the Twitch token:
 
 | Variable                      | Default        | What it does                                                          |
 | ----------------------------- | -------------- | --------------------------------------------------------------------- |
@@ -109,11 +109,17 @@ The environment only wires the process:
 | `VIXION_DDNS`                 | `false`        | Keep the video domain's A record on the public address                |
 | `VIXION_LOG`                  | `info`         | Log level: `error`, `warn`, `info`, `debug`                           |
 | `VIXION_LOG_FORMAT`           | text           | `json` for log collectors                                             |
+| `VIXION_TWITCH_TOKEN`         |                | A Twitch account's `auth-token` cookie (see below)                    |
+| `VIXION_TWITCH_TOKEN_FILE`    |                | The same, read from a file (Docker secrets)                           |
 
 ### Twitch token (no ads)
 
-With a Turbo or subscribed account, paste the value of the `auth-token` cookie of twitch.tv (browser developer tools →
-Application → Cookies) in *Settings → Twitch*. It is stored encrypted and only sent to Twitch.
+With a Turbo or subscribed account, take the value of the `auth-token` cookie of twitch.tv (browser developer tools →
+Application → Cookies) and give it to Vixion at startup, with `VIXION_TWITCH_TOKEN`, `VIXION_TWITCH_TOKEN_FILE` or
+`vixion --twitch-token <token>` (an argument shows in the process list: prefer the environment). It is only sent to
+Twitch. *Settings → Twitch* shows it masked, with buttons to reveal and copy it; it can't be changed there.
+
+A token saved from the interface by an earlier version keeps working until one is configured, which replaces it.
 
 ## Player shortcuts
 

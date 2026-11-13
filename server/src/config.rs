@@ -51,6 +51,18 @@ pub struct Config {
     pub ddns: bool,
     pub log_json: bool,
     pub log_filter: String,
+    /// The `auth-token` cookie of a Twitch account, from `VIXION_TWITCH_TOKEN`,
+    /// `VIXION_TWITCH_TOKEN_FILE` or `--twitch-token`. With Turbo or a subscription, no ads.
+    pub twitch_token: Option<String>,
+}
+
+/// A Twitch `auth-token` as pasted: an optional `OAuth ` prefix, then letters and digits.
+pub fn parse_twitch_token(raw: &str) -> Result<String, ConfigError> {
+    let token = raw.trim().trim_start_matches("OAuth ").trim();
+    if token.is_empty() || token.len() > 64 || !token.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err(ConfigError("the Twitch token must be the auth-token cookie: about 30 letters and digits".into()));
+    }
+    Ok(token.to_owned())
 }
 
 #[derive(Debug)]
@@ -133,7 +145,23 @@ impl Config {
             }
         };
 
+        let twitch_token = match (var("VIXION_TWITCH_TOKEN"), var("VIXION_TWITCH_TOKEN_FILE")) {
+            (Some(token), _) => {
+                Some(parse_twitch_token(&token).map_err(|error| ConfigError(format!("VIXION_TWITCH_TOKEN: {error}")))?)
+            }
+            (None, Some(path)) => {
+                let text = std::fs::read_to_string(&path)
+                    .map_err(|error| ConfigError(format!("VIXION_TWITCH_TOKEN_FILE: {path}: {error}")))?;
+                Some(
+                    parse_twitch_token(&text)
+                        .map_err(|error| ConfigError(format!("VIXION_TWITCH_TOKEN_FILE: {error}")))?,
+                )
+            }
+            (None, None) => None,
+        };
+
         Ok(Self {
+            twitch_token,
             data_dir,
             http_addr,
             media_mode,

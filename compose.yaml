@@ -22,6 +22,8 @@ services:
       #   https - on their own port, with a Let's Encrypt certificate (keeps video off a Cloudflare Tunnel)
       #   http  - on their own port, behind your own TLS proxy (set VIXION_MEDIA_PUBLIC_URL)
       VIXION_MEDIA_MODE: same
+      # A Twitch account's auth-token cookie: no ads with Turbo or a subscription, and 1440p HEVC.
+      # VIXION_TWITCH_TOKEN: your-auth-token
       # For https mode:
       # VIXION_MEDIA_DOMAIN: media.example.com
       # VIXION_CLOUDFLARE_API_TOKEN: your-token   # Zone:Zone:Read + Zone:DNS:Edit, for the certificate (and DDNS)
