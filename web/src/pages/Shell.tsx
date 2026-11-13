@@ -1,23 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useRouterState } from '@tanstack/react-router';
-import {
-	BarChart3,
-	Check,
-	KeyRound,
-	LogOut,
-	Monitor,
-	Moon,
-	ScrollText,
-	Settings,
-	Search,
-	Sun,
-	Tv,
-	Users,
-	X,
-} from 'lucide-react';
-import { type FormEvent, type ReactNode, Suspense, useState } from 'react';
+import { Check, KeyRound, Languages, LogOut, Monitor, Moon, Search, ShieldCheck, Sun, X } from 'lucide-react';
+import { type FormEvent, Suspense, useEffect, useRef, useState } from 'react';
 import { LOCALES, type Locale, useLocale, useT } from '@/i18n';
-import { type Alert, type Permission, api } from '@/lib/api';
+import { type Alert, api } from '@/lib/api';
 import { meQuery, useCan, useMe } from '@/lib/session';
 import { type Theme, usePrefs } from '@/stores/prefs';
 import { Avatar } from '@/ui/Avatar';
@@ -26,32 +12,13 @@ import { Dialog } from '@/ui/Dialog';
 import { Field, TextInput } from '@/ui/Field';
 import { Flag } from '@/ui/Flag';
 import { Logo } from '@/ui/Logo';
-import { Menu, MenuDivider, MenuItem, MenuLabel } from '@/ui/Menu';
+import { Menu, MenuDivider, MenuItem } from '@/ui/Menu';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
+import { firstAdminPage } from './Admin';
 import { ChannelSearch } from './ChannelSearch';
 
-interface NavEntry {
-	to: '/' | '/stats' | '/logs' | '/settings' | '/users';
-	label: string;
-	icon: ReactNode;
-	permission?: Permission;
-}
-
-function useNav(): NavEntry[] {
-	const t = useT();
-	const me = useMe();
-	const entries: NavEntry[] = [
-		{ to: '/', label: t.nav.streamers, icon: <Tv size={19} /> },
-		{ to: '/stats', label: t.nav.stats, icon: <BarChart3 size={19} />, permission: 'stats.view' },
-		{ to: '/logs', label: t.nav.logs, icon: <ScrollText size={19} />, permission: 'logs.view' },
-		{ to: '/users', label: t.nav.users, icon: <Users size={19} />, permission: 'users.manage' },
-		{ to: '/settings', label: t.nav.settings, icon: <Settings size={19} />, permission: 'settings.manage' },
-	];
-	return entries.filter((entry) => !entry.permission || me.admin || me.permissions.includes(entry.permission));
-}
-
-/** Open alerts, polled for the dot on the logs entry. */
+/** Open alerts, polled for the dot on the administration button. */
 function useOpenAlerts(): number {
 	const can = useCan('logs.view');
 	const { data } = useQuery({
@@ -63,23 +30,54 @@ function useOpenAlerts(): number {
 	return data?.filter((alert) => !alert.resolved && alert.level !== 'info').length ?? 0;
 }
 
-function isActive(path: string, to: string): boolean {
-	if (to === '/') return !['/stats', '/logs', '/users', '/settings'].some((page) => path.startsWith(page));
-	return path.startsWith(to);
-}
-
 export function Shell() {
-	const nav = useNav();
 	const t = useT();
+	const me = useMe();
 	const path = useRouterState({ select: (state) => state.location.pathname });
 	const alerts = useOpenAlerts();
 	const [searching, setSearching] = useState(false);
-	// The player takes the whole screen on a phone: no tab bar under it.
+	const [revealed, setRevealed] = useState(false);
+	const admin = firstAdminPage(me);
+	// On a recording the picture takes the whole window: the bar slides over it from the top edge.
 	const studio = /^\/[^/]+\/\d+$/.test(path);
+	const hidden = studio && !revealed;
+	const header = useRef<HTMLElement>(null);
+
+	// Shown over a recording: it goes away once the pointer moves below it.
+	useEffect(() => {
+		if (!studio || !revealed) return;
+		const onMove = (event: PointerEvent) => {
+			const bar = header.current;
+			if (!bar || bar.contains(document.activeElement)) return;
+			if (event.clientY > bar.getBoundingClientRect().bottom + 24) setRevealed(false);
+		};
+		document.addEventListener('pointermove', onMove);
+		return () => {
+			document.removeEventListener('pointermove', onMove);
+		};
+	}, [studio, revealed]);
 
 	return (
 		<div className="flex min-h-dvh flex-col">
-			<header className="bg-bg/85 border-line sticky top-0 z-40 border-b backdrop-blur-md">
+			{hidden ? (
+				<div
+					aria-hidden
+					className="fixed inset-x-0 top-0 z-50 h-3"
+					onPointerEnter={() => {
+						setRevealed(true);
+					}}
+				/>
+			) : null}
+			<header
+				ref={header}
+				onFocus={() => {
+					if (studio) setRevealed(true);
+				}}
+				onBlur={(event) => {
+					if (studio && !event.currentTarget.contains(event.relatedTarget)) setRevealed(false);
+				}}
+				className={`bg-bg/90 border-line z-40 border-b backdrop-blur-md transition-transform duration-200 ease-(--ease-out-soft) ${studio ? 'fixed inset-x-0 top-0' : 'sticky top-0'} ${hidden ? '-translate-y-full' : ''}`}
+			>
 				<div className="mx-auto flex h-16 max-w-[120rem] items-center gap-2 px-3 sm:gap-3 sm:px-5">
 					{searching ? (
 						<>
@@ -103,27 +101,6 @@ export function Shell() {
 								<Logo size={30} />
 								<span className="text-lead hidden font-semibold tracking-tight lg:inline">Vixion</span>
 							</Link>
-							<nav className="ml-2 hidden items-center gap-0.5 md:flex" aria-label={t.nav.menu}>
-								{nav.map((entry) => (
-									<Link
-										key={entry.to}
-										to={entry.to}
-										title={entry.label}
-										aria-label={entry.label}
-										aria-current={isActive(path, entry.to) ? 'page' : undefined}
-										className="text-ui text-muted hover:text-ink hover:bg-surface aria-[current=page]:text-ink aria-[current=page]:bg-surface relative flex h-10 items-center gap-2 rounded-sm px-2.5 font-medium transition-colors duration-150 xl:px-3"
-									>
-										{entry.icon}
-										<span className="hidden xl:inline">{entry.label}</span>
-										{entry.to === '/logs' && alerts > 0 ? (
-											<span
-												className="bg-danger absolute top-2 right-1.5 size-2 rounded-full"
-												aria-hidden
-											/>
-										) : null}
-									</Link>
-								))}
-							</nav>
 							<div className="mx-auto hidden w-full max-w-xl px-2 sm:block">
 								<ChannelSearch />
 							</div>
@@ -137,128 +114,93 @@ export function Shell() {
 							>
 								<Search size={20} />
 							</IconButton>
-							<div className="hidden items-center gap-2 md:flex">
-								<ThemeSwitch />
-								<LocaleSwitch />
+							<div className="flex items-center gap-1">
+								<ThemeButton />
+								<LocaleMenu />
+								{admin ? (
+									<Link
+										to={admin}
+										aria-label={t.nav.admin}
+										data-tip={t.nav.admin}
+										aria-current={path.startsWith('/admin') ? 'page' : undefined}
+										className="text-muted hover:text-ink hover:bg-surface aria-[current=page]:text-ink aria-[current=page]:bg-surface relative grid size-10 place-items-center rounded-sm transition-colors"
+									>
+										<ShieldCheck size={20} />
+										{alerts > 0 ? (
+											<span
+												className="bg-danger absolute top-2 right-2 size-2 rounded-full"
+												aria-hidden
+											/>
+										) : null}
+									</Link>
+								) : null}
 							</div>
 							<AccountMenu />
 						</>
 					)}
 				</div>
 			</header>
-			<main className={`flex-1 ${studio ? '' : 'pb-20 md:pb-0'}`}>
+			<main className="flex-1">
 				<Suspense fallback={<PageLoading />}>
 					<Outlet />
 				</Suspense>
 			</main>
-			{studio || nav.length < 2 ? null : (
-				<nav
-					aria-label={t.nav.menu}
-					className="bg-bg/90 border-line fixed inset-x-0 bottom-0 z-40 flex border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
-				>
-					{nav.map((entry) => (
-						<Link
-							key={entry.to}
-							to={entry.to}
-							aria-current={isActive(path, entry.to) ? 'page' : undefined}
-							className="text-muted aria-[current=page]:text-accent-text relative flex h-16 flex-1 flex-col items-center justify-center gap-1 text-[0.75rem] font-medium"
-						>
-							{entry.icon}
-							<span className="max-w-full truncate px-1">{entry.label}</span>
-							{entry.to === '/logs' && alerts > 0 ? (
-								<span className="bg-danger absolute top-3 left-[calc(50%+8px)] size-1.5 rounded-full" />
-							) : null}
-						</Link>
-					))}
-				</nav>
-			)}
 		</div>
 	);
 }
 
-/** A row of icons where one is chosen: the theme, the language. */
-function Choice<T extends string>({
-	label,
-	value,
-	options,
-	onChange,
-}: {
-	label: string;
-	value: T;
-	options: { value: T; label: string; icon: ReactNode }[];
-	onChange: (value: T) => void;
-}) {
-	return (
-		<div role="radiogroup" aria-label={label} className="bg-surface flex items-center rounded-full p-1">
-			{options.map((option) => (
-				<button
-					key={option.value}
-					type="button"
-					role="radio"
-					aria-checked={value === option.value}
-					aria-label={option.label}
-					title={option.label}
-					onClick={() => {
-						onChange(option.value);
-					}}
-					className="text-muted hover:text-ink aria-checked:bg-bg aria-checked:text-ink grid size-8 place-items-center rounded-full transition-[color,background-color,box-shadow] duration-150 aria-checked:shadow-(--shadow-card)"
-				>
-					{option.icon}
-				</button>
-			))}
-		</div>
-	);
-}
+const THEMES: Theme[] = ['system', 'light', 'dark'];
 
-function useThemeOptions() {
+/** One button that steps through system, light and dark. */
+function ThemeButton() {
 	const t = useT();
-	return [
-		{ value: 'system' as Theme, label: t.nav.themeSystem, icon: <Monitor size={16} /> },
-		{ value: 'light' as Theme, label: t.nav.themeLight, icon: <Sun size={16} /> },
-		{ value: 'dark' as Theme, label: t.nav.themeDark, icon: <Moon size={16} /> },
-	];
+	const theme = usePrefs((state) => state.theme);
+	const setPrefs = usePrefs((state) => state.set);
+	const Icon = theme === 'light' ? Sun : theme === 'dark' ? Moon : Monitor;
+	const label = t.nav.themeTip[theme];
+	return (
+		<IconButton
+			label={label}
+			onClick={() => {
+				setPrefs({ theme: THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length] ?? 'system' });
+			}}
+		>
+			<Icon size={20} />
+		</IconButton>
+	);
 }
 
-function usePickLocale() {
+function LocaleMenu() {
+	const t = useT();
+	const locale = useLocale();
 	const setPrefs = usePrefs((state) => state.set);
-	return (next: Locale) => {
+	const pick = (next: Locale) => {
 		setPrefs({ locale: next });
 		// Remembered on the account too, for other devices.
 		void api.patch('/me', { locale: next }).catch(() => undefined);
 	};
-}
-
-function ThemeSwitch() {
-	const t = useT();
-	const theme = usePrefs((state) => state.theme);
-	const setPrefs = usePrefs((state) => state.set);
 	return (
-		<Choice
-			label={t.nav.theme}
-			value={theme}
-			options={useThemeOptions()}
-			onChange={(value) => {
-				setPrefs({ theme: value });
-			}}
-		/>
-	);
-}
-
-function LocaleSwitch() {
-	const t = useT();
-	const locale = useLocale();
-	const pick = usePickLocale();
-	return (
-		<Choice
+		<Menu
 			label={t.nav.language}
-			value={locale}
-			options={(Object.keys(LOCALES) as Locale[]).map((value) => ({
-				value,
-				label: LOCALES[value],
-				icon: <Flag locale={value} />,
-			}))}
-			onChange={pick}
-		/>
+			trigger={(open) => (
+				<IconButton label={t.nav.language} aria-expanded={open}>
+					<Languages size={20} />
+				</IconButton>
+			)}
+		>
+			{(Object.keys(LOCALES) as Locale[]).map((value) => (
+				<MenuItem
+					key={value}
+					icon={<Flag locale={value} size={18} />}
+					checked={locale === value}
+					onSelect={() => {
+						pick(value);
+					}}
+				>
+					{LOCALES[value]}
+				</MenuItem>
+			))}
+		</Menu>
 	);
 }
 
@@ -266,11 +208,6 @@ function AccountMenu() {
 	const t = useT();
 	const me = useMe();
 	const client = useQueryClient();
-	const theme = usePrefs((state) => state.theme);
-	const locale = useLocale();
-	const setPrefs = usePrefs((state) => state.set);
-	const pickLocale = usePickLocale();
-	const themes = useThemeOptions();
 	const [password, setPassword] = useState(false);
 
 	const signOut = async () => {
@@ -288,9 +225,10 @@ function AccountMenu() {
 					<button
 						type="button"
 						aria-label={t.nav.account}
-						className={`hover:bg-surface flex h-11 flex-none items-center gap-2.5 rounded-full pr-1.5 pl-1.5 transition-colors lg:pr-4 ${open ? 'bg-surface' : ''}`}
+						data-tip={t.nav.account}
+						className={`hover:bg-surface flex h-10 flex-none items-center gap-2.5 rounded-sm px-1.5 transition-colors lg:pr-3 ${open ? 'bg-surface' : ''}`}
 					>
-						<Avatar src={null} name={me.username} size={32} />
+						<Avatar src={null} name={me.username} size={30} />
 						<span className="text-ui hidden max-w-36 truncate font-medium lg:inline">{me.username}</span>
 					</button>
 				)}
@@ -298,35 +236,6 @@ function AccountMenu() {
 				<div className="px-2.5 pt-2 pb-2">
 					<div className="text-ui font-semibold">{me.username}</div>
 					<div className="text-caption text-muted">{t.users.roleNames[me.role] ?? me.role}</div>
-				</div>
-				<div className="md:hidden">
-					<MenuDivider />
-					<MenuLabel>{t.nav.theme}</MenuLabel>
-					{themes.map((option) => (
-						<MenuItem
-							key={option.value}
-							icon={option.icon}
-							checked={theme === option.value}
-							onSelect={() => {
-								setPrefs({ theme: option.value });
-							}}
-						>
-							{option.label}
-						</MenuItem>
-					))}
-					<MenuLabel>{t.nav.language}</MenuLabel>
-					{(Object.keys(LOCALES) as Locale[]).map((value) => (
-						<MenuItem
-							key={value}
-							icon={<Flag locale={value} size={16} />}
-							checked={locale === value}
-							onSelect={() => {
-								pickLocale(value);
-							}}
-						>
-							{LOCALES[value]}
-						</MenuItem>
-					))}
 				</div>
 				<MenuDivider />
 				<MenuItem

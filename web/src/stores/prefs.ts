@@ -12,8 +12,6 @@ interface Prefs {
 	volume: number;
 	muted: boolean;
 	compressor: boolean;
-	/** Chat column width, in pixels, on wide screens. */
-	chatWidth: number;
 	set: (changes: Partial<Omit<Prefs, 'set'>>) => void;
 }
 
@@ -25,7 +23,6 @@ export const usePrefs = create<Prefs>()(
 			volume: 1,
 			muted: false,
 			compressor: false,
-			chatWidth: 340,
 			set: (changes) => {
 				set(changes);
 			},
@@ -38,7 +35,6 @@ export const usePrefs = create<Prefs>()(
 				volume: state.volume,
 				muted: state.muted,
 				compressor: state.compressor,
-				chatWidth: state.chatWidth,
 			}),
 		},
 	),

@@ -82,10 +82,11 @@
 	--text-display: 2.75rem;
 	--text-display--line-height: 1.05;
 
-	--radius-xs: 0.45rem;
-	--radius-sm: 0.65rem;
-	--radius-md: 0.9rem;
-	--radius-lg: 1.15rem;
+	/* Corners barely softened: edges should read as sharp. */
+	--radius-xs: 0.125rem;
+	--radius-sm: 0.1875rem;
+	--radius-md: 0.25rem;
+	--radius-lg: 0.3125rem;
 
 	--ease-out-soft: cubic-bezier(0.22, 0.9, 0.24, 1);
 	--ease-spring: cubic-bezier(0.3, 1.35, 0.45, 1);
@@ -378,14 +379,14 @@ dialog::backdrop {
 
 .seek-range::-webkit-slider-runnable-track {
 	height: var(--track-height);
-	border-radius: 1rem;
+	border-radius: 1px;
 	background: linear-gradient(to right, var(--accent) var(--progress), rgb(255 255 255 / 0.32) var(--progress));
 	transition: height 120ms var(--ease-out-soft);
 }
 
 .seek-range::-moz-range-track {
 	height: var(--track-height);
-	border-radius: 1rem;
+	border-radius: 1px;
 	background: linear-gradient(to right, var(--accent) var(--progress), rgb(255 255 255 / 0.32) var(--progress));
 }
 
@@ -424,13 +425,13 @@ dialog::backdrop {
 
 .volume-range::-webkit-slider-runnable-track {
 	height: 0.25rem;
-	border-radius: 1rem;
+	border-radius: 1px;
 	background: linear-gradient(to right, #fff var(--level), rgb(255 255 255 / 0.3) var(--level));
 }
 
 .volume-range::-moz-range-track {
 	height: 0.25rem;
-	border-radius: 1rem;
+	border-radius: 1px;
 	background: linear-gradient(to right, #fff var(--level), rgb(255 255 255 / 0.3) var(--level));
 }
 

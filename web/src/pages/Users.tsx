@@ -12,7 +12,6 @@ import { Field, Segmented, Select, Switch, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
-import { PageHeader } from './Streamers';
 
 interface RolesResponse {
 	roles: Role[];
@@ -54,8 +53,8 @@ export function UsersPage() {
 	const roleById = new Map(roles.data.roles.map((role) => [role.id, role]));
 
 	return (
-		<div className="panel-in mx-auto max-w-5xl px-4 pb-12 sm:px-6">
-			<PageHeader title={t.users.title}>
+		<div className="panel-in pb-12">
+			<div className="flex justify-end pb-5">
 				<Button
 					variant="accent"
 					onClick={() => {
@@ -65,7 +64,7 @@ export function UsersPage() {
 					<Plus size={17} strokeWidth={2.4} />
 					<span className="hidden sm:inline">{t.users.add}</span>
 				</Button>
-			</PageHeader>
+			</div>
 
 			<ul className="border-line divide-line divide-y rounded-md border">
 				{users.data.map((user) => (
@@ -85,8 +84,11 @@ export function UsersPage() {
 							</div>
 							<div className="text-caption text-muted truncate">
 								{roleName(roleById.get(user.role_id))}
-								{Object.keys(user.overrides).length > 0 ? ' +' : ''} · {t.users.lastLogin}:{' '}
-								{user.last_login_at ? formatRelative(user.last_login_at) : t.common.never}
+								{Object.keys(user.overrides).length > 0 ? ' +' : ''}
+								<span className="ml-3">
+									{t.users.lastLogin}{' '}
+									{user.last_login_at ? formatRelative(user.last_login_at) : t.common.never}
+								</span>
 							</div>
 						</div>
 						<IconButton
@@ -130,7 +132,7 @@ export function UsersPage() {
 								<div className="text-ui font-semibold">{roleName(role)}</div>
 								<div className="text-caption text-muted">
 									{t.users.roleUsers(role.users)}
-									{role.builtin ? ` · ${t.users.builtin}` : ''}
+									{role.builtin ? <span className="ml-3">{t.users.builtin}</span> : null}
 								</div>
 							</div>
 							{role.builtin === 'admin' ? null : (
@@ -368,9 +370,8 @@ function UserDialog({
 										<span className="text-small">
 											{t.users.perm[permission] ?? permission}
 											{value === 'role' ? (
-												<span className={fromRole ? 'text-ok' : 'text-muted'}>
-													{' '}
-													· {fromRole ? t.common.on : t.common.off}
+												<span className={`ml-2 ${fromRole ? 'text-ok' : 'text-muted'}`}>
+													{fromRole ? t.common.on : t.common.off}
 												</span>
 											) : null}
 										</span>

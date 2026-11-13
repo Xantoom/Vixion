@@ -1,14 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { type ChatLine, api } from '@/lib/api';
 
-/** Chat is fetched five minutes at a time and kept around the playhead. */
-const WINDOW_MS = 5 * 60_000;
-/** Lines shown at once: older ones scroll away. */
-export const SHOWN = 150;
+/** Lines shown at the playhead; scrolling up reveals more, a hundred at a time. */
+export const SHOWN = 100;
+/** Chat is fetched five minutes ahead of the playhead as the video plays. */
+const AHEAD_MS = 5 * 60_000;
+/** Lines kept in memory at most: the oldest go first. */
+const KEPT = 30_000;
 
 interface Loaded {
+	/** Video time the loaded lines start from; everything after it up to `to` is there. */
 	from: number;
 	to: number;
+	/** The first line of the chat is loaded: there is nothing older. */
+	atStart: boolean;
 	lines: ChatLine[];
 }
 
@@ -24,75 +29,149 @@ function lowerBound(lines: ChatLine[], ms: number): number {
 	return low;
 }
 
+const covers = (loaded: Loaded | null, ms: number): loaded is Loaded =>
+	loaded !== null && ms >= loaded.from && ms <= loaded.to;
+
+export interface Chat {
+	/** The lines to show, oldest first. */
+	lines: ChatLine[];
+	loading: boolean;
+	/** Changes after each jump: the panel goes back to following the playhead. */
+	epoch: number;
+	/** Keeps the shown lines starting at this one while the reader scrolls back; null follows the playhead. */
+	pin: (from: ChatLine | null) => void;
+	/** Shows the hundred lines before the first shown, fetching them when needed. */
+	showOlder: () => void;
+}
+
 /**
- * The chat said up to the playhead, in video time. Fetches ahead as the video plays, starts over
- * after a jump, and asks again for the latest window while the stream is still being recorded.
+ * The chat said up to the playhead, in video time. After a jump it asks for the last lines before
+ * the new time and the next five minutes together, and keeps showing the previous lines until
+ * they arrive; answers to a jump that was overtaken by another are dropped.
  */
-export function useChat(streamId: number, timeMs: number, recording: boolean): { lines: ChatLine[]; loading: boolean } {
-	const [loaded, setLoaded] = useState<Loaded>({ from: 0, to: 0, lines: [] });
-	const [loading, setLoading] = useState(true);
-	const busy = useRef(false);
+export function useChat(streamId: number, timeMs: number): Chat {
+	const [loaded, setLoaded] = useState<Loaded | null>(null);
+	const [anchor, setAnchor] = useState<number | null>(null);
+	const [epoch, setEpoch] = useState(0);
 	const generation = useRef(0);
+	const pending = useRef<number | null>(null);
+	const ahead = useRef(false);
+	const older = useRef(false);
+	// While a jump loads, the panel keeps showing the chat at the last time it had.
+	const shownAt = useRef(0);
+	const [frozen, setFrozen] = useState<number | null>(null);
+	const url = `/streams/${streamId}/chat`;
 
-	// A new recording starts over.
+	// A jump: anywhere the loaded lines do not cover.
 	useEffect(() => {
+		if (covers(loaded, timeMs)) return;
+		// Already on its way for about this time (the clock moves on while it loads).
+		const waiting = pending.current;
+		if (waiting !== null && timeMs >= waiting - 1000 && timeMs <= waiting + 20_000) return;
 		generation.current += 1;
-		setLoaded({ from: 0, to: 0, lines: [] });
-	}, [streamId]);
-
-	useEffect(() => {
-		if (busy.current) return;
-		const inside = timeMs >= loaded.from && timeMs <= loaded.to;
-		const nearEnd = inside && loaded.to - timeMs < 90_000;
-		if (inside && !nearEnd && loaded.to > 0) return;
-		const jump = !inside || loaded.to === 0;
-		// After a jump, a little before the playhead too, so the panel isn't empty.
-		const from = jump ? Math.max(0, timeMs - 60_000) : loaded.to;
-		const to = from + WINDOW_MS;
 		const run = generation.current;
-		busy.current = true;
-		if (jump) setLoading(true);
-		api.get<ChatLine[]>(`/streams/${streamId}/chat?from=${Math.floor(from)}&to=${Math.ceil(to)}`)
-			.then((lines) => {
+		pending.current = timeMs;
+		ahead.current = false;
+		older.current = false;
+		const at = Math.floor(timeMs) + 1;
+		setFrozen(loaded ? shownAt.current : null);
+		Promise.all([
+			api.get<ChatLine[]>(`${url}?before=${at}&limit=${SHOWN}`),
+			api.get<ChatLine[]>(`${url}?from=${at}&to=${at + AHEAD_MS}`),
+		])
+			.then(([past, next]) => {
 				if (run !== generation.current) return;
+				const atStart = past.length < SHOWN;
+				setLoaded({
+					from: atStart ? 0 : (past[0]?.o ?? at),
+					to: at + AHEAD_MS,
+					atStart,
+					lines: [...past, ...next],
+				});
+				setAnchor(null);
+				setFrozen(null);
+				setEpoch(run);
+			})
+			.catch(() => undefined)
+			.finally(() => {
+				if (run === generation.current) pending.current = null;
+			});
+	}, [url, timeMs, loaded]);
+
+	// Playing on: the next five minutes, before they are needed.
+	useEffect(() => {
+		if (!covers(loaded, timeMs) || ahead.current || loaded.to - timeMs > 90_000) return;
+		ahead.current = true;
+		const run = generation.current;
+		const from = loaded.to;
+		api.get<ChatLine[]>(`${url}?from=${from}&to=${from + AHEAD_MS}`)
+			.then((next) => {
+				if (run !== generation.current) return;
+				setLoaded((current) => {
+					if (current?.to !== from) return current;
+					const lines = [...current.lines, ...next];
+					if (lines.length <= KEPT) return { ...current, to: from + AHEAD_MS, lines };
+					const kept = lines.slice(lines.length - KEPT);
+					return { from: kept[0]?.o ?? from, to: from + AHEAD_MS, atStart: false, lines: kept };
+				});
+			})
+			.catch(() => undefined)
+			.finally(() => {
+				if (run === generation.current) ahead.current = false;
+			});
+	}, [url, timeMs, loaded]);
+
+	const showOlder = useCallback(() => {
+		if (!loaded) return;
+		const end = lowerBound(loaded.lines, timeMs + 1);
+		const start = anchor === null ? Math.max(0, end - SHOWN) : lowerBound(loaded.lines, anchor);
+		const next = Math.max(0, start - SHOWN);
+		const line = loaded.lines[next];
+		if (line && next < start) setAnchor(line.o);
+		if (next >= SHOWN || loaded.atStart || older.current) return;
+		// Running short: the lines before the loaded ones.
+		older.current = true;
+		const run = generation.current;
+		const before = loaded.lines[0]?.o ?? loaded.from;
+		api.get<ChatLine[]>(`${url}?before=${before}&limit=${SHOWN * 2}`)
+			.then((past) => {
+				if (run !== generation.current) return;
+				const atStart = past.length < SHOWN * 2;
 				setLoaded((current) =>
-					jump
-						? { from, to, lines }
-						: // Keep the last ten minutes before the new window: enough to scroll back a little.
-							{
-								from: Math.max(current.from, from - 2 * WINDOW_MS),
-								to,
-								lines: [
-									...current.lines.filter((line) => line.o >= from - 2 * WINDOW_MS && line.o < from),
-									...lines,
-								],
-							},
+					current
+						? {
+								...current,
+								from: atStart ? 0 : (past[0]?.o ?? current.from),
+								atStart,
+								lines: [...past.filter((item) => item.o < before), ...current.lines],
+							}
+						: current,
 				);
 			})
-			.catch(() => {
-				// Tried again on the next time update.
-			})
+			.catch(() => undefined)
 			.finally(() => {
-				busy.current = false;
-				setLoading(false);
+				if (run === generation.current) older.current = false;
 			});
-	}, [streamId, timeMs, loaded]);
+	}, [loaded, timeMs, anchor, url]);
 
-	// While recording, the window at the end fills up as people talk: ask for it again.
+	const pin = useCallback((from: ChatLine | null) => {
+		setAnchor(from?.o ?? null);
+	}, []);
+
+	const at = frozen ?? timeMs;
+	let lines: ChatLine[] = [];
+	if (covers(loaded, at)) {
+		const end = lowerBound(loaded.lines, at + 1);
+		const start =
+			anchor === null
+				? Math.max(0, end - SHOWN)
+				: Math.min(lowerBound(loaded.lines, anchor), Math.max(0, end - SHOWN));
+		lines = loaded.lines.slice(start, end);
+	}
 	useEffect(() => {
-		if (!recording) return;
-		const timer = setInterval(() => {
-			setLoaded((current) =>
-				current.to > 0 ? { ...current, to: Math.max(current.from, current.to - WINDOW_MS) } : current,
-			);
-		}, 20_000);
-		return () => {
-			clearInterval(timer);
-		};
-	}, [recording]);
-
-	const end = lowerBound(loaded.lines, timeMs + 1);
-	return { lines: loaded.lines.slice(Math.max(0, end - SHOWN), end), loading };
+		if (frozen === null && covers(loaded, timeMs)) shownAt.current = timeMs;
+	});
+	return { lines, loading: loaded === null || frozen !== null, epoch, pin, showOlder };
 }
 
 /** Part of a message: text, or a Twitch emote. */

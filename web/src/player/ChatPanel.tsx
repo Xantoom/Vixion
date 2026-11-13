@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDown, Gem, Megaphone, MessageSquare, Star, Sword, Video } from 'lucide-react';
+import { ArrowDown, Gem, Megaphone, Star, Sword, Video } from 'lucide-react';
 import { type ReactNode, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '@/i18n';
 import { type ChatAssets, type ChatLine, api } from '@/lib/api';
-import { formatClock, formatNumber } from '@/lib/format';
+import { formatClock } from '@/lib/format';
 import { Spinner } from '@/ui/Spinner';
 import { fragments, nameColor, useChat } from './chat';
 
@@ -37,7 +37,7 @@ function Badges({ badges, assets }: { badges: string | undefined; assets: Assets
 							key={entry}
 							src={url}
 							alt=""
-							title={name}
+							data-tip={name}
 							loading="lazy"
 							referrerPolicy="no-referrer"
 							className="mr-1 inline-block size-[1.125rem] -translate-y-px align-middle"
@@ -48,8 +48,8 @@ function Badges({ badges, assets }: { badges: string | undefined; assets: Assets
 				return badge ? (
 					<span
 						key={entry}
-						title={badge.label}
-						className={`mr-1 inline-grid size-[1.125rem] -translate-y-px place-items-center rounded-[4px] align-middle ${badge.className}`}
+						data-tip={badge.label}
+						className={`mr-1 inline-grid size-[1.125rem] -translate-y-px place-items-center rounded-xs align-middle ${badge.className}`}
 					>
 						{badge.icon}
 					</span>
@@ -65,10 +65,10 @@ function Emote({ name, src, srcSet }: { name: string; src: string; srcSet: strin
 			src={src}
 			srcSet={srcSet}
 			alt={name}
-			title={name}
+			data-tip={name}
 			loading="lazy"
 			referrerPolicy="no-referrer"
-			className="-my-1.5 inline-block h-8 w-auto align-middle"
+			className="-my-1.5 inline-block h-8 w-auto max-w-full align-middle"
 		/>
 	);
 }
@@ -118,8 +118,8 @@ function Name({ line }: { line: ChatLine }) {
 			href={`https://www.twitch.tv/${line.u}`}
 			target="_blank"
 			rel="noreferrer"
-			title={t.player.openOnTwitch(name)}
-			className="chat-name font-bold hover:underline"
+			data-tip={t.player.openOnTwitch(name)}
+			className="chat-name font-bold"
 			style={style}
 		>
 			{name}
@@ -130,8 +130,6 @@ function Name({ line }: { line: ChatLine }) {
 		</span>
 	);
 }
-
-const clockFormat = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 const Line = memo(function Line({
 	line,
@@ -152,23 +150,23 @@ const Line = memo(function Line({
 			onClick={() => {
 				onSeek(line.o);
 			}}
-			title={`${t.player.seekHere} · ${clockFormat.format(line.t)}`}
-			className="text-caption text-muted hover:text-accent-text tabular pt-px text-right hover:underline"
+			data-tip={t.player.seekHere}
+			className="text-caption text-muted hover:text-accent-text tabular mr-2 align-baseline transition-colors"
 		>
 			{formatClock(line.o / 1000)}
 		</button>
 	);
 	if (line.k === 'n') {
 		return (
-			<li className="grid grid-cols-[3.75rem_1fr] gap-x-2 px-2 py-1">
-				{stamp}
-				<div className="border-accent bg-accent-soft rounded-r-xs border-l-2 px-2.5 py-1.5">
-					<div className="text-small text-accent-text flex items-center gap-1.5 font-semibold">
-						<Megaphone size={14} />
+			<li className="px-3 py-1">
+				<div className="border-accent bg-accent-soft text-ui rounded-r-xs border-l-2 px-2.5 py-1.5 leading-relaxed">
+					{stamp}
+					<span className="text-accent-text font-semibold">
+						<Megaphone size={14} className="mr-1.5 inline -translate-y-px" />
 						{line.s || t.player.notice}
-					</div>
+					</span>
 					{line.m ? (
-						<div className="text-ui mt-0.5 break-words">
+						<div className="mt-0.5">
 							<Name line={line} />: <Message text={line.m} emotes={line.e} assets={assets} />
 						</div>
 					) : null}
@@ -178,44 +176,36 @@ const Line = memo(function Line({
 	}
 	const action = line.k === 'a';
 	return (
-		<li
-			className={`hover:bg-surface grid grid-cols-[3.75rem_1fr] gap-x-2 rounded-xs px-2 py-1 ${deleted ? 'opacity-45' : ''}`}
-		>
+		<li className={`hover:bg-surface text-ui px-3 py-0.5 leading-relaxed ${deleted ? 'opacity-45' : ''}`}>
 			{stamp}
-			<div className="text-ui leading-relaxed break-words">
-				<Badges badges={line.b} assets={assets} />
-				<Name line={line} />
-				{action ? ' ' : <span className="text-muted">: </span>}
-				{deleted ? (
-					<span className="text-muted italic">&lt;{t.player.deletedMessage}&gt;</span>
-				) : (
-					<span className={action ? 'italic' : ''} style={action ? { color: nameColor(line) } : undefined}>
-						<Message text={line.m ?? ''} emotes={line.e} assets={assets} />
-					</span>
-				)}
-			</div>
+			<Badges badges={line.b} assets={assets} />
+			<Name line={line} />
+			{action ? ' ' : <span className="text-muted">: </span>}
+			{deleted ? (
+				<span className="text-muted italic">&lt;{t.player.deletedMessage}&gt;</span>
+			) : (
+				<span className={action ? 'italic' : ''} style={action ? { color: nameColor(line) } : undefined}>
+					<Message text={line.m ?? ''} emotes={line.e} assets={assets} />
+				</span>
+			)}
 		</li>
 	);
 });
 
 /**
- * The chat as it was at the playhead. It follows the newest line unless the reader scrolled up,
- * in which case a button brings them back down.
+ * The chat as it was at the playhead: the last hundred lines, following the newest. Scrolling up
+ * stops following and reveals older lines; a button brings the reader back down.
  */
 export function ChatPanel({
 	streamId,
 	timeMs,
-	recording,
 	onSeek,
 	hasChat,
-	count,
 }: {
 	streamId: number;
 	timeMs: number;
-	recording: boolean;
 	onSeek: (ms: number) => void;
 	hasChat: boolean;
-	count: number;
 }) {
 	const t = useT();
 	const { data: assets } = useQuery({
@@ -224,9 +214,15 @@ export function ChatPanel({
 		staleTime: 60 * 60_000,
 		enabled: hasChat,
 	});
-	const { lines, loading } = useChat(streamId, timeMs, recording);
+	const { lines, loading, epoch, pin, showOlder } = useChat(streamId, timeMs);
 	const scroller = useRef<HTMLDivElement>(null);
 	const [following, setFollowing] = useState(true);
+	const [lastEpoch, setLastEpoch] = useState(epoch);
+	// A jump brings the panel back to the playhead.
+	if (epoch !== lastEpoch) {
+		setLastEpoch(epoch);
+		setFollowing(true);
+	}
 
 	// Deletions and clears apply to lines already shown.
 	const { visible, deleted } = useMemo(() => {
@@ -255,11 +251,24 @@ export function ChatPanel({
 		if (element && following) element.scrollTop = element.scrollHeight;
 	}, [visible, following]);
 
+	// Read on scroll without re-subscribing on every line.
+	const latest = useRef({ lines, following, pin, showOlder });
+	useEffect(() => {
+		latest.current = { lines, following, pin, showOlder };
+	});
+
 	useEffect(() => {
 		const element = scroller.current;
 		if (!element) return;
 		const onScroll = () => {
-			setFollowing(element.scrollHeight - element.scrollTop - element.clientHeight < 40);
+			const current = latest.current;
+			const bottom = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
+			if (bottom !== current.following) {
+				setFollowing(bottom);
+				// Reading back: the lines stay put while new ones arrive below.
+				current.pin(bottom ? null : (current.lines[0] ?? null));
+			}
+			if (!bottom && element.scrollTop < 300) current.showOlder();
 		};
 		element.addEventListener('scroll', onScroll, { passive: true });
 		return () => {
@@ -269,16 +278,10 @@ export function ChatPanel({
 
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col">
-			<div className="border-line text-ui flex h-12 flex-none items-center justify-between border-b px-4 font-semibold">
-				<span className="flex items-center gap-2">
-					<MessageSquare size={18} className="text-muted" />
-					{t.player.chat}
-				</span>
-				{count > 0 ? (
-					<span className="text-small text-muted tabular font-medium">{formatNumber(count)}</span>
-				) : null}
-			</div>
-			<div ref={scroller} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 py-2">
+			<div
+				ref={scroller}
+				className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain py-2 [overflow-anchor:auto] [overflow-wrap:anywhere]"
+			>
 				{!hasChat ? (
 					<p className="text-small text-muted px-3 py-6 text-center">{t.player.noChat}</p>
 				) : visible.length === 0 ? (
@@ -304,8 +307,9 @@ export function ChatPanel({
 					type="button"
 					onClick={() => {
 						setFollowing(true);
+						pin(null);
 					}}
-					className="menu-in bg-tip text-tip-ink text-small absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-3.5 py-1.5 font-medium shadow-lg"
+					className="menu-in bg-tip text-tip-ink text-small absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-sm px-3.5 py-1.5 font-medium whitespace-nowrap shadow-lg"
 				>
 					<ArrowDown size={14} />
 					{t.player.goLive}

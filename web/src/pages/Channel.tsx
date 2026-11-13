@@ -10,7 +10,6 @@ import {
 	Eye,
 	Film,
 	Gamepad2,
-	HardDrive,
 	MoreHorizontal,
 	Play,
 	Plus,
@@ -30,15 +29,7 @@ import {
 	type TwitchVideo,
 	api,
 } from '@/lib/api';
-import {
-	formatBytes,
-	formatClock,
-	formatDate,
-	formatDuration,
-	formatNumber,
-	formatQuality,
-	formatRelative,
-} from '@/lib/format';
+import { formatClock, formatDate, formatDuration, formatNumber, formatQuality, formatRelative } from '@/lib/format';
 import { useCan, useRouteParams } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button, IconButton } from '@/ui/Button';
@@ -48,7 +39,7 @@ import { Menu, MenuDivider, MenuItem } from '@/ui/Menu';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
-import { LiveBadge, streamersQuery } from './Streamers';
+import { LiveDot, streamersQuery } from './Streamers';
 
 function channelQuery(login: string) {
 	return {
@@ -167,10 +158,10 @@ function Tab({
 			role="tab"
 			aria-selected={selected}
 			onClick={onSelect}
-			className="text-ui text-muted hover:text-ink aria-selected:text-ink relative -mb-px flex h-12 items-center gap-2 px-3 font-semibold transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent aria-selected:after:bg-[var(--accent)]"
+			className="text-ui text-muted hover:text-ink aria-selected:text-ink relative -mb-px flex h-12 items-center gap-2 px-3 font-semibold transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-transparent aria-selected:after:bg-[var(--accent)]"
 		>
 			{children}
-			<span className="text-caption bg-surface tabular rounded-full px-2 py-0.5 font-medium">{count}</span>
+			<span className="text-caption bg-surface tabular rounded-xs px-1.5 py-0.5 font-medium">{count}</span>
 		</button>
 	);
 }
@@ -204,15 +195,14 @@ function Hero({ data, name }: { data: Page; name: string }) {
 					<Avatar src={avatar} name={name} size={128} live={live} className="max-sm:!size-24" />
 				</span>
 				<div className="flex min-w-0 flex-1 basis-72 flex-col gap-2 pb-1">
-					<h1 className="text-heading sm:text-display flex items-center gap-2.5 font-bold tracking-tight">
+					<h1 className="text-heading sm:text-display flex items-center gap-3 font-bold tracking-tight">
 						<span className="truncate">{name}</span>
 						{profile?.partner ? (
-							<BadgeCheck
-								size={28}
-								className="text-accent-text flex-none"
-								aria-label={t.channel.partner}
-							/>
+							<span data-tip={t.channel.partner} className="flex-none">
+								<BadgeCheck size={28} className="text-accent-text" aria-label={t.channel.partner} />
+							</span>
 						) : null}
+						{live ? <LiveDot size={12} /> : null}
 					</h1>
 					<div className="text-small text-muted flex flex-wrap items-center gap-x-5 gap-y-1">
 						{profile ? (
@@ -221,24 +211,28 @@ function Hero({ data, name }: { data: Page; name: string }) {
 							</Meta>
 						) : null}
 						{streamer ? (
-							<>
-								<Meta icon={<Film size={16} />}>{t.streamers.streams(streamer.stream_count)}</Meta>
-								<Meta icon={<HardDrive size={16} />}>{formatBytes(streamer.total_bytes)}</Meta>
-							</>
+							<Meta icon={<Film size={16} />}>{t.streamers.streams(streamer.stream_count)}</Meta>
 						) : null}
-						{!live && profile?.last_broadcast ? (
+						{!live && (profile?.last_broadcast ?? streamer?.last_stream_at) ? (
 							<Meta icon={<CalendarDays size={16} />}>
-								{t.channel.lastLive(formatRelative(profile.last_broadcast))}
+								{t.channel.lastLive(
+									formatRelative(profile?.last_broadcast ?? streamer?.last_stream_at ?? 0),
+								)}
 							</Meta>
 						) : null}
 					</div>
 				</div>
-				<div className="flex items-center gap-2 pb-1">
+				<div className="flex items-center gap-1.5 pb-1">
 					{streamer ? <StreamerActions streamer={streamer} /> : <AddButton login={login} name={name} />}
-					<a href={`https://www.twitch.tv/${login}`} target="_blank" rel="noreferrer" tabIndex={-1}>
-						<IconButton label={t.streamer.openTwitch}>
-							<ExternalLink size={19} />
-						</IconButton>
+					<a
+						href={`https://www.twitch.tv/${login}`}
+						target="_blank"
+						rel="noreferrer"
+						aria-label={t.streamer.openTwitch}
+						data-tip={t.streamer.openTwitch}
+						className="text-muted hover:text-ink hover:bg-surface grid size-10 place-items-center rounded-sm transition-colors"
+					>
+						<ExternalLink size={19} />
 					</a>
 				</div>
 				{profile?.description ? (
@@ -251,20 +245,24 @@ function Hero({ data, name }: { data: Page; name: string }) {
 	);
 }
 
-/** The broadcast on air, when there is one, with its recording. */
+/** The broadcast on air: what it is, and a way to watch it on Twitch. Recordings open once finished. */
 function LiveNow({ data }: { data: Page }) {
 	const t = useT();
 	const { profile, streamer } = data;
 	const live = profile?.live;
-	if (!live && !streamer?.live && !streamer?.recording) return null;
+	if (!live && !streamer?.live) return null;
 	const title = live?.title ?? streamer?.live?.title ?? null;
 	const game = live?.game ?? streamer?.live?.game ?? null;
 	const since = live?.since ?? streamer?.live?.since ?? null;
-	const recordingId = streamer?.recording?.stream_id;
 	const login = streamer?.login ?? profile?.login ?? '';
 
 	return (
-		<section className="bg-card ring-line mt-8 mb-10 flex flex-col overflow-hidden rounded-lg shadow-(--shadow-card) ring-1 sm:flex-row">
+		<a
+			href={`https://www.twitch.tv/${login}`}
+			target="_blank"
+			rel="noreferrer"
+			className="group bg-card ring-line mt-8 mb-10 flex flex-col overflow-hidden rounded-md shadow-(--shadow-card) ring-1 transition-shadow hover:shadow-(--shadow-lift) sm:flex-row"
+		>
 			<div className="bg-surface-2 relative aspect-video flex-none sm:w-96">
 				{live?.preview_url ? (
 					<img
@@ -274,16 +272,15 @@ function LiveNow({ data }: { data: Page }) {
 						className="size-full object-cover"
 					/>
 				) : null}
-				{streamer ? (
-					<LiveBadge streamer={streamer} className="absolute top-3 left-3" />
-				) : (
-					<span className="bg-live text-live-ink text-caption absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold">
-						<span className="live-dot size-2 rounded-full bg-white" />
-						{t.streamers.live}
-					</span>
-				)}
 			</div>
 			<div className="flex min-w-0 flex-1 flex-col gap-3 p-5">
+				<span className="text-small text-live flex items-center gap-2 font-semibold">
+					<LiveDot />
+					{t.streamers.live}
+					{streamer?.recording ? (
+						<span className="text-muted font-medium">{t.channel.beingRecorded}</span>
+					) : null}
+				</span>
 				<h2 className="text-lead line-clamp-2 font-semibold">{title ?? t.stream.untitled}</h2>
 				<div className="text-small text-muted flex flex-wrap gap-x-5 gap-y-1">
 					{game ? <Meta icon={<Gamepad2 size={16} />}>{game}</Meta> : null}
@@ -292,16 +289,12 @@ function LiveNow({ data }: { data: Page }) {
 					) : null}
 					{since ? <Meta icon={<Timer size={16} />}>{formatDuration(Date.now() - since)}</Meta> : null}
 				</div>
-				{recordingId ? (
-					<Link to="/$login/$id" params={{ login, id: String(recordingId) }} className="mt-auto self-start">
-						<Button variant="accent" tabIndex={-1}>
-							<Play size={16} fill="currentColor" />
-							{t.channel.watchLive}
-						</Button>
-					</Link>
-				) : null}
+				<span className="text-small text-accent-text mt-auto inline-flex items-center gap-1.5 font-semibold">
+					<ExternalLink size={16} />
+					{t.channel.watchOnTwitch}
+				</span>
 			</div>
-		</section>
+		</a>
 	);
 }
 
@@ -327,7 +320,7 @@ function AddButton({ login, name }: { login: string; name: string }) {
 		}
 	};
 	return (
-		<Button variant="accent" busy={busy} title={t.channel.addHint} onClick={() => void add()}>
+		<Button variant="accent" busy={busy} data-tip={t.channel.addHint} onClick={() => void add()}>
 			<Plus size={18} strokeWidth={2.4} />
 			{t.channel.add}
 		</Button>
@@ -416,10 +409,41 @@ function StreamerActions({ streamer }: { streamer: Streamer }) {
 function Pill({ children, className = '' }: { children: ReactNode; className?: string }) {
 	return (
 		<span
-			className={`text-caption tabular inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 font-semibold backdrop-blur-sm ${className || 'bg-tip/80 text-tip-ink'}`}
+			className={`text-caption tabular inline-flex items-center gap-1.5 rounded-xs px-1.5 py-0.5 font-semibold backdrop-blur-sm ${className || 'bg-black/70 text-white'}`}
 		>
 			{children}
 		</span>
+	);
+}
+
+/** A square button laid on a picture. */
+function OverlayButton({
+	label,
+	onClick,
+	pressed,
+	danger = false,
+	disabled,
+	children,
+}: {
+	label: string;
+	onClick: () => void;
+	pressed?: boolean;
+	danger?: boolean;
+	disabled?: boolean;
+	children: ReactNode;
+}) {
+	return (
+		<button
+			type="button"
+			aria-label={label}
+			data-tip={label}
+			aria-pressed={pressed}
+			disabled={disabled}
+			onClick={onClick}
+			className={`grid size-8 place-items-center rounded-sm bg-black/70 text-white backdrop-blur-sm transition-colors disabled:opacity-50 aria-pressed:bg-[var(--accent)] aria-pressed:text-[var(--accent-ink)] ${danger ? 'hover:bg-[var(--danger)]' : 'hover:bg-black/90'}`}
+		>
+			{children}
+		</button>
 	);
 }
 
@@ -448,103 +472,102 @@ function StreamCard({ stream, login }: { stream: StreamSummary; login: string })
 
 	const quality = formatQuality(stream.height, stream.fps, stream.video_codec);
 	const expiresSoon = stream.expires_at !== null && stream.expires_at - Date.now() < 2 * 86_400_000;
+	const title = stream.title || t.stream.untitled;
+	// Kept recordings show their mark at all times; the other buttons come with the pointer.
+	const reveal =
+		'opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100';
 
 	return (
 		<article className="group flex flex-col gap-3">
-			<Link
-				to="/$login/$id"
-				params={params}
-				className="bg-surface-2 relative block aspect-video overflow-hidden rounded-md"
-				aria-label={stream.title || t.stream.untitled}
-			>
+			<div className="bg-surface-2 relative aspect-video overflow-hidden rounded-md">
 				{stream.has_thumbnail ? (
 					<img
 						src={`/api/streams/${stream.id}/thumbnail`}
 						alt=""
 						loading="lazy"
 						decoding="async"
-						className="size-full object-cover transition-transform duration-500 ease-(--ease-out-soft) group-hover:scale-[1.03]"
+						className={`size-full object-cover transition-transform duration-500 ease-(--ease-out-soft) ${recording ? 'opacity-50' : 'group-hover:scale-[1.03]'}`}
 					/>
 				) : null}
-				<span className="absolute inset-0 grid place-items-center bg-black/30 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-					<span className="grid size-14 place-items-center rounded-full bg-white/90 text-black shadow-lg">
-						<Play size={24} fill="currentColor" className="ml-0.5" />
+				{recording ? (
+					<span className="text-small absolute inset-0 grid place-items-center font-semibold text-white">
+						<span className="flex items-center gap-2 rounded-sm bg-black/70 px-3 py-1.5">
+							<LiveDot size={8} />
+							{t.stream.recordingNow}
+						</span>
 					</span>
-				</span>
-				<span className="absolute top-2.5 left-2.5 flex gap-1.5">
-					{recording ? (
-						<Pill className="bg-live text-live-ink">
-							<span className="live-dot size-1.5 rounded-full bg-white" />
-							{t.stream.recording}
-						</Pill>
-					) : null}
+				) : (
+					<Link to="/$login/$id" params={params} aria-label={title} className="absolute inset-0">
+						<span className="absolute inset-0 grid place-items-center bg-black/25 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+							<span className="grid size-14 place-items-center rounded-sm bg-white/90 text-black shadow-lg">
+								<Play size={24} fill="currentColor" className="ml-0.5" />
+							</span>
+						</span>
+					</Link>
+				)}
+				<span className="pointer-events-none absolute top-2.5 left-2.5 flex gap-1.5">
 					{stream.status === 'failed' ? (
 						<Pill className="bg-danger text-white">{t.stream.failed}</Pill>
 					) : null}
 					{stream.part > 1 ? <Pill>{t.stream.part(stream.part)}</Pill> : null}
 				</span>
-				{stream.keep_forever ? (
-					<span
-						className="bg-accent text-accent-ink absolute top-2.5 right-2.5 grid size-7 place-items-center rounded-full shadow"
-						title={t.stream.kept}
-					>
-						<BookmarkCheck size={15} />
+				{!recording && (canKeep || canDelete) ? (
+					<span className="absolute top-2.5 right-2.5 flex gap-1.5">
+						{canDelete ? (
+							<span className={reveal}>
+								<OverlayButton
+									label={t.stream.delete}
+									danger
+									onClick={() => {
+										setDeleting(true);
+									}}
+								>
+									<Trash2 size={16} />
+								</OverlayButton>
+							</span>
+						) : null}
+						{canKeep ? (
+							<span className={stream.keep_forever ? '' : reveal}>
+								<OverlayButton
+									label={stream.keep_forever ? t.stream.unkeep : t.stream.keep}
+									pressed={stream.keep_forever}
+									disabled={keeping}
+									onClick={() => void toggleKeep()}
+								>
+									{stream.keep_forever ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+								</OverlayButton>
+							</span>
+						) : null}
 					</span>
 				) : null}
-				<span className="absolute inset-x-2.5 bottom-2.5 flex items-end justify-between gap-2">
+				<span className="pointer-events-none absolute inset-x-2.5 bottom-2.5 flex items-end justify-between gap-2">
 					{quality ? <Pill>{quality}</Pill> : <span />}
-					<Pill>{formatClock(stream.duration_ms / 1000)}</Pill>
+					{recording ? null : <Pill>{formatClock(stream.duration_ms / 1000)}</Pill>}
 				</span>
-			</Link>
-			<div className="flex items-start gap-2">
-				<div className="flex min-w-0 flex-1 flex-col gap-1.5">
+			</div>
+			<div className="flex min-w-0 flex-col gap-1.5">
+				{recording ? (
+					<span className="text-body line-clamp-2 leading-snug font-semibold">{title}</span>
+				) : (
 					<Link
 						to="/$login/$id"
 						params={params}
 						className="text-body hover:text-accent-text line-clamp-2 leading-snug font-semibold transition-colors"
-						title={stream.title}
 					>
-						{stream.title || t.stream.untitled}
+						{title}
 					</Link>
-					<div className="text-caption text-muted flex flex-wrap gap-x-4 gap-y-1">
-						<Meta icon={<CalendarDays size={14} />}>{formatDate(stream.started_at)}</Meta>
-						{stream.game ? <Meta icon={<Gamepad2 size={14} />}>{stream.game}</Meta> : null}
-						<span className="tabular">{formatBytes(stream.size_bytes)}</span>
-					</div>
+				)}
+				<div className="text-caption text-muted flex flex-wrap gap-x-4 gap-y-1">
+					<Meta icon={<CalendarDays size={14} />}>{formatDate(stream.started_at)}</Meta>
+					{stream.game ? <Meta icon={<Gamepad2 size={14} />}>{stream.game}</Meta> : null}
 					{!stream.keep_forever && stream.expires_at !== null && !recording ? (
-						<Meta
-							icon={<Timer size={14} />}
-							className={`text-caption ${expiresSoon ? 'text-warn font-semibold' : 'text-muted'}`}
-						>
+						<Meta icon={<Timer size={14} />} className={expiresSoon ? 'text-warn font-semibold' : ''}>
 							{stream.expires_at < Date.now()
 								? t.stream.expired
 								: t.stream.expires(formatRelative(stream.expires_at))}
 						</Meta>
 					) : null}
 				</div>
-				{canKeep ? (
-					<IconButton
-						size="sm"
-						label={stream.keep_forever ? t.stream.unkeep : t.stream.keep}
-						aria-pressed={stream.keep_forever}
-						disabled={keeping}
-						onClick={() => void toggleKeep()}
-					>
-						{stream.keep_forever ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
-					</IconButton>
-				) : null}
-				{canDelete && !recording ? (
-					<IconButton
-						size="sm"
-						label={t.stream.delete}
-						className="hover:!text-danger"
-						onClick={() => {
-							setDeleting(true);
-						}}
-					>
-						<Trash2 size={18} />
-					</IconButton>
-				) : null}
 			</div>
 			<Confirm
 				open={deleting}

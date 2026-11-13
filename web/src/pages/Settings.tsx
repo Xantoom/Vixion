@@ -8,7 +8,6 @@ import { Field, NumberInput, Select, Switch, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
-import { PageHeader } from './Streamers';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
 	return (
@@ -79,9 +78,7 @@ export function SettingsPage() {
 	};
 
 	return (
-		<div className="panel-in mx-auto max-w-5xl px-4 pb-28 sm:px-6">
-			<PageHeader title={t.settings.title} />
-
+		<div className="panel-in pb-28">
 			<Section title={t.settings.recording}>
 				<p className="text-small text-muted -mb-2">{t.settings.quality}</p>
 				<Switch

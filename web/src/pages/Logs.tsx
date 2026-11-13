@@ -10,7 +10,6 @@ import { Segmented, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
-import { PageHeader } from './Streamers';
 
 const MAX_LINES = 2000;
 type Level = 'all' | 'warn' | 'error';
@@ -28,12 +27,10 @@ function time(at: number): string {
 }
 
 export function LogsPage() {
-	const t = useT();
 	const can = useCan('logs.view');
 	if (!can) return <NotFound forbidden />;
 	return (
-		<div className="panel-in mx-auto flex max-w-[110rem] flex-col px-4 pb-10 sm:px-6">
-			<PageHeader title={t.logs.title} />
+		<div className="panel-in flex flex-col pb-10">
 			<Alerts />
 			<Console />
 		</div>
@@ -83,7 +80,8 @@ function Alerts() {
 							<div className="min-w-0 flex-1">
 								<p className="text-ui break-words">{alert.message}</p>
 								<p className="text-caption text-muted mt-0.5">
-									<span className="font-mono">{alert.kind}</span> · {formatRelative(alert.created_at)}
+									<span className="font-mono">{alert.kind}</span>
+									<span className="ml-3">{formatRelative(alert.created_at)}</span>
 								</p>
 							</div>
 							<IconButton size="sm" label={t.logs.dismiss} onClick={() => void dismiss(alert.id)}>

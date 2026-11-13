@@ -115,7 +115,7 @@ export function Timeline({
 					return (
 						<div
 							key={segment.start}
-							className={`relative h-full overflow-hidden rounded-full transition-colors ${lit ? 'bg-white/55' : 'bg-white/30'}`}
+							className={`relative h-full overflow-hidden rounded-[1px] transition-colors ${lit ? 'bg-white/55' : 'bg-white/30'}`}
 							style={{ flexGrow: span, flexBasis: 0 }}
 						>
 							<div

@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { currentLocale, useT } from '@/i18n';
-import { type Me, api } from '@/lib/api';
+import { ApiError, type Me, api } from '@/lib/api';
 import { meQuery } from '@/lib/session';
 import { Button } from '@/ui/Button';
 import { Field, TextInput } from '@/ui/Field';
@@ -127,7 +127,13 @@ export function LoginPage() {
 			const me = await api.get<Me>('/me');
 			client.setQueryData(meQuery.queryKey, me);
 		} catch (caught) {
-			setError(caught instanceof Error ? caught.message : t.common.error);
+			setError(
+				caught instanceof ApiError && caught.code === 'bad_credentials'
+					? t.auth.wrongPassword
+					: caught instanceof Error
+						? caught.message
+						: t.common.error,
+			);
 			setPassword('');
 		} finally {
 			setBusy(false);

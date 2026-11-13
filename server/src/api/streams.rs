@@ -350,12 +350,16 @@ async fn timed_chat(id: i64, located: &Located) -> AppResult<Arc<Vec<TimedLine>>
 #[derive(Deserialize)]
 pub struct Window {
     /// Video milliseconds, inclusive.
-    from: i64,
+    from: Option<i64>,
     /// Video milliseconds, exclusive.
-    to: i64,
+    to: Option<i64>,
+    /// Asks for the lines said before this time (exclusive) instead: the last `limit` of them.
+    before: Option<i64>,
+    limit: Option<usize>,
 }
 
-/// Chat between two video times; the player asks a few minutes at a time.
+/// Chat between two video times, or the last lines before one: the player asks a few minutes
+/// ahead as the video plays, and a hundred lines back after a jump or when the reader scrolls up.
 pub async fn chat_window(
     State(app): State<AppState>,
     user: CurrentUser,
@@ -365,9 +369,16 @@ pub async fn chat_window(
     user.require("streams.view")?;
     let located = locate(&app, id).await?;
     let lines = timed_chat(id, &located).await?;
-    let start = lines.partition_point(|line| line.o < window.from);
-    let end = lines.partition_point(|line| line.o < window.to.min(window.from + 30 * 60_000));
-    let slice = &lines[start..end.max(start)];
+    let slice = if let Some(before) = window.before {
+        let end = lines.partition_point(|line| line.o < before);
+        &lines[end.saturating_sub(window.limit.unwrap_or(100).min(1000))..end]
+    } else {
+        let from = window.from.unwrap_or(0);
+        let to = window.to.unwrap_or(from + 5 * 60_000).min(from + 30 * 60_000);
+        let start = lines.partition_point(|line| line.o < from);
+        let end = lines.partition_point(|line| line.o < to);
+        &lines[start..end.max(start)]
+    };
     let cache = if located.status == "recording" { "no-store" } else { "private, max-age=3600" };
     Ok(([(header::CACHE_CONTROL, cache)], Json(slice)).into_response())
 }

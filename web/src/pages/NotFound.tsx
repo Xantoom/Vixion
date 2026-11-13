@@ -6,7 +6,7 @@ export function NotFound({ forbidden = false }: { forbidden?: boolean }) {
 	return (
 		<div className="panel-in mx-auto flex min-h-[50vh] max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
 			<p className="text-lead text-ink-2">{forbidden ? t.errors.forbidden : t.errors.notFound}</p>
-			<Link to="/" className="text-ui text-accent-text font-medium hover:underline">
+			<Link to="/" className="text-ui text-accent-text font-medium">
 				{t.errors.home}
 			</Link>
 		</div>

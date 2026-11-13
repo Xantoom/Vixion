@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
 import { lazy } from 'react';
+import { AdminIndex, AdminLayout } from './pages/Admin';
 import { NotFound } from './pages/NotFound';
 import { Shell } from './pages/Shell';
 import { StreamersPage } from './pages/Streamers';
@@ -14,12 +15,17 @@ const LogsPage = lazy(async () => import('./pages/Logs').then((m) => ({ default:
 
 const root = createRootRoute({ component: Shell, notFoundComponent: () => <NotFound /> });
 
+const admin = createRoute({ getParentRoute: () => root, path: '/admin', component: AdminLayout });
+
 const routes = [
 	createRoute({ getParentRoute: () => root, path: '/', component: StreamersPage }),
-	createRoute({ getParentRoute: () => root, path: '/stats', component: StatsPage }),
-	createRoute({ getParentRoute: () => root, path: '/settings', component: SettingsPage }),
-	createRoute({ getParentRoute: () => root, path: '/users', component: UsersPage }),
-	createRoute({ getParentRoute: () => root, path: '/logs', component: LogsPage }),
+	admin.addChildren([
+		createRoute({ getParentRoute: () => admin, path: '/', component: AdminIndex }),
+		createRoute({ getParentRoute: () => admin, path: '/stats', component: StatsPage }),
+		createRoute({ getParentRoute: () => admin, path: '/logs', component: LogsPage }),
+		createRoute({ getParentRoute: () => admin, path: '/users', component: UsersPage }),
+		createRoute({ getParentRoute: () => admin, path: '/settings', component: SettingsPage }),
+	]),
 	// Channels live at their Twitch name, like on Twitch; the pages above take precedence.
 	createRoute({ getParentRoute: () => root, path: '/$login', component: ChannelPage }),
 	createRoute({ getParentRoute: () => root, path: '/$login/$id', component: StudioPage }),

@@ -3,17 +3,13 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import {
 	AudioLines,
 	CalendarDays,
-	ChevronLeft,
 	Download,
-	FastForward,
 	FileJson,
 	FileText,
 	FileVideo,
 	Gamepad2,
-	HardDrive,
 	ListVideo,
 	Maximize,
-	MessageSquare,
 	Minimize,
 	MonitorPlay,
 	Pause,
@@ -25,17 +21,10 @@ import {
 	Volume2,
 	VolumeX,
 } from 'lucide-react';
-import {
-	type PointerEvent as ReactPointerEvent,
-	type ReactNode,
-	useCallback,
-	useEffect,
-	useRef,
-	useState,
-} from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '@/i18n';
 import { ApiError, type StreamDetail, api } from '@/lib/api';
-import { formatBytes, formatClock, formatDate, formatDuration, formatNumber, formatQuality } from '@/lib/format';
+import { formatClock, formatDate, formatDuration, formatQuality } from '@/lib/format';
 import { useCan, useRouteParams } from '@/lib/session';
 import { ChatPanel } from '@/player/ChatPanel';
 import { type Engine, type EngineError, type PlaybackState, createEngine } from '@/player/engine';
@@ -46,6 +35,7 @@ import { Button } from '@/ui/Button';
 import { Menu, MenuDivider, MenuItem } from '@/ui/Menu';
 import { PageLoading, Spinner } from '@/ui/Spinner';
 import { NotFound } from './NotFound';
+import { LiveDot } from './Streamers';
 
 /** Starts a download of each link, one after the other (browsers allow a few in a row from a click). */
 function downloadAll(urls: string[]) {
@@ -95,6 +85,8 @@ export function StudioPage() {
 		queryFn: async () => api.get<StreamDetail>(`/streams/${id}`),
 		staleTime: Number.POSITIVE_INFINITY,
 		refetchOnWindowFocus: false,
+		// A broadcast still being recorded opens once it ends.
+		refetchInterval: (query) => (query.state.data?.status === 'recording' ? 15_000 : false),
 	});
 	// An old link with the channel's former name lands on the current one.
 	const actual = detail.data?.streamer_login;
@@ -104,6 +96,7 @@ export function StudioPage() {
 	}, [actual, login, id, navigate]);
 	if (detail.isPending) return <PageLoading />;
 	if (detail.error) return <NotFound forbidden={detail.error instanceof ApiError && detail.error.status === 403} />;
+	if (detail.data.status === 'recording') return <StillRecording stream={detail.data} />;
 	return (
 		<Studio
 			key={id}
@@ -136,7 +129,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	const hideTimer = useRef(0);
 	const lastTap = useRef(0);
 	const fullscreen = useFullscreen(root);
-	const recording = stream.status === 'recording';
+	const [chaptersOpen, setChaptersOpen] = useState(false);
 
 	const reopen = useRef<
 		(url: string, durationMs: number, at: number, autoplay: boolean, preferElement?: boolean) => void
@@ -258,7 +251,8 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
 			const target = event.target as HTMLElement | null;
-			if (target?.closest('input, textarea, select, [contenteditable], [role=menu], dialog')) return;
+			if (target?.closest('input, textarea, select, [contenteditable], [role=menu], [role=dialog], dialog'))
+				return;
 			if (event.ctrlKey || event.metaKey || event.altKey) return;
 			const set = usePrefs.getState().set;
 			const { volume, muted } = usePrefs.getState();
@@ -309,23 +303,6 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 		};
 	}, [togglePlay, seekBy, seekTo, fullscreen, duration, poke]);
 
-	// Resizing the chat column by its edge.
-	const startResize = (event: ReactPointerEvent) => {
-		event.preventDefault();
-		const startX = event.clientX;
-		const startWidth = prefs.chatWidth;
-		const move = (moved: PointerEvent) => {
-			const width = Math.min(640, Math.max(280, startWidth - (moved.clientX - startX)));
-			usePrefs.getState().set({ chatWidth: width });
-		};
-		const up = () => {
-			window.removeEventListener('pointermove', move);
-			window.removeEventListener('pointerup', up);
-		};
-		window.addEventListener('pointermove', move);
-		window.addEventListener('pointerup', up);
-	};
-
 	const shown = scrub ?? time;
 	const downloads = {
 		video: stream.download_url,
@@ -335,13 +312,14 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	const VolumeIcon = prefs.muted || prefs.volume === 0 ? VolumeX : prefs.volume < 0.5 ? Volume1 : Volume2;
 	const pseudoFullscreen = fullscreen.active && !fullscreen.native;
 	// What lies on the picture shows while the pointer is over it, and while paused.
-	const overlay = (hovering && controls) || !state.playing;
+	const overlay = (hovering && controls) || !state.playing || chaptersOpen;
 
 	return (
 		<div
 			ref={root}
-			style={{ '--chat-width': `${prefs.chatWidth}px` } as React.CSSProperties}
-			className={`bg-bg flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_var(--chat-width)] ${fullscreen.active ? 'h-dvh' : 'h-[calc(100dvh-4rem)]'} ${pseudoFullscreen ? 'fixed inset-0 z-[60]' : ''}`}
+			// The video takes the full height and the chat what is left of the width, within bounds.
+			style={{ '--chat-width': 'clamp(20rem, calc(100vw - 100dvh * 16 / 9), 36rem)' } as React.CSSProperties}
+			className={`bg-bg flex h-dvh flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_var(--chat-width)] ${pseudoFullscreen ? 'fixed inset-0 z-[60]' : ''}`}
 		>
 			<section
 				ref={stage}
@@ -396,7 +374,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						type="button"
 						aria-label={t.player.play}
 						onClick={togglePlay}
-						className="absolute top-1/2 left-1/2 grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition-transform duration-150 hover:scale-105"
+						className="absolute top-1/2 left-1/2 grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-md bg-black/45 text-white backdrop-blur-md transition-transform duration-150 hover:scale-105"
 					>
 						<Play size={34} fill="currentColor" className="ml-1" />
 					</button>
@@ -428,7 +406,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 					</div>
 				) : null}
 
-				<StreamOverlay stream={stream} recording={recording} visible={overlay} />
+				<StreamOverlay stream={stream} visible={overlay} />
 
 				{/* Controls */}
 				<div
@@ -492,57 +470,6 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 								}}
 							/>
 						</div>
-						<span className="text-ui tabular ml-2 whitespace-nowrap text-white">
-							{formatClock(shown)}
-							<span className="text-white/55 max-sm:hidden"> / {formatClock(duration)}</span>
-						</span>
-						<div className="flex-1" />
-						{recording ? (
-							<PlayerButton label={t.player.reload} onClick={() => void refresh()}>
-								<RefreshCw size={20} />
-							</PlayerButton>
-						) : null}
-						{stream.chapters.length > 1 ? (
-							<Menu
-								label={t.player.chapters}
-								panelClassName="text-ink max-h-[60dvh] overflow-y-auto"
-								trigger={() => (
-									<PlayerButton label={t.player.chapters}>
-										<ListVideo size={21} />
-									</PlayerButton>
-								)}
-							>
-								{stream.chapters.map((chapter) => (
-									<MenuItem
-										key={chapter.at_ms}
-										icon={
-											chapter.game ? (
-												<img
-													src={boxArt(chapter.game)}
-													alt=""
-													referrerPolicy="no-referrer"
-													className="h-8 w-6 rounded-[2px] object-cover"
-												/>
-											) : (
-												<MonitorPlay size={16} />
-											)
-										}
-										onSelect={() => {
-											seekTo(chapter.at_ms / 1000);
-										}}
-									>
-										<span className="flex min-w-0 flex-col">
-											<span className="truncate font-medium">
-												{chapter.game ?? chapter.title}
-											</span>
-											<span className="text-caption text-muted tabular">
-												{formatClock(chapter.at_ms / 1000)}
-											</span>
-										</span>
-									</MenuItem>
-								))}
-							</Menu>
-						) : null}
 						<PlayerButton
 							label={prefs.compressor ? t.player.compressorOn : t.player.compressorOff}
 							pressed={prefs.compressor}
@@ -552,6 +479,21 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						>
 							<AudioLines size={21} />
 						</PlayerButton>
+						<span className="text-ui tabular ml-2 whitespace-nowrap text-white">
+							{formatClock(shown)}
+							<span className="text-white/55 max-sm:hidden"> / {formatClock(duration)}</span>
+						</span>
+						<div className="flex-1" />
+						{stream.chapters.length > 1 ? (
+							<Chapters
+								chapters={stream.chapters}
+								duration={duration}
+								time={shown}
+								open={chaptersOpen}
+								setOpen={setChaptersOpen}
+								onSeek={seekTo}
+							/>
+						) : null}
 						{canDownload && downloads.video ? (
 							<Menu
 								label={t.player.download}
@@ -593,18 +535,10 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 			</section>
 
 			<aside className="border-line relative flex min-h-0 flex-1 flex-col border-t lg:border-t-0 lg:border-l">
-				<div
-					role="separator"
-					aria-orientation="vertical"
-					onPointerDown={startResize}
-					className="hover:bg-accent/40 absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize transition-colors lg:block"
-				/>
 				<ChatPanel
 					streamId={stream.id}
 					timeMs={Math.floor(time * 1000)}
-					recording={recording}
-					hasChat={stream.chat_messages > 0 || recording}
-					count={stream.chat_messages}
+					hasChat={stream.chat_messages > 0}
 					onSeek={(ms) => {
 						seekTo(ms / 1000);
 					}}
@@ -631,7 +565,7 @@ function PlayerButton({
 		<button
 			type="button"
 			aria-label={label}
-			title={label}
+			data-tip={label}
 			aria-pressed={pressed}
 			onClick={onClick}
 			className={`touch-target relative grid size-10 flex-none place-items-center rounded-sm text-white/90 transition-colors duration-150 hover:bg-white/15 hover:text-white aria-pressed:text-[color:var(--accent-text)] sm:size-11 ${className}`}
@@ -642,9 +576,9 @@ function PlayerButton({
 	);
 }
 
-function Fact({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+function Fact({ icon, children, className = '' }: { icon: ReactNode; children: ReactNode; className?: string }) {
 	return (
-		<span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+		<span className={`inline-flex items-center gap-1.5 whitespace-nowrap ${className}`}>
 			<span className="opacity-75">{icon}</span>
 			{children}
 		</span>
@@ -652,7 +586,7 @@ function Fact({ icon, children }: { icon: ReactNode; children: ReactNode }) {
 }
 
 /** Who and what, laid over the top of the picture. */
-function StreamOverlay({ stream, recording, visible }: { stream: StreamDetail; recording: boolean; visible: boolean }) {
+function StreamOverlay({ stream, visible }: { stream: StreamDetail; visible: boolean }) {
 	const t = useT();
 	const login = stream.streamer_login;
 	const quality = formatQuality(stream.height, stream.fps, stream.video_codec);
@@ -660,43 +594,35 @@ function StreamOverlay({ stream, recording, visible }: { stream: StreamDetail; r
 		<div
 			className={`absolute inset-x-0 top-0 bg-gradient-to-b from-black/85 via-black/45 to-transparent px-3 pt-3 pb-16 text-white transition-opacity duration-300 sm:px-5 sm:pt-4 ${visible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
 		>
-			<div className="flex items-start gap-3">
+			<div className="flex items-center gap-3.5">
 				<Link
 					to="/$login"
 					params={{ login }}
 					aria-label={stream.streamer_name}
-					className="flex flex-none items-center gap-0.5 rounded-full text-white/80 hover:text-white"
+					className="flex-none rounded-full transition-opacity hover:opacity-85"
 				>
-					<ChevronLeft size={22} className="max-sm:hidden" />
-					<Avatar src={stream.streamer_avatar} name={stream.streamer_name} size={44} live={recording} />
+					<Avatar src={stream.streamer_avatar} name={stream.streamer_name} size={48} />
 				</Link>
 				<div className="min-w-0 flex-1">
-					<h1
-						className="text-body sm:text-lead line-clamp-2 font-semibold [text-shadow:0_1px_3px_rgb(0_0_0/0.5)]"
-						title={stream.title}
-					>
+					<h1 className="text-body sm:text-lead truncate font-semibold [text-shadow:0_1px_3px_rgb(0_0_0/0.5)]">
 						{stream.title || t.stream.untitled}
 					</h1>
-					<div className="text-small mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-white/80">
-						<Link to="/$login" params={{ login }} className="font-semibold text-white hover:underline">
+					<div className="text-small mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-white/75">
+						<Link
+							to="/$login"
+							params={{ login }}
+							className="font-semibold text-white transition-opacity hover:opacity-80"
+						>
 							{stream.streamer_name}
 						</Link>
 						{stream.game ? <Fact icon={<Gamepad2 size={15} />}>{stream.game}</Fact> : null}
 						<Fact icon={<CalendarDays size={15} />}>{formatDate(stream.started_at)}</Fact>
-						<span className="max-md:hidden contents">
-							{quality ? <Fact icon={<MonitorPlay size={15} />}>{quality}</Fact> : null}
-							<Fact icon={<HardDrive size={15} />}>{formatBytes(stream.size_bytes)}</Fact>
-							{stream.chat_messages > 0 ? (
-								<Fact icon={<MessageSquare size={15} />}>{formatNumber(stream.chat_messages)}</Fact>
-							) : null}
-							{stream.ads_skipped_ms > 0 ? (
-								<Fact icon={<FastForward size={15} />}>
-									{t.stream.ads(formatDuration(stream.ads_skipped_ms))}
-								</Fact>
-							) : null}
-						</span>
+						{quality ? (
+							<Fact icon={<MonitorPlay size={15} />} className="max-md:hidden">
+								{quality}
+							</Fact>
+						) : null}
 					</div>
-					{recording ? <p className="text-small text-live mt-1 font-semibold">{t.player.growing}</p> : null}
 					{stream.error ? (
 						<p className="text-small mt-1 text-red-300">
 							{t.stream.error}: {stream.error}
@@ -711,13 +637,159 @@ function StreamOverlay({ stream, recording, visible }: { stream: StreamDetail; r
 								to="/$login/$id"
 								params={{ login, id: String(id) }}
 								aria-current={id === stream.id ? 'page' : undefined}
-								className="text-small rounded-full bg-white/15 px-3 py-1 font-medium backdrop-blur-sm hover:bg-white/25 aria-[current=page]:bg-white aria-[current=page]:text-black"
+								className="text-small rounded-sm bg-white/15 px-2.5 py-1 font-semibold backdrop-blur-sm transition-colors hover:bg-white/25 aria-[current=page]:bg-white aria-[current=page]:text-black"
 							>
 								{t.stream.part(part)}
 							</Link>
 						))}
 					</div>
 				) : null}
+			</div>
+		</div>
+	);
+}
+
+/** The broadcast's categories, each with its start and length; picking one jumps there. */
+function Chapters({
+	chapters,
+	duration,
+	time,
+	open,
+	setOpen,
+	onSeek,
+}: {
+	chapters: StreamDetail['chapters'];
+	duration: number;
+	time: number;
+	open: boolean;
+	setOpen: (open: boolean) => void;
+	onSeek: (seconds: number) => void;
+}) {
+	const t = useT();
+	const wrap = useRef<HTMLDivElement>(null);
+	const list = useRef<HTMLOListElement>(null);
+
+	useEffect(() => {
+		if (!open) return;
+		list.current?.querySelector('[aria-current]')?.scrollIntoView({ block: 'nearest' });
+		const onDown = (event: PointerEvent) => {
+			if (!wrap.current?.contains(event.target as Node)) setOpen(false);
+		};
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') setOpen(false);
+		};
+		document.addEventListener('pointerdown', onDown);
+		document.addEventListener('keydown', onKey);
+		return () => {
+			document.removeEventListener('pointerdown', onDown);
+			document.removeEventListener('keydown', onKey);
+		};
+	}, [open, setOpen]);
+
+	const now = time * 1000;
+	return (
+		<div ref={wrap} className="relative">
+			<PlayerButton
+				label={t.player.chapters}
+				pressed={open}
+				onClick={() => {
+					setOpen(!open);
+				}}
+			>
+				<ListVideo size={21} />
+			</PlayerButton>
+			{open ? (
+				<div
+					role="dialog"
+					aria-label={t.player.chapters}
+					className="menu-in absolute right-0 bottom-full mb-3 flex max-h-[min(34rem,60dvh)] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-md bg-neutral-950/90 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-md"
+				>
+					<div className="text-small flex flex-none items-center justify-between px-4 pt-3 pb-2 font-semibold text-white/60">
+						{t.player.chapters}
+						<span className="tabular">{chapters.length}</span>
+					</div>
+					<ol ref={list} className="min-h-0 overflow-y-auto overscroll-contain px-1.5 pb-1.5">
+						{chapters.map((chapter, index) => {
+							const end = chapters[index + 1]?.at_ms ?? duration * 1000;
+							const current = now >= chapter.at_ms && now < end;
+							return (
+								<li key={chapter.at_ms}>
+									<button
+										type="button"
+										aria-current={current ? 'true' : undefined}
+										onClick={() => {
+											onSeek(chapter.at_ms / 1000);
+											setOpen(false);
+										}}
+										className="group/chapter relative flex w-full items-center gap-3 rounded-sm p-2 text-left transition-colors hover:bg-white/10 aria-[current=true]:bg-white/12"
+									>
+										{current ? (
+											<span className="absolute inset-y-2 left-0 w-0.5 rounded-xs bg-[var(--accent)]" />
+										) : null}
+										{chapter.game ? (
+											<img
+												src={boxArt(chapter.game)}
+												alt=""
+												loading="lazy"
+												referrerPolicy="no-referrer"
+												className="h-14 w-[2.625rem] flex-none rounded-xs bg-white/10 object-cover"
+											/>
+										) : (
+											<span className="grid h-14 w-[2.625rem] flex-none place-items-center rounded-xs bg-white/10">
+												<MonitorPlay size={18} className="opacity-70" />
+											</span>
+										)}
+										<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+											<span className="text-ui truncate font-semibold">
+												{chapter.game ?? chapter.title}
+											</span>
+											{chapter.game && chapter.title ? (
+												<span className="text-small truncate text-white/60">
+													{chapter.title}
+												</span>
+											) : null}
+										</span>
+										<span className="text-small tabular flex flex-none flex-col items-end gap-0.5">
+											<span className="font-semibold">{formatClock(chapter.at_ms / 1000)}</span>
+											<span className="text-white/60">
+												{formatDuration(Math.max(0, end - chapter.at_ms))}
+											</span>
+										</span>
+									</button>
+								</li>
+							);
+						})}
+					</ol>
+				</div>
+			) : null}
+		</div>
+	);
+}
+
+/** A broadcast still being recorded can't be watched yet: it opens once it ends. */
+function StillRecording({ stream }: { stream: StreamDetail }) {
+	const t = useT();
+	const login = stream.streamer_login;
+	return (
+		<div className="grid min-h-dvh place-items-center px-4 py-20">
+			<div className="panel-in flex max-w-md flex-col items-center gap-4 text-center">
+				<Avatar src={stream.streamer_avatar} name={stream.streamer_name} size={72} live />
+				<p className="text-small text-live flex items-center gap-2 font-semibold">
+					<LiveDot size={8} />
+					{t.stream.recordingNow}
+				</p>
+				<h1 className="text-title font-semibold tracking-tight">{stream.title || t.stream.untitled}</h1>
+				<p className="text-body text-muted">{t.stream.recordingLead}</p>
+				<div className="mt-2 flex flex-wrap justify-center gap-2">
+					<a href={`https://www.twitch.tv/${login}`} target="_blank" rel="noreferrer">
+						<Button variant="accent" tabIndex={-1}>
+							{t.channel.watchOnTwitch}
+						</Button>
+					</a>
+					<Link to="/$login" params={{ login }}>
+						<Button tabIndex={-1}>{stream.streamer_name}</Button>
+					</Link>
+				</div>
 			</div>
 		</div>
 	);

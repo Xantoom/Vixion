@@ -19,9 +19,11 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - Downloads of the video, the chat as JSON and as ASS subtitles, or both.
 - Search bar for Twitch channels with suggestions; each channel has a page with its banner,
   live broadcast, recordings and past broadcasts still on Twitch, and an add button.
-- Studio player: full-height video with chat beside it, timeline cut into chapters by
-  category, seeking on press, keyboard shortcuts, full screen, and a compressor that evens out
-  loud and quiet moments.
+- Studio player: full-height video with chat filling the rest of the width, timeline and
+  chapter list by category, seeking on press, keyboard shortcuts, full screen, and a compressor
+  that evens out loud and quiet moments. The chat shows the last hundred messages at the
+  playhead and older ones on scrolling up. A broadcast still being recorded opens once it ends.
+- Administration page gathering statistics, logs, users and settings.
 - Recordings are deleted after 14 days unless kept forever; per-streamer retention.
 - Accounts with roles and per-person permissions; statistics, logs and alerts by webhook.
 - Built-in HTTPS for the video address, with Let's Encrypt certificates through Cloudflare DNS.

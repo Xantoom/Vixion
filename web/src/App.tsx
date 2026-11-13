@@ -10,6 +10,7 @@ import { usePrefs } from './stores/prefs';
 import { Button } from './ui/Button';
 import { PageLoading } from './ui/Spinner';
 import { Toasts } from './ui/Toasts';
+import { Tooltips } from './ui/Tooltips';
 
 /**
  * Who is here decides what shows: the first-run page, the sign-in page, or the app. The sign-in
@@ -65,6 +66,7 @@ export function App() {
 		<>
 			{page}
 			<Toasts />
+			<Tooltips />
 		</>
 	);
 }

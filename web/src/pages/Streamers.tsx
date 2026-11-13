@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Clock3, Film, HardDrive, Search } from 'lucide-react';
+import { CalendarDays, Film, Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '@/i18n';
 import { type Streamer, api } from '@/lib/api';
-import { formatBytes, formatDuration, formatNumber, formatRelative } from '@/lib/format';
+import { formatRelative } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
@@ -76,65 +76,32 @@ export function StreamersPage() {
 	);
 }
 
-/** The red pill of a channel on air, with what Vixion is doing about it. */
-export function LiveBadge({ streamer, className = '' }: { streamer: Streamer; className?: string }) {
+/** The red dot of a channel on air. */
+export function LiveDot({ size = 10, className = '' }: { size?: number; className?: string }) {
 	const t = useT();
-	const recording = streamer.recording;
-	const label = recording
-		? recording.state === 'ad'
-			? t.streamers.ad
-			: recording.state === 'waiting'
-				? t.streamers.waiting
-				: t.streamers.recording
-		: t.streamers.live;
 	return (
 		<span
-			className={`bg-live text-live-ink text-caption inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold shadow-sm ${className}`}
-		>
-			<span className="live-dot size-2 rounded-full bg-white" />
-			{label}
-			{recording ? (
-				<span className="tabular font-medium opacity-85">{formatDuration(recording.duration_ms)}</span>
-			) : null}
-		</span>
+			role="img"
+			aria-label={t.streamers.live}
+			data-tip={t.streamers.live}
+			className={`live-dot bg-live inline-block flex-none rounded-full ${className}`}
+			style={{ width: size, height: size }}
+		/>
 	);
 }
 
-/** What a channel is doing, in a line: its game when live, its last broadcast otherwise. */
-export function StreamerStatus({ streamer }: { streamer: Streamer }) {
-	const t = useT();
-	if (streamer.live) {
-		return (
-			<span className="text-small text-ink-2 truncate" title={streamer.live.title ?? undefined}>
-				{streamer.live.game ?? streamer.live.title}
-			</span>
-		);
-	}
-	if (!streamer.monitored) return <span className="text-small text-muted">{t.streamers.paused}</span>;
-	return (
-		<span className="text-small text-muted truncate">
-			{streamer.last_stream_at
-				? t.streamers.lastStream(formatRelative(streamer.last_stream_at))
-				: t.streamers.noStreams}
-		</span>
-	);
-}
-
-/** A picture behind a channel: its latest recording, its Twitch banner, or its avatar blurred. */
-export function Cover({
+/** A channel's Twitch banner, or its avatar blurred when it has none. */
+export function Banner({
 	streamer,
 	className = '',
 }: {
-	streamer: Pick<Streamer, 'cover_stream_id' | 'banner_url' | 'avatar_url'>;
+	streamer: Pick<Streamer, 'banner_url' | 'avatar_url'>;
 	className?: string;
 }) {
-	const src = streamer.cover_stream_id
-		? `/api/streams/${streamer.cover_stream_id}/thumbnail`
-		: (streamer.banner_url ?? null);
-	if (src) {
+	if (streamer.banner_url) {
 		return (
 			<img
-				src={src}
+				src={streamer.banner_url}
 				alt=""
 				loading="lazy"
 				decoding="async"
@@ -149,66 +116,55 @@ export function Cover({
 			alt=""
 			loading="lazy"
 			referrerPolicy="no-referrer"
-			className={`size-full scale-125 object-cover opacity-70 blur-2xl saturate-150 ${className}`}
+			className={`size-full scale-125 object-cover opacity-60 blur-2xl saturate-150 ${className}`}
 		/>
 	) : (
 		<div className="bg-surface-2 size-full" />
 	);
 }
 
-function Stat({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
-	return (
-		<span className="text-caption text-muted tabular inline-flex items-center gap-1.5" title={label}>
-			{icon}
-			{children}
-		</span>
-	);
-}
-
 function StreamerCard({ streamer }: { streamer: Streamer }) {
 	const t = useT();
 	const live = streamer.live !== null || streamer.recording !== null;
+	const lastLive = streamer.live?.since ?? streamer.last_stream_at;
 	return (
 		<Link
 			to="/$login"
 			params={{ login: streamer.login }}
-			className={`group bg-card ring-line flex h-full flex-col overflow-hidden rounded-lg shadow-(--shadow-card) ring-1 transition-[box-shadow,translate] duration-200 hover:-translate-y-0.5 hover:shadow-(--shadow-lift) ${live ? 'ring-live/50' : ''}`}
+			className={`group bg-card ring-line flex h-full flex-col overflow-hidden rounded-md shadow-(--shadow-card) ring-1 transition-[box-shadow,translate] duration-200 hover:-translate-y-0.5 hover:shadow-(--shadow-lift) ${streamer.monitored ? '' : 'opacity-60'}`}
 		>
-			<div className="bg-surface-2 relative aspect-[16/7] overflow-hidden">
-				<Cover
+			<div className="bg-surface-2 relative aspect-[3/1] overflow-hidden">
+				<Banner
 					streamer={streamer}
-					className={`transition-transform duration-500 ease-(--ease-out-soft) group-hover:scale-[1.04] ${streamer.monitored ? '' : 'grayscale'}`}
+					className="transition-transform duration-500 ease-(--ease-out-soft) group-hover:scale-[1.04]"
 				/>
-				<div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
-				{live ? <LiveBadge streamer={streamer} className="absolute top-3 left-3" /> : null}
-				{streamer.live?.viewers ? (
-					<span className="bg-tip/80 text-tip-ink text-caption tabular absolute top-3 right-3 rounded-full px-2.5 py-1 font-medium backdrop-blur-sm">
-						{t.channel.viewers(formatNumber(streamer.live.viewers))}
-					</span>
-				) : null}
 			</div>
-			<div className="flex flex-1 flex-col px-4 pb-4">
-				<div className="flex items-end gap-3">
-					<span className="bg-card relative -mt-8 flex-none rounded-full p-1">
-						<Avatar src={streamer.avatar_url} name={streamer.display_name} size={60} />
+			<div className="flex items-center gap-3.5 px-4 pt-0 pb-4">
+				<span className="bg-card relative -mt-7 flex-none self-start rounded-full p-1">
+					<Avatar src={streamer.avatar_url} name={streamer.display_name} size={64} live={live} />
+				</span>
+				<div className="flex min-w-0 flex-1 flex-col gap-1 pt-2.5">
+					<span className="flex items-center gap-2">
+						<span className="text-lead min-w-0 truncate font-semibold tracking-tight">
+							{streamer.display_name}
+						</span>
+						{live ? <LiveDot /> : null}
 					</span>
-					<span className="text-lead min-w-0 truncate pb-1 font-semibold tracking-tight">
-						{streamer.display_name}
+					<span className="text-small text-muted flex flex-wrap items-center gap-x-4 gap-y-1">
+						<span
+							className="tabular inline-flex items-center gap-1.5"
+							data-tip={t.streamers.streams(streamer.stream_count)}
+						>
+							<Film size={15} />
+							{streamer.stream_count}
+						</span>
+						{lastLive ? (
+							<span className="inline-flex items-center gap-1.5" data-tip={t.streamers.lastLiveTip}>
+								<CalendarDays size={15} />
+								{formatRelative(lastLive)}
+							</span>
+						) : null}
 					</span>
-				</div>
-				<div className="mt-1.5 flex min-h-6 flex-col">
-					<StreamerStatus streamer={streamer} />
-				</div>
-				<div className="border-line mt-auto flex flex-wrap gap-x-4 gap-y-1 border-t pt-3">
-					<Stat icon={<Film size={15} />} label={t.streamers.streams(streamer.stream_count)}>
-						{streamer.stream_count}
-					</Stat>
-					<Stat icon={<HardDrive size={15} />} label={t.stats.space}>
-						{formatBytes(streamer.total_bytes)}
-					</Stat>
-					<Stat icon={<Clock3 size={15} />} label={t.stats.watchTime}>
-						{formatDuration(streamer.total_duration_ms)}
-					</Stat>
 				</div>
 			</div>
 		</Link>

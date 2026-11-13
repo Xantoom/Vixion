@@ -75,10 +75,10 @@ export function formatNumber(value: number): string {
 	);
 }
 
-/** 1080p60 · HEVC */
+/** 1080p60 HEVC */
 export function formatQuality(height: number | null, fps: number | null, codec: string | null): string {
 	const parts: string[] = [];
 	if (height) parts.push(`${height}p${fps && fps > 31 ? Math.round(fps) : ''}`);
 	if (codec) parts.push(codec.toUpperCase().replace('H265', 'HEVC'));
-	return parts.join(' · ');
+	return parts.join(' ');
 }

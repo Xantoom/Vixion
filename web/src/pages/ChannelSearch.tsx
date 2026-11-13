@@ -166,7 +166,7 @@ export function ChannelSearch({ onDone }: { onDone?: () => void }) {
 					}, 120);
 				}}
 				onKeyDown={onKeyDown}
-				className="bg-surface text-ui placeholder:text-muted focus:bg-bg focus:shadow-[inset_0_0_0_1px_var(--field-line)] h-11 w-full rounded-full pr-16 pl-11 transition-[background-color,box-shadow] duration-150 outline-none [&::-webkit-search-cancel-button]:hidden"
+				className="bg-surface text-ui placeholder:text-muted focus:bg-bg focus:shadow-[inset_0_0_0_1px_var(--field-line)] h-11 w-full rounded-sm pr-16 pl-11 transition-[background-color,box-shadow] duration-150 outline-none [&::-webkit-search-cancel-button]:hidden"
 			/>
 			{text ? (
 				<button
@@ -176,7 +176,7 @@ export function ChannelSearch({ onDone }: { onDone?: () => void }) {
 						setText('');
 						input.current?.focus();
 					}}
-					className="text-muted hover:text-ink absolute top-1/2 right-2 grid size-8 -translate-y-1/2 place-items-center rounded-full"
+					className="text-muted hover:text-ink absolute top-1/2 right-2 grid size-8 -translate-y-1/2 place-items-center rounded-xs"
 				>
 					<X size={16} />
 				</button>
@@ -226,7 +226,7 @@ export function ChannelSearch({ onDone }: { onDone?: () => void }) {
 									) : null}
 								</span>
 								{suggestion.watched ? (
-									<span className="text-caption bg-accent-soft text-accent-text flex-none rounded-full px-2 py-0.5 font-medium">
+									<span className="text-caption bg-accent-soft text-accent-text flex-none rounded-xs px-1.5 py-0.5 font-medium">
 										{t.channel.watched}
 									</span>
 								) : null}

@@ -9,7 +9,6 @@ import { useCan } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { PageLoading } from '@/ui/Spinner';
 import { NotFound } from './NotFound';
-import { PageHeader } from './Streamers';
 
 function Tile({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
 	return (
@@ -47,8 +46,7 @@ export function StatsPage() {
 	];
 
 	return (
-		<div className="panel-in mx-auto max-w-6xl px-4 pb-12 sm:px-6">
-			<PageHeader title={t.stats.title} />
+		<div className="panel-in pb-12">
 			<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
 				<Tile icon={<HardDrive size={16} />} label={t.stats.space} value={formatBytes(data.bytes)} />
 				<Tile icon={<Film size={16} />} label={t.stats.recordings} value={formatNumber(data.streams)} />
@@ -64,7 +62,7 @@ export function StatsPage() {
 					</span>
 				</div>
 				<div
-					className="bg-surface-2 flex h-3 gap-0.5 overflow-hidden rounded-full"
+					className="bg-surface-2 flex h-3 gap-0.5 overflow-hidden rounded-xs"
 					role="img"
 					aria-label={t.stats.storage}
 				>
@@ -115,7 +113,7 @@ export function StatsPage() {
 										<Link
 											to="/$login"
 											params={{ login: streamer.login }}
-											className="flex items-center gap-2.5 font-medium hover:underline"
+											className="flex items-center gap-2.5 font-medium"
 										>
 											<Avatar src={streamer.avatar_url} name={streamer.display_name} size={26} />
 											{streamer.display_name}
@@ -128,7 +126,7 @@ export function StatsPage() {
 											</span>
 											<div className="hidden h-1.5 flex-1 sm:block">
 												<div
-													className="bg-accent h-full min-w-0.5 rounded-full"
+													className="bg-accent h-full min-w-0.5 rounded-xs"
 													style={{ width: `${(streamer.bytes / biggest) * 100}%` }}
 												/>
 											</div>

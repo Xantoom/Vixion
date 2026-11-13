@@ -121,10 +121,10 @@ export function Switch({
 				onClick={() => {
 					onChange(!checked);
 				}}
-				className="bg-line-2 aria-checked:bg-accent relative mt-0.5 h-6 w-10 flex-none rounded-full transition-colors duration-200"
+				className="bg-line-2 aria-checked:bg-accent relative mt-0.5 h-6 w-10 flex-none rounded-sm transition-colors duration-200"
 			>
 				<span
-					className={`absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-(--ease-spring) ${checked ? 'translate-x-4' : ''}`}
+					className={`absolute top-0.5 left-0.5 size-5 rounded-xs bg-white shadow-sm transition-transform duration-200 ease-(--ease-spring) ${checked ? 'translate-x-4' : ''}`}
 				/>
 			</button>
 		</div>
