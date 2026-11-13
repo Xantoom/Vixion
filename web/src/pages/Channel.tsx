@@ -3,9 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import {
 	BadgeCheck,
 	Bookmark,
-	BookmarkCheck,
 	CalendarDays,
-	ChevronDown,
 	CircleStop,
 	ExternalLink,
 	Eye,
@@ -14,7 +12,7 @@ import {
 	HardDrive,
 	Play,
 	Plus,
-	SlidersHorizontal,
+	Settings2,
 	Timer,
 	Trash2,
 	TriangleAlert,
@@ -45,8 +43,7 @@ import { useCan, useRouteParams } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { Confirm, Dialog } from '@/ui/Dialog';
-import { NumberInput, Segmented, Switch } from '@/ui/Field';
-import { Menu, MenuDivider, MenuItem } from '@/ui/Menu';
+import { NumberInput, Segmented } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
@@ -244,9 +241,10 @@ function Hero({ data, name }: { data: Page; name: string }) {
 						rel="noreferrer"
 						aria-label={t.streamer.openTwitch}
 						data-tip={t.streamer.openTwitch}
-						className="text-muted hover:text-ink hover:bg-surface grid size-10 place-items-center rounded-sm transition-colors"
+						className="text-ui text-ink-2 hover:text-ink hover:bg-surface flex h-10 items-center gap-2 rounded-sm px-3 font-medium transition-colors max-sm:w-10 max-sm:justify-center max-sm:px-0"
 					>
-						<ExternalLink size={19} />
+						<ExternalLink size={17} />
+						<span className="max-sm:hidden">Twitch</span>
 					</a>
 				</div>
 			</div>
@@ -337,82 +335,83 @@ function AddButton({ login, name }: { login: string; name: string }) {
 	);
 }
 
+/** Whether new broadcasts are recorded, switched right here; a plain status for those who can't. */
+function RecordSwitch({ streamer }: { streamer: Streamer }) {
+	const t = useT();
+	const client = useQueryClient();
+	const canManage = useCan('streamers.manage');
+	const [busy, setBusy] = useState(false);
+	if (!canManage) {
+		return (
+			<span className="text-small text-muted mr-1 font-medium">
+				{streamer.monitored ? t.channel.watched : t.streamers.paused}
+			</span>
+		);
+	}
+	const toggle = async () => {
+		setBusy(true);
+		try {
+			await api.patch(`/streamers/${streamer.id}`, { monitored: !streamer.monitored });
+			await Promise.all([
+				client.invalidateQueries({ queryKey: ['channel'] }),
+				client.invalidateQueries({ queryKey: streamersQuery.queryKey }),
+			]);
+			toast.ok(
+				streamer.monitored
+					? t.streamer.recordOff(streamer.display_name)
+					: t.streamer.recordOn(streamer.display_name),
+			);
+		} catch (error) {
+			toast.error(error);
+		} finally {
+			setBusy(false);
+		}
+	};
+	return (
+		<button
+			type="button"
+			role="switch"
+			aria-checked={streamer.monitored}
+			aria-busy={busy || undefined}
+			onClick={busy ? undefined : () => void toggle()}
+			className="group text-ui hover:bg-surface flex h-10 items-center gap-2.5 rounded-sm px-3 font-medium transition-colors max-sm:-ml-3"
+		>
+			{t.streamer.record}
+			<span className="bg-line-2 group-aria-checked:bg-accent-fill relative h-6 w-10 flex-none rounded-sm transition-colors duration-200">
+				<span className="absolute top-1 left-1 size-4 rounded-xs bg-white shadow-sm transition-transform duration-200 ease-(--ease-spring) group-aria-checked:translate-x-4" />
+			</span>
+		</button>
+	);
+}
+
 function StreamerActions({ streamer }: { streamer: Streamer }) {
 	const t = useT();
 	const canManage = useCan('streamers.manage');
-	const [options, setOptions] = useState(false);
-	const [removing, setRemoving] = useState(false);
-	const [stopping, setStopping] = useState(false);
+	const [settings, setSettings] = useState(false);
 	return (
 		<>
-			<span
-				className={`text-small mr-2 inline-flex items-center gap-1.5 font-semibold ${streamer.monitored ? 'text-accent-text' : 'text-muted'}`}
-			>
-				<BookmarkCheck size={17} />
-				{streamer.monitored ? t.channel.watched : t.streamers.paused}
-			</span>
+			<RecordSwitch streamer={streamer} />
 			{canManage ? (
 				<>
-					<Menu
-						label={t.streamer.options}
-						trigger={() => (
-							<Button>
-								<SlidersHorizontal size={17} />
-								{t.streamer.options}
-								<ChevronDown size={16} className="text-muted -mr-1" />
-							</Button>
-						)}
+					<Button
+						aria-label={t.streamer.settingsTitle(streamer.display_name)}
+						data-tip={t.streamer.settingsTitle(streamer.display_name)}
+						onClick={() => {
+							setSettings(true);
+						}}
+						className="max-sm:w-10 max-sm:px-0"
 					>
-						<MenuItem
-							icon={<SlidersHorizontal size={16} />}
-							onSelect={() => {
-								setOptions(true);
+						<Settings2 size={17} />
+						<span className="max-sm:hidden">{t.streamer.settings}</span>
+					</Button>
+					{settings ? (
+						<SettingsDialog
+							streamer={streamer}
+							onClose={() => {
+								setSettings(false);
 							}}
-						>
-							{t.streamer.options}
-						</MenuItem>
-						{streamer.recording ? (
-							<MenuItem
-								icon={<CircleStop size={16} />}
-								onSelect={() => {
-									setStopping(true);
-								}}
-							>
-								{t.streamer.stop}
-							</MenuItem>
-						) : null}
-						<MenuDivider />
-						<MenuItem
-							danger
-							icon={<Trash2 size={16} />}
-							onSelect={() => {
-								setRemoving(true);
-							}}
-						>
-							{t.streamer.remove}
-						</MenuItem>
-					</Menu>
-					<OptionsDialog
-						streamer={streamer}
-						open={options}
-						onClose={() => {
-							setOptions(false);
-						}}
-					/>
-					<RemoveDialog
-						streamer={streamer}
-						open={removing}
-						onClose={() => {
-							setRemoving(false);
-						}}
-					/>
-					<StopDialog
-						streamer={streamer}
-						open={stopping}
-						onClose={() => {
-							setStopping(false);
-						}}
-					/>
+						/>
+					) : null}
 				</>
 			) : null}
 		</>
@@ -668,21 +667,22 @@ function VideoCard({ video }: { video: TwitchVideo }) {
 
 type RetentionChoice = 'default' | 'forever' | 'custom';
 
-function OptionsDialog({ streamer, open, onClose }: { streamer: Streamer; open: boolean; onClose: () => void }) {
+/** How long recordings stay, cutting the broadcast on air, and deleting the streamer. */
+function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: () => void }) {
 	const t = useT();
 	const client = useQueryClient();
-	const [monitored, setMonitored] = useState(streamer.monitored);
 	const initial: RetentionChoice =
 		streamer.retention_days === null ? 'default' : streamer.retention_days === 0 ? 'forever' : 'custom';
 	const [choice, setChoice] = useState<RetentionChoice>(initial);
 	const [days, setDays] = useState(streamer.retention_days || 30);
 	const [busy, setBusy] = useState(false);
+	const [removing, setRemoving] = useState(false);
+	const [stopping, setStopping] = useState(false);
 
 	const save = async () => {
 		setBusy(true);
 		try {
 			await api.patch(`/streamers/${streamer.id}`, {
-				monitored,
 				retention_days: choice === 'default' ? null : choice === 'forever' ? 0 : days,
 			});
 			await Promise.all([
@@ -700,9 +700,9 @@ function OptionsDialog({ streamer, open, onClose }: { streamer: Streamer; open: 
 
 	return (
 		<Dialog
-			open={open}
+			open
 			onClose={onClose}
-			title={t.streamer.options}
+			title={t.streamer.settingsTitle(streamer.display_name)}
 			footer={
 				<>
 					<Button variant="ghost" onClick={onClose}>
@@ -715,12 +715,6 @@ function OptionsDialog({ streamer, open, onClose }: { streamer: Streamer; open: 
 			}
 		>
 			<div className="flex flex-col gap-6">
-				<Switch
-					checked={monitored}
-					onChange={setMonitored}
-					label={t.streamer.monitored}
-					hint={t.streamer.monitoredHint}
-				/>
 				<div className="flex flex-col gap-3">
 					<span className="text-ui font-medium">{t.streamer.retention}</span>
 					<Segmented
@@ -744,7 +738,50 @@ function OptionsDialog({ streamer, open, onClose }: { streamer: Streamer; open: 
 						/>
 					) : null}
 				</div>
+				{streamer.recording ? (
+					<div className="bg-surface ring-line flex flex-wrap items-center justify-between gap-3 rounded-md px-4 py-3 ring-1">
+						<span className="text-ui text-live flex items-center gap-2 font-medium">
+							<LiveDot size={8} />
+							{t.streamer.liveNow}
+						</span>
+						<Button
+							size="sm"
+							onClick={() => {
+								setStopping(true);
+							}}
+						>
+							<CircleStop size={15} />
+							{t.streamer.stop}
+						</Button>
+					</div>
+				) : null}
+				<div className="border-line -mx-6 border-t px-6 pt-4">
+					<Button
+						variant="danger-ghost"
+						className="-ml-3"
+						onClick={() => {
+							setRemoving(true);
+						}}
+					>
+						<Trash2 size={16} />
+						{t.streamer.remove}
+					</Button>
+				</div>
 			</div>
+			<RemoveDialog
+				streamer={streamer}
+				open={removing}
+				onClose={() => {
+					setRemoving(false);
+				}}
+			/>
+			<StopDialog
+				streamer={streamer}
+				open={stopping}
+				onClose={() => {
+					setStopping(false);
+				}}
+			/>
 		</Dialog>
 	);
 }

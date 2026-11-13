@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { Spinner } from './Spinner';
 
-type Variant = 'accent' | 'secondary' | 'ghost' | 'danger';
+type Variant = 'accent' | 'secondary' | 'ghost' | 'danger' | 'danger-ghost';
 
 const VARIANTS: Record<Variant, string> = {
 	accent: 'bg-accent-fill text-accent-ink font-semibold hover:brightness-[1.07] disabled:opacity-45',
@@ -9,6 +9,8 @@ const VARIANTS: Record<Variant, string> = {
 	secondary: 'text-ink font-medium shadow-[inset_0_0_0_1px_var(--field-line)] hover:bg-surface disabled:opacity-45',
 	ghost: 'text-ink-2 font-medium hover:bg-surface hover:text-ink disabled:opacity-45',
 	danger: 'bg-danger text-white font-semibold hover:brightness-[1.07] disabled:opacity-45',
+	// A destructive action that is not the point of where it sits: red words, no fill.
+	'danger-ghost': 'text-danger font-medium hover:bg-danger-soft disabled:opacity-45',
 };
 
 export function Button({

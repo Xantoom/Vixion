@@ -291,7 +291,7 @@ function Footer({
 	return (
 		<>
 			{onDelete ? (
-				<Button variant="ghost" className="text-danger mr-auto -ml-3" onClick={onDelete}>
+				<Button variant="danger-ghost" className="mr-auto -ml-3" onClick={onDelete}>
 					{t.common.delete}
 				</Button>
 			) : null}
