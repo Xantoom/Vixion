@@ -96,7 +96,44 @@ export function StatsPage() {
 			</Card>
 
 			<Card title={t.stats.perStreamer} count={data.streamers.length} flush>
-				<div className="overflow-x-auto">
+				{/* On a phone, one block per streamer instead of five columns. */}
+				<ul className="divide-line divide-y sm:hidden">
+					{data.streamers.map((streamer) => (
+						<li key={streamer.id} className="flex flex-col gap-2 px-5 py-3">
+							<div className="flex items-center gap-2.5">
+								<Link
+									to="/$login"
+									params={{ login: streamer.login }}
+									className="text-small flex min-w-0 flex-1 items-center gap-2.5 font-semibold"
+								>
+									<Avatar src={streamer.avatar_url} name={streamer.display_name} size={28} />
+									<span className="truncate">{streamer.display_name}</span>
+								</Link>
+								<span className="text-small tabular flex-none font-medium">
+									{formatBytes(streamer.bytes)}
+								</span>
+							</div>
+							<div className="h-1.5">
+								<div
+									className="bg-accent h-full min-w-0.5 rounded-xs"
+									style={{ width: `${(streamer.bytes / biggest) * 100}%` }}
+								/>
+							</div>
+							<p className="text-caption text-muted tabular flex flex-wrap gap-x-3">
+								<span>
+									{t.stats.count} {streamer.streams}
+								</span>
+								<span>
+									{t.stats.duration} {formatDuration(streamer.duration_ms)}
+								</span>
+								<span>
+									{t.stats.kept} {streamer.kept}
+								</span>
+							</p>
+						</li>
+					))}
+				</ul>
+				<div className="overflow-x-auto max-sm:hidden">
 					<table className="text-small w-full min-w-[34rem]">
 						<thead className="text-caption text-muted text-left">
 							<tr>

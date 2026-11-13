@@ -223,7 +223,7 @@ function Console() {
 					onChange={(event) => {
 						setFilter(event.target.value);
 					}}
-					className="h-9 max-w-xs flex-1"
+					className="h-9 min-w-40 flex-[1_1_12rem] sm:max-w-xs"
 				/>
 			</div>
 			<div
@@ -240,13 +240,13 @@ function Console() {
 					shown.map((line) => (
 						<div
 							key={`${line.id}-${line.at}`}
-							className="hover:bg-surface flex gap-3 rounded-[3px] px-1 whitespace-pre-wrap"
+							className="hover:bg-surface flex flex-wrap gap-x-3 rounded-[3px] px-1 whitespace-pre-wrap sm:flex-nowrap"
 						>
 							<span className="text-muted flex-none tabular">{time(line.at)}</span>
 							<span className={`w-11 flex-none uppercase ${LEVEL_STYLE[line.level] ?? ''}`}>
 								{line.level}
 							</span>
-							<span className="min-w-0 break-words">
+							<span className="min-w-0 break-words max-sm:basis-full max-sm:pb-1">
 								<span className="text-ink">{line.message}</span>
 								{line.fields ? <span className="text-muted"> {line.fields}</span> : null}
 								<span className="text-muted/60"> {line.target}</span>

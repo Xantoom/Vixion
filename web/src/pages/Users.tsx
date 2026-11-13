@@ -93,11 +93,20 @@ export function UsersPage() {
 								<span className="text-ui truncate font-semibold">{user.username}</span>
 								{user.id === me.id ? <Chip>{t.users.you}</Chip> : null}
 								{user.disabled ? <Chip tone="muted">{t.users.disabled}</Chip> : null}
+								{/* On a phone the role goes under the name, which then keeps its width. */}
+								<span className="basis-full sm:hidden">
+									<Chip tone="accent">
+										{roleName(roleById.get(user.role_id))}
+										{Object.keys(user.overrides).length > 0 ? ' +' : ''}
+									</Chip>
+								</span>
 							</div>
-							<Chip tone="accent">
-								{roleName(roleById.get(user.role_id))}
-								{Object.keys(user.overrides).length > 0 ? ' +' : ''}
-							</Chip>
+							<span className="max-sm:hidden">
+								<Chip tone="accent">
+									{roleName(roleById.get(user.role_id))}
+									{Object.keys(user.overrides).length > 0 ? ' +' : ''}
+								</Chip>
+							</span>
 							<span
 								className="text-small text-muted hidden w-36 flex-none text-right sm:block"
 								data-tip={t.users.lastLogin}

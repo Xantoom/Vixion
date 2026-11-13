@@ -40,12 +40,12 @@ export function AdminLayout() {
 	};
 	const current = pages.find((page) => path.startsWith(page.to));
 	return (
-		<div className="mx-auto grid max-w-7xl gap-x-10 px-4 pt-6 pb-16 sm:px-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:pt-10">
+		<div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] gap-x-10 px-4 pt-6 pb-16 sm:px-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:pt-10">
 			<nav aria-label={t.nav.admin} className="max-lg:mb-6 lg:sticky lg:top-24 lg:self-start">
 				<p className="text-caption text-muted mb-2 px-3 font-semibold tracking-wide uppercase max-lg:hidden">
 					{t.nav.admin}
 				</p>
-				<ul className="flex gap-1 overflow-x-auto lg:flex-col">
+				<ul className="grid grid-cols-2 gap-1 sm:flex sm:overflow-x-auto lg:flex-col">
 					{pages.map((page) => (
 						<li key={page.to} className="flex-none">
 							<Link
