@@ -257,6 +257,21 @@ export function ChatPanel({
 		latest.current = { lines, following, pin, showOlder };
 	});
 
+	// Emotes and badges load after their lines and make them taller: the panel stays at the bottom.
+	const content = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		const element = scroller.current;
+		const inner = content.current;
+		if (!element || !inner) return;
+		const observer = new ResizeObserver(() => {
+			if (latest.current.following) element.scrollTop = element.scrollHeight;
+		});
+		observer.observe(inner);
+		return () => {
+			observer.disconnect();
+		};
+	}, []);
+
 	useEffect(() => {
 		const element = scroller.current;
 		if (!element) return;
@@ -280,27 +295,29 @@ export function ChatPanel({
 		<div className="relative flex min-h-0 flex-1 flex-col">
 			<div
 				ref={scroller}
-				className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain py-2 [overflow-anchor:auto] [overflow-wrap:anywhere]"
+				className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain [overflow-wrap:anywhere] ${following ? '[overflow-anchor:none]' : '[overflow-anchor:auto]'}`}
 			>
-				{!hasChat ? (
-					<p className="text-small text-muted px-3 py-6 text-center">{t.player.noChat}</p>
-				) : visible.length === 0 ? (
-					<div className="text-small text-muted grid place-items-center px-3 py-6 text-center">
-						{loading ? <Spinner /> : t.player.chatEmpty}
-					</div>
-				) : (
-					<ul className="flex flex-col">
-						{visible.map((line) => (
-							<Line
-								key={`${line.o}-${line.i ?? line.t}`}
-								line={line}
-								deleted={deleted(line)}
-								assets={assets}
-								onSeek={onSeek}
-							/>
-						))}
-					</ul>
-				)}
+				<div ref={content} className="py-2">
+					{!hasChat ? (
+						<p className="text-small text-muted px-3 py-6 text-center">{t.player.noChat}</p>
+					) : visible.length === 0 ? (
+						<div className="text-small text-muted grid place-items-center px-3 py-6 text-center">
+							{loading ? <Spinner /> : t.player.chatEmpty}
+						</div>
+					) : (
+						<ul className="flex flex-col">
+							{visible.map((line) => (
+								<Line
+									key={`${line.o}-${line.i ?? line.t}`}
+									line={line}
+									deleted={deleted(line)}
+									assets={assets}
+									onSeek={onSeek}
+								/>
+							))}
+						</ul>
+					)}
+				</div>
 			</div>
 			{following ? null : (
 				<button
