@@ -8,7 +8,6 @@ use axum::extract::{Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -551,10 +550,7 @@ pub async fn logs(State(app): State<AppState>, user: CurrentUser) -> AppResult<J
 }
 
 /// New log lines as they happen, as server-sent events.
-pub async fn logs_live(
-    State(app): State<AppState>,
-    user: CurrentUser,
-) -> AppResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
+pub async fn logs_live(State(app): State<AppState>, user: CurrentUser) -> AppResult<impl IntoResponse> {
     user.require("logs.view")?;
     let receiver = app.logs.subscribe();
     let stream = futures_util::stream::unfold(receiver, |mut receiver| async move {
@@ -570,7 +566,11 @@ pub async fn logs_live(
             }
         }
     });
-    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+    // Something is sent at once: a proxy (the dev server, nginx…) holds the headers back until the
+    // first bytes, which left the console "disconnected" until the first keep-alive.
+    let hello = futures_util::stream::once(async { Ok::<_, Infallible>(Event::default().comment("connected")) });
+    let stream = futures_util::StreamExt::chain(hello, stream);
+    Ok(([("x-accel-buffering", "no")], Sse::new(stream).keep_alive(KeepAlive::default())))
 }
 
 pub async fn alerts(State(app): State<AppState>, user: CurrentUser) -> AppResult<Json<Vec<Alert>>> {
