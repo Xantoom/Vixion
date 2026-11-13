@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { CircleDot, Clock3, Film, HardDrive, TriangleAlert } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import { useT } from '@/i18n';
 import { type Folder, type Stats, api } from '@/lib/api';
 import { formatBytes, formatDuration, formatNumber } from '@/lib/format';
@@ -11,14 +10,10 @@ import { Card, Facts } from '@/ui/Card';
 import { PageLoading } from '@/ui/Spinner';
 import { NotFound } from './NotFound';
 
-function Tile({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
+function Tile({ label, value }: { label: string; value: string }) {
 	return (
-		// Values line up at the bottom when a label takes two lines.
-		<div className="bg-card ring-line flex flex-col justify-between gap-3 rounded-md px-5 py-5 ring-1">
-			<span className="text-small text-muted flex items-start gap-2 font-medium">
-				<span className="mt-0.5 flex-none">{icon}</span>
-				{label}
-			</span>
+		<div className="bg-card ring-line flex flex-col justify-between gap-4 rounded-md p-6 ring-1">
+			<span className="text-small text-muted font-medium">{label}</span>
 			<span className="text-heading tabular font-semibold tracking-tight">{value}</span>
 		</div>
 	);
@@ -49,166 +44,136 @@ export function StatsPage() {
 
 	return (
 		<div className="panel-in flex flex-col gap-8">
-			<div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-				<Tile icon={<HardDrive size={16} />} label={t.stats.space} value={formatBytes(data.bytes)} />
-				<Tile icon={<Film size={16} />} label={t.stats.recordings} value={formatNumber(data.streams)} />
-				<Tile icon={<Clock3 size={16} />} label={t.stats.watchTime} value={formatDuration(data.duration_ms)} />
-				<Tile icon={<CircleDot size={16} />} label={t.stats.recordingNow} value={String(data.recording)} />
+			<div className="grid gap-4 lg:grid-cols-3">
+				{/* The disk first: how much the recordings take, and how much room is left. */}
+				<section className="bg-card ring-line flex flex-col justify-between gap-6 rounded-md p-6 ring-1 lg:col-span-2">
+					<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+						<div className="flex flex-col gap-2">
+							<h2 className="text-small text-muted font-medium">{t.stats.space}</h2>
+							<span className="text-display tabular font-semibold tracking-tight">
+								{formatBytes(data.bytes)}
+							</span>
+						</div>
+						{disk.total > 0 ? (
+							<span className="text-small text-muted tabular pb-1">
+								{t.stats.diskFree(formatBytes(disk.free), formatBytes(disk.total))}
+							</span>
+						) : null}
+					</div>
+					{disk.total > 0 ? (
+						<div className="flex flex-col gap-4">
+							<div
+								className="bg-surface-2 flex h-2.5 gap-0.5 overflow-hidden rounded-xs"
+								role="img"
+								aria-label={t.stats.storage}
+							>
+								{segments.map((segment) =>
+									segment.value > 0 ? (
+										<div
+											key={segment.label}
+											data-tip={`${segment.label} ${formatBytes(segment.value)}`}
+											className={`${segment.className} h-full min-w-1 transition-[width] duration-500`}
+											style={{ width: `${share(segment.value)}%` }}
+										/>
+									) : null,
+								)}
+							</div>
+							<ul className="text-small text-ink-2 flex flex-wrap gap-x-7 gap-y-2">
+								{segments.map((segment) => (
+									<li key={segment.label} className="flex items-center gap-2">
+										<span className={`${segment.className} size-2.5 rounded-xs`} />
+										{segment.label}
+										<span className="text-muted tabular">{formatBytes(segment.value)}</span>
+									</li>
+								))}
+								<li className="flex items-center gap-2">
+									<span className="bg-surface-2 ring-line-2 size-2.5 rounded-xs ring-1" />
+									{t.stats.free}
+									<span className="text-muted tabular">{formatBytes(disk.free)}</span>
+								</li>
+							</ul>
+						</div>
+					) : null}
+				</section>
+				<div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
+					<Tile label={t.stats.recordings} value={formatNumber(data.streams)} />
+					<Tile label={t.stats.watchTime} value={formatDuration(data.duration_ms)} />
+				</div>
 			</div>
 
-			<Card
-				title={t.stats.storage}
-				actions={
-					<span className="text-small text-muted tabular">
-						{t.stats.diskFree(formatBytes(disk.free), formatBytes(disk.total))}
-					</span>
-				}
-			>
-				<div
-					className="bg-surface-2 flex h-3 gap-0.5 overflow-hidden rounded-xs"
-					role="img"
-					aria-label={t.stats.storage}
-				>
-					{segments.map((segment) =>
-						segment.value > 0 ? (
-							<div
-								key={segment.label}
-								data-tip={`${segment.label} ${formatBytes(segment.value)}`}
-								className={`${segment.className} h-full min-w-1 transition-[width] duration-500`}
-								style={{ width: `${share(segment.value)}%` }}
-							/>
-						) : null,
-					)}
-				</div>
-				<ul className="text-small text-ink-2 mt-4 flex flex-wrap gap-x-7 gap-y-2">
-					{segments.map((segment) => (
-						<li key={segment.label} className="flex items-center gap-2">
-							<span className={`${segment.className} size-2.5 rounded-xs`} />
-							{segment.label}
-							<span className="text-muted tabular">{formatBytes(segment.value)}</span>
-						</li>
-					))}
-					<li className="flex items-center gap-2">
-						<span className="bg-surface-2 ring-line-2 size-2.5 rounded-xs ring-1" />
-						{t.stats.free}
-						<span className="text-muted tabular">{formatBytes(disk.free)}</span>
-					</li>
-				</ul>
-			</Card>
-
-			<Card title={t.stats.perStreamer} count={data.streamers.length} flush>
-				{/* On a phone, one block per streamer instead of five columns. */}
-				<ul className="divide-line divide-y sm:hidden">
-					{data.streamers.map((streamer) => (
-						<li key={streamer.id} className="flex flex-col gap-2.5 px-6 py-4">
-							<div className="flex items-center gap-2.5">
+			{data.streamers.length > 0 ? (
+				<Card title={t.stats.perStreamer} flush>
+					<ul className="divide-line divide-y">
+						{data.streamers.map((streamer) => (
+							<li key={streamer.id}>
 								<Link
 									to="/$login"
 									params={{ login: streamer.login }}
-									className="text-small flex min-w-0 flex-1 items-center gap-2.5 font-semibold"
+									className="hover:bg-surface flex min-h-18 items-center gap-4 px-6 py-4 transition-colors"
 								>
-									<Avatar src={streamer.avatar_url} name={streamer.display_name} size={28} />
-									<span className="truncate">{streamer.display_name}</span>
-								</Link>
-								<span className="text-small tabular flex-none font-medium">
-									{formatBytes(streamer.bytes)}
-								</span>
-							</div>
-							<div className="h-1.5">
-								<div
-									className="bg-accent-fill h-full min-w-0.5 rounded-xs"
-									style={{ width: `${(streamer.bytes / biggest) * 100}%` }}
-								/>
-							</div>
-							<p className="text-caption text-muted tabular flex flex-wrap gap-x-3">
-								<span>
-									{t.stats.count} {streamer.streams}
-								</span>
-								<span>
-									{t.stats.duration} {formatDuration(streamer.duration_ms)}
-								</span>
-								<span>
-									{t.stats.kept} {streamer.kept}
-								</span>
-							</p>
-						</li>
-					))}
-				</ul>
-				<div className="overflow-x-auto max-sm:hidden">
-					<table className="text-small w-full min-w-[34rem]">
-						<thead className="text-caption text-muted text-left">
-							<tr>
-								<th className="px-6 py-3.5 font-medium">{t.stats.streamer}</th>
-								<th className="px-6 py-3.5 font-medium">{t.stats.size}</th>
-								<th className="px-6 py-3.5 text-right font-medium">{t.stats.count}</th>
-								<th className="px-6 py-3.5 text-right font-medium">{t.stats.duration}</th>
-								<th className="px-6 py-3.5 text-right font-medium">{t.stats.kept}</th>
-							</tr>
-						</thead>
-						<tbody>
-							{data.streamers.map((streamer) => (
-								<tr
-									key={streamer.id}
-									className="border-line hover:bg-surface border-t transition-colors"
-								>
-									<td className="px-6 py-4">
-										<Link
-											to="/$login"
-											params={{ login: streamer.login }}
-											className="flex items-center gap-2.5 font-semibold"
-										>
-											<Avatar src={streamer.avatar_url} name={streamer.display_name} size={28} />
-											{streamer.display_name}
-										</Link>
-									</td>
-									<td className="px-6 py-4">
-										<div className="flex items-center gap-3">
-											<span className="tabular w-16 flex-none">
-												{formatBytes(streamer.bytes)}
+									<Avatar src={streamer.avatar_url} name={streamer.display_name} size={36} />
+									<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+										<span className="text-ui truncate font-semibold">{streamer.display_name}</span>
+										<span className="text-small text-muted tabular">
+											<span className="whitespace-nowrap">
+												{t.streamers.streams(streamer.streams)}
 											</span>
-											<div className="hidden h-1.5 flex-1 sm:block">
-												<div
-													className="bg-accent-fill h-full min-w-0.5 rounded-xs"
-													style={{ width: `${(streamer.bytes / biggest) * 100}%` }}
-												/>
-											</div>
-										</div>
-									</td>
-									<td className="tabular px-6 py-4 text-right">{streamer.streams}</td>
-									<td className="tabular px-6 py-4 text-right">
-										{formatDuration(streamer.duration_ms)}
-									</td>
-									<td className="tabular px-6 py-4 text-right">{streamer.kept}</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
-			</Card>
+											{' · '}
+											<span className="whitespace-nowrap">
+												{formatDuration(streamer.duration_ms)}
+											</span>
+										</span>
+									</span>
+									{/* The size, and a bar against the biggest streamer. */}
+									<span className="flex w-20 flex-none flex-col items-end gap-2 sm:w-48">
+										<span className="text-ui tabular font-medium">
+											{formatBytes(streamer.bytes)}
+										</span>
+										<span className="bg-surface-2 h-1.5 w-full overflow-hidden rounded-xs">
+											<span
+												className="bg-accent-fill block h-full min-w-0.5 rounded-xs"
+												style={{ width: `${(streamer.bytes / biggest) * 100}%` }}
+											/>
+										</span>
+									</span>
+								</Link>
+							</li>
+						))}
+					</ul>
+				</Card>
+			) : null}
 
-			<Card title={t.stats.server} flush>
-				<Facts
-					items={[
-						[t.stats.version, data.version],
-						[t.stats.uptime, formatDuration(data.uptime_ms)],
-						...(data.folders
-							? ([
-									[t.stats.configFolder, <FolderFact key="config" folder={data.folders.config} />],
-									[
-										t.stats.recordingsFolder,
-										<FolderFact key="recordings" folder={data.folders.recordings} />,
-									],
-								] as [string, ReactNode][])
-							: []),
-					]}
-				/>
+			{/* Where the files live: the free space shows only for a folder on another disk. */}
+			<Card
+				title={t.stats.server}
+				flush
+				actions={
+					<span className="text-small text-muted tabular">
+						{data.version} · {t.stats.uptime(formatDuration(data.uptime_ms))}
+					</span>
+				}
+			>
+				{data.folders ? (
+					<Facts
+						items={[
+							[
+								t.stats.configFolder,
+								<FolderFact key="config" folder={data.folders.config} disk={disk} />,
+							],
+							[
+								t.stats.recordingsFolder,
+								<FolderFact key="recordings" folder={data.folders.recordings} disk={disk} />,
+							],
+						]}
+					/>
+				) : null}
 			</Card>
 		</div>
 	);
 }
 
 /** A folder as Vixion sees it, where it comes from on the host, and the room left on its disk. */
-function FolderFact({ folder }: { folder: Folder }) {
+function FolderFact({ folder, disk }: { folder: Folder; disk: Stats['disk'] }) {
 	const t = useT();
 	return (
 		<span className="flex flex-col items-end gap-0.5">
@@ -224,7 +189,7 @@ function FolderFact({ folder }: { folder: Folder }) {
 					{t.stats.unmapped}
 				</span>
 			) : null}
-			{folder.disk.total > 0 ? (
+			{folder.disk.total > 0 && (folder.disk.total !== disk.total || folder.disk.free !== disk.free) ? (
 				<span className="text-small text-muted">
 					{t.stats.diskFree(formatBytes(folder.disk.free), formatBytes(folder.disk.total))}
 				</span>
