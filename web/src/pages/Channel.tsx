@@ -30,6 +30,7 @@ import {
 	api,
 } from '@/lib/api';
 import { formatClock, formatDate, formatDuration, formatNumber, formatQuality, formatRelative } from '@/lib/format';
+import { watched } from '@/lib/progress';
 import { useCan, useRouteParams } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button, IconButton } from '@/ui/Button';
@@ -440,7 +441,7 @@ function OverlayButton({
 			aria-pressed={pressed}
 			disabled={disabled}
 			onClick={onClick}
-			className={`grid size-8 place-items-center rounded-sm bg-black/70 text-white backdrop-blur-sm transition-colors disabled:opacity-50 aria-pressed:bg-[var(--accent)] aria-pressed:text-[var(--accent-ink)] ${danger ? 'hover:bg-[var(--danger)]' : 'hover:bg-black/90'}`}
+			className={`grid size-8 place-items-center rounded-sm bg-black/70 text-white backdrop-blur-sm transition-colors disabled:opacity-50 aria-pressed:bg-[var(--accent)] aria-pressed:text-[var(--accent-ink)] ${danger ? 'hover:bg-[var(--danger)]' : 'hover:bg-[var(--accent)] hover:text-[var(--accent-ink)]'}`}
 		>
 			{children}
 		</button>
@@ -471,15 +472,17 @@ function StreamCard({ stream, login }: { stream: StreamSummary; login: string })
 	};
 
 	const quality = formatQuality(stream.height, stream.fps, stream.video_codec);
-	const expiresSoon = stream.expires_at !== null && stream.expires_at - Date.now() < 2 * 86_400_000;
 	const title = stream.title || t.stream.untitled;
+	const progress = recording ? null : watched(stream.id);
 	// Kept recordings show their mark at all times; the other buttons come with the pointer.
 	const reveal =
 		'opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100';
 
 	return (
 		<article className="group flex flex-col gap-3">
-			<div className="bg-surface-2 relative aspect-video overflow-hidden rounded-md">
+			<div
+				className={`bg-surface-2 relative aspect-video overflow-hidden rounded-md ${stream.keep_forever ? 'ring-accent ring-2 ring-offset-2 ring-offset-[var(--bg)]' : ''}`}
+			>
 				{stream.has_thumbnail ? (
 					<img
 						src={`/api/streams/${stream.id}/thumbnail`}
@@ -499,7 +502,7 @@ function StreamCard({ stream, login }: { stream: StreamSummary; login: string })
 				) : (
 					<Link to="/$login/$id" params={params} aria-label={title} className="absolute inset-0">
 						<span className="absolute inset-0 grid place-items-center bg-black/25 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-							<span className="grid size-14 place-items-center rounded-sm bg-white/90 text-black shadow-lg">
+							<span className="grid size-14 place-items-center rounded-full bg-white/90 text-black shadow-lg">
 								<Play size={24} fill="currentColor" className="ml-0.5" />
 							</span>
 						</span>
@@ -534,13 +537,18 @@ function StreamCard({ stream, login }: { stream: StreamSummary; login: string })
 									disabled={keeping}
 									onClick={() => void toggleKeep()}
 								>
-									{stream.keep_forever ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+									<Bookmark size={16} fill={stream.keep_forever ? 'currentColor' : 'none'} />
 								</OverlayButton>
 							</span>
 						) : null}
 					</span>
 				) : null}
-				<span className="pointer-events-none absolute inset-x-2.5 bottom-2.5 flex items-end justify-between gap-2">
+				{progress ? (
+					<span className="absolute inset-x-0 bottom-0 h-1 bg-black/50">
+						<span className="block h-full bg-[var(--accent)]" style={{ width: `${progress * 100}%` }} />
+					</span>
+				) : null}
+				<span className="pointer-events-none absolute inset-x-2.5 bottom-3 flex items-end justify-between gap-2">
 					{quality ? <Pill>{quality}</Pill> : <span />}
 					{recording ? null : <Pill>{formatClock(stream.duration_ms / 1000)}</Pill>}
 				</span>
@@ -560,13 +568,6 @@ function StreamCard({ stream, login }: { stream: StreamSummary; login: string })
 				<div className="text-caption text-muted flex flex-wrap gap-x-4 gap-y-1">
 					<Meta icon={<CalendarDays size={14} />}>{formatDate(stream.started_at)}</Meta>
 					{stream.game ? <Meta icon={<Gamepad2 size={14} />}>{stream.game}</Meta> : null}
-					{!stream.keep_forever && stream.expires_at !== null && !recording ? (
-						<Meta icon={<Timer size={14} />} className={expiresSoon ? 'text-warn font-semibold' : ''}>
-							{stream.expires_at < Date.now()
-								? t.stream.expired
-								: t.stream.expires(formatRelative(stream.expires_at))}
-						</Meta>
-					) : null}
 				</div>
 			</div>
 			<Confirm
@@ -740,7 +741,7 @@ function RemoveDialog({ streamer, open, onClose }: { streamer: Streamer; open: b
 			open={open}
 			onClose={onClose}
 			title={t.streamer.removeTitle(streamer.display_name)}
-			confirm={t.streamer.remove}
+			confirm={t.common.delete}
 			onConfirm={async () => {
 				try {
 					await api.delete(`/streamers/${streamer.id}?recordings=true`);

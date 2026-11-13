@@ -25,6 +25,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useT } from '@/i18n';
 import { ApiError, type StreamDetail, api } from '@/lib/api';
 import { formatClock, formatDate, formatDuration, formatQuality } from '@/lib/format';
+import { resumeAt, saveProgress } from '@/lib/progress';
 import { useCan, useRouteParams } from '@/lib/session';
 import { ChatPanel } from '@/player/ChatPanel';
 import { type Engine, type EngineError, type PlaybackState, createEngine } from '@/player/engine';
@@ -184,7 +185,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	}, [open]);
 
 	useEffect(() => {
-		open(initial.video_url, initial.duration_ms, 0, false);
+		open(initial.video_url, initial.duration_ms, resumeAt(initial.id), false);
 		return () => {
 			engine.current?.dispose();
 			engine.current = null;
@@ -214,6 +215,27 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 		},
 		[duration],
 	);
+
+	// The position is remembered every few seconds and on leaving, to start there next time.
+	const saved = useRef(0);
+	const position = useRef({ time: 0, duration: 0 });
+	useEffect(() => {
+		position.current = { time, duration };
+		if (Math.abs(time - saved.current) < 5) return;
+		saved.current = time;
+		saveProgress(initial.id, time, duration);
+	}, [time, duration, initial.id]);
+	useEffect(() => {
+		const save = () => {
+			const { time: at, duration: of } = position.current;
+			if (at > 0) saveProgress(initial.id, at, of);
+		};
+		window.addEventListener('pagehide', save);
+		return () => {
+			window.removeEventListener('pagehide', save);
+			save();
+		};
+	}, [initial.id]);
 
 	const seekTo = useCallback((seconds: number) => {
 		engine.current?.seek(seconds);
@@ -374,7 +396,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						type="button"
 						aria-label={t.player.play}
 						onClick={togglePlay}
-						className="absolute top-1/2 left-1/2 grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-md bg-black/45 text-white backdrop-blur-md transition-transform duration-150 hover:scale-105"
+						className="absolute top-1/2 left-1/2 grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition-transform duration-150 hover:scale-105"
 					>
 						<Play size={34} fill="currentColor" className="ml-1" />
 					</button>
@@ -568,7 +590,7 @@ function PlayerButton({
 			data-tip={label}
 			aria-pressed={pressed}
 			onClick={onClick}
-			className={`touch-target relative grid size-10 flex-none place-items-center rounded-sm text-white/90 transition-colors duration-150 hover:bg-white/15 hover:text-white aria-pressed:text-[color:var(--accent-text)] sm:size-11 ${className}`}
+			className={`touch-target relative grid size-10 flex-none place-items-center rounded-full text-white/90 transition-colors duration-150 hover:bg-white/15 hover:text-white aria-pressed:text-[color:var(--accent-text)] sm:size-11 ${className}`}
 		>
 			{children}
 			{pressed ? <span className="absolute bottom-1 size-1 rounded-full bg-current" /> : null}

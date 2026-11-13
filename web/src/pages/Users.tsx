@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { Pencil, Plus, Trash2, Users as UsersIcon } from 'lucide-react';
+import { type FormEvent, type ReactNode, useState } from 'react';
 import { useT } from '@/i18n';
 import { type Permission, type Role, type User, api } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { useCan, useMe } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button, IconButton } from '@/ui/Button';
+import { Card } from '@/ui/Card';
 import { Confirm, Dialog } from '@/ui/Dialog';
 import { Field, Segmented, Select, Switch, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
@@ -16,6 +17,19 @@ import { NotFound } from './NotFound';
 interface RolesResponse {
 	roles: Role[];
 	permissions: Permission[];
+}
+
+function Chip({ children, tone = 'plain' }: { children: ReactNode; tone?: 'plain' | 'accent' | 'muted' }) {
+	const tones = {
+		plain: 'bg-surface-2 text-ink-2',
+		accent: 'bg-accent-soft text-accent-text',
+		muted: 'bg-surface-2 text-muted',
+	};
+	return (
+		<span className={`text-caption inline-flex items-center rounded-xs px-1.5 py-0.5 font-semibold ${tones[tone]}`}>
+			{children}
+		</span>
+	);
 }
 
 function useRoleName() {
@@ -53,124 +67,141 @@ export function UsersPage() {
 	const roleById = new Map(roles.data.roles.map((role) => [role.id, role]));
 
 	return (
-		<div className="panel-in pb-12">
-			<div className="flex justify-end pb-5">
-				<Button
-					variant="accent"
-					onClick={() => {
-						setEditing('new');
-					}}
-				>
-					<Plus size={17} strokeWidth={2.4} />
-					<span className="hidden sm:inline">{t.users.add}</span>
-				</Button>
-			</div>
-
-			<ul className="border-line divide-line divide-y rounded-md border">
-				{users.data.map((user) => (
-					<li key={user.id} className="flex items-center gap-3 px-4 py-3">
-						<Avatar src={null} name={user.username} size={36} />
-						<div className="min-w-0 flex-1">
-							<div className="text-ui flex items-center gap-2 font-semibold">
-								<span className="truncate">{user.username}</span>
-								{user.id === me.id ? (
-									<span className="text-caption text-muted font-normal">({t.users.you})</span>
-								) : null}
-								{user.disabled ? (
-									<span className="bg-surface-2 text-caption text-muted rounded-xs px-1.5 font-medium">
-										{t.users.disabled}
-									</span>
-								) : null}
+		<div className="panel-in flex flex-col gap-6">
+			<Card
+				title={t.users.accounts}
+				count={users.data.length}
+				actions={
+					<Button
+						size="sm"
+						variant="accent"
+						onClick={() => {
+							setEditing('new');
+						}}
+					>
+						<Plus size={15} strokeWidth={2.4} />
+						{t.users.add}
+					</Button>
+				}
+				flush
+			>
+				<ul className="divide-line divide-y">
+					{users.data.map((user) => (
+						<li key={user.id} className="flex items-center gap-3.5 px-5 py-3">
+							<Avatar src={null} name={user.username} size={36} />
+							<div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
+								<span className="text-ui truncate font-semibold">{user.username}</span>
+								{user.id === me.id ? <Chip>{t.users.you}</Chip> : null}
+								{user.disabled ? <Chip tone="muted">{t.users.disabled}</Chip> : null}
 							</div>
-							<div className="text-caption text-muted truncate">
+							<Chip tone="accent">
 								{roleName(roleById.get(user.role_id))}
 								{Object.keys(user.overrides).length > 0 ? ' +' : ''}
-								<span className="ml-3">
-									{t.users.lastLogin}{' '}
-									{user.last_login_at ? formatRelative(user.last_login_at) : t.common.never}
-								</span>
-							</div>
-						</div>
-						<IconButton
-							label={t.common.edit}
-							onClick={() => {
-								setEditing(user);
-							}}
-						>
-							<Pencil size={17} />
-						</IconButton>
-						<IconButton
-							label={t.common.delete}
-							disabled={user.id === me.id}
-							className="hover:!text-danger"
-							onClick={() => {
-								setDeleting(user);
-							}}
-						>
-							<Trash2 size={17} />
-						</IconButton>
-					</li>
-				))}
-			</ul>
-
-			<div className="mt-12 flex items-center justify-between gap-3 pb-4">
-				<h2 className="text-title font-semibold">{t.users.roles}</h2>
-				<Button
-					onClick={() => {
-						setRoleEditing('new');
-					}}
-				>
-					<Plus size={16} />
-					{t.users.addRole}
-				</Button>
-			</div>
-			<ul className="grid gap-3 sm:grid-cols-2">
-				{roles.data.roles.map((role) => (
-					<li key={role.id} className="border-line flex flex-col gap-2 rounded-md border p-4">
-						<div className="flex items-start gap-2">
-							<div className="min-w-0 flex-1">
-								<div className="text-ui font-semibold">{roleName(role)}</div>
-								<div className="text-caption text-muted">
-									{t.users.roleUsers(role.users)}
-									{role.builtin ? <span className="ml-3">{t.users.builtin}</span> : null}
-								</div>
-							</div>
-							{role.builtin === 'admin' ? null : (
+							</Chip>
+							<span
+								className="text-small text-muted hidden w-36 flex-none text-right sm:block"
+								data-tip={t.users.lastLogin}
+							>
+								{user.last_login_at ? formatRelative(user.last_login_at) : t.common.never}
+							</span>
+							<div className="flex flex-none">
 								<IconButton
 									size="sm"
 									label={t.common.edit}
 									onClick={() => {
-										setRoleEditing(role);
+										setEditing(user);
 									}}
 								>
-									<Pencil size={15} />
+									<Pencil size={16} />
 								</IconButton>
-							)}
-							{role.builtin ? null : (
 								<IconButton
 									size="sm"
 									label={t.common.delete}
+									disabled={user.id === me.id}
 									className="hover:!text-danger"
 									onClick={() => {
-										setRoleDeleting(role);
+										setDeleting(user);
 									}}
 								>
-									<Trash2 size={15} />
+									<Trash2 size={16} />
 								</IconButton>
-							)}
-						</div>
-						<p className="text-small text-ink-2">
-							{role.builtin === 'admin'
-								? t.users.adminRole
-								: role.permissions.length === 0
-									? t.common.none
-									: role.permissions
-											.map((permission) => t.users.perm[permission] ?? permission)
-											.join(', ')}
-						</p>
-					</li>
-				))}
-			</ul>
+							</div>
+						</li>
+					))}
+				</ul>
+			</Card>
+
+			<Card
+				title={t.users.roles}
+				count={roles.data.roles.length}
+				actions={
+					<Button
+						size="sm"
+						onClick={() => {
+							setRoleEditing('new');
+						}}
+					>
+						<Plus size={15} />
+						{t.users.addRole}
+					</Button>
+				}
+				flush
+			>
+				<ul className="divide-line divide-y">
+					{roles.data.roles.map((role) => (
+						<li key={role.id} className="flex items-start gap-3.5 px-5 py-3.5">
+							<div className="flex min-w-0 flex-1 flex-col gap-2">
+								<div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+									<span className="text-ui font-semibold">{roleName(role)}</span>
+									<span
+										className="text-small text-muted tabular inline-flex items-center gap-1"
+										data-tip={t.users.roleUsers(role.users)}
+									>
+										<UsersIcon size={14} />
+										{role.users}
+									</span>
+								</div>
+								<div className="flex flex-wrap gap-1.5">
+									{role.builtin === 'admin' ? (
+										<Chip tone="accent">{t.users.adminRole}</Chip>
+									) : role.permissions.length === 0 ? (
+										<span className="text-small text-muted">{t.common.none}</span>
+									) : (
+										role.permissions.map((permission) => (
+											<Chip key={permission}>{t.users.perm[permission] ?? permission}</Chip>
+										))
+									)}
+								</div>
+							</div>
+							<div className="flex flex-none">
+								{role.builtin === 'admin' ? null : (
+									<IconButton
+										size="sm"
+										label={t.common.edit}
+										onClick={() => {
+											setRoleEditing(role);
+										}}
+									>
+										<Pencil size={16} />
+									</IconButton>
+								)}
+								{role.builtin ? null : (
+									<IconButton
+										size="sm"
+										label={t.common.delete}
+										className="hover:!text-danger"
+										onClick={() => {
+											setRoleDeleting(role);
+										}}
+									>
+										<Trash2 size={16} />
+									</IconButton>
+								)}
+							</div>
+						</li>
+					))}
+				</ul>
+			</Card>
 
 			{editing ? (
 				<UserDialog

@@ -37,26 +37,34 @@ export function AdminLayout() {
 		'/admin/users': t.nav.users,
 		'/admin/settings': t.nav.settings,
 	};
+	const current = pages.find((page) => path.startsWith(page.to));
 	return (
-		<div className="mx-auto max-w-6xl px-4 sm:px-6">
-			<h1 className="text-heading pt-8 pb-5 font-semibold tracking-tight">{t.nav.admin}</h1>
-			<nav
-				aria-label={t.nav.admin}
-				className="border-line mb-7 flex gap-1 overflow-x-auto overflow-y-hidden border-b"
-			>
-				{pages.map((page) => (
-					<Link
-						key={page.to}
-						to={page.to}
-						aria-current={path.startsWith(page.to) ? 'page' : undefined}
-						className="text-ui text-muted hover:text-ink aria-[current=page]:text-ink relative -mb-px flex h-12 flex-none items-center gap-2 px-3 font-semibold transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-transparent aria-[current=page]:after:bg-[var(--accent)]"
-					>
-						{page.icon}
-						{labels[page.to]}
-					</Link>
-				))}
+		<div className="mx-auto grid max-w-7xl gap-x-10 px-4 pt-6 pb-16 sm:px-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:pt-10">
+			<nav aria-label={t.nav.admin} className="max-lg:mb-6 lg:sticky lg:top-24 lg:self-start">
+				<p className="text-caption text-muted mb-2 px-3 font-semibold tracking-wide uppercase max-lg:hidden">
+					{t.nav.admin}
+				</p>
+				<ul className="flex gap-1 overflow-x-auto lg:flex-col">
+					{pages.map((page) => (
+						<li key={page.to} className="flex-none">
+							<Link
+								to={page.to}
+								aria-current={path.startsWith(page.to) ? 'page' : undefined}
+								className="text-ui text-ink-2 hover:bg-surface hover:text-ink aria-[current=page]:bg-surface aria-[current=page]:text-ink relative flex h-10 items-center gap-2.5 rounded-sm px-3 font-medium transition-colors aria-[current=page]:font-semibold"
+							>
+								<span className="text-muted [[aria-current=page]>&]:text-accent-text">{page.icon}</span>
+								{labels[page.to]}
+							</Link>
+						</li>
+					))}
+				</ul>
 			</nav>
-			<Outlet />
+			<div className="min-w-0">
+				{current ? (
+					<h1 className="text-heading mb-6 font-semibold tracking-tight">{labels[current.to]}</h1>
+				) : null}
+				<Outlet />
+			</div>
 		</div>
 	);
 }

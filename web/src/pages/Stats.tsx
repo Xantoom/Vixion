@@ -7,12 +7,13 @@ import { type Stats, api } from '@/lib/api';
 import { formatBytes, formatDuration, formatNumber } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
+import { Card, Facts } from '@/ui/Card';
 import { PageLoading } from '@/ui/Spinner';
 import { NotFound } from './NotFound';
 
 function Tile({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
 	return (
-		<div className="bg-surface flex flex-col gap-1 rounded-md px-4 py-3.5">
+		<div className="bg-card ring-line flex flex-col gap-1 rounded-md px-4 py-3.5 ring-1">
 			<span className="text-small text-muted flex items-center gap-2 font-medium">
 				{icon}
 				{label}
@@ -46,7 +47,7 @@ export function StatsPage() {
 	];
 
 	return (
-		<div className="panel-in pb-12">
+		<div className="panel-in flex flex-col gap-6">
 			<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
 				<Tile icon={<HardDrive size={16} />} label={t.stats.space} value={formatBytes(data.bytes)} />
 				<Tile icon={<Film size={16} />} label={t.stats.recordings} value={formatNumber(data.streams)} />
@@ -54,13 +55,14 @@ export function StatsPage() {
 				<Tile icon={<CircleDot size={16} />} label={t.stats.recordingNow} value={String(data.recording)} />
 			</div>
 
-			<section className="mt-8">
-				<div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-					<h2 className="text-lead font-semibold">{t.stats.storage}</h2>
+			<Card
+				title={t.stats.storage}
+				actions={
 					<span className="text-small text-muted tabular">
 						{t.stats.diskFree(formatBytes(disk.free), formatBytes(disk.total))}
 					</span>
-				</div>
+				}
+			>
 				<div
 					className="bg-surface-2 flex h-3 gap-0.5 overflow-hidden rounded-xs"
 					role="img"
@@ -70,56 +72,58 @@ export function StatsPage() {
 						segment.value > 0 ? (
 							<div
 								key={segment.label}
-								title={`${segment.label}: ${formatBytes(segment.value)}`}
+								data-tip={`${segment.label} ${formatBytes(segment.value)}`}
 								className={`${segment.className} h-full min-w-1 transition-[width] duration-500`}
 								style={{ width: `${share(segment.value)}%` }}
 							/>
 						) : null,
 					)}
 				</div>
-				<ul className="text-small text-ink-2 mt-2.5 flex flex-wrap gap-x-5 gap-y-1">
+				<ul className="text-small text-ink-2 mt-3 flex flex-wrap gap-x-6 gap-y-1">
 					{segments.map((segment) => (
 						<li key={segment.label} className="flex items-center gap-2">
-							<span className={`${segment.className} size-2.5 rounded-full`} />
+							<span className={`${segment.className} size-2.5 rounded-xs`} />
 							{segment.label}
 							<span className="text-muted tabular">{formatBytes(segment.value)}</span>
 						</li>
 					))}
 					<li className="flex items-center gap-2">
-						<span className="bg-surface-2 ring-line-2 size-2.5 rounded-full ring-1" />
+						<span className="bg-surface-2 ring-line-2 size-2.5 rounded-xs ring-1" />
 						{t.stats.free}
 						<span className="text-muted tabular">{formatBytes(disk.free)}</span>
 					</li>
 				</ul>
-			</section>
+			</Card>
 
-			<section className="mt-10">
-				<h2 className="text-lead mb-3 font-semibold">{t.stats.perStreamer}</h2>
-				<div className="border-line overflow-x-auto rounded-md border">
+			<Card title={t.stats.perStreamer} count={data.streamers.length} flush>
+				<div className="overflow-x-auto">
 					<table className="text-small w-full min-w-[34rem]">
-						<thead className="text-caption text-muted bg-surface text-left">
+						<thead className="text-caption text-muted text-left">
 							<tr>
-								<th className="px-4 py-2.5 font-medium">{t.stats.streamer}</th>
-								<th className="px-4 py-2.5 font-medium">{t.stats.size}</th>
-								<th className="px-4 py-2.5 text-right font-medium">{t.stats.count}</th>
-								<th className="px-4 py-2.5 text-right font-medium">{t.stats.duration}</th>
-								<th className="px-4 py-2.5 text-right font-medium">{t.stats.kept}</th>
+								<th className="px-5 py-2.5 font-medium">{t.stats.streamer}</th>
+								<th className="px-5 py-2.5 font-medium">{t.stats.size}</th>
+								<th className="px-5 py-2.5 text-right font-medium">{t.stats.count}</th>
+								<th className="px-5 py-2.5 text-right font-medium">{t.stats.duration}</th>
+								<th className="px-5 py-2.5 text-right font-medium">{t.stats.kept}</th>
 							</tr>
 						</thead>
 						<tbody>
 							{data.streamers.map((streamer) => (
-								<tr key={streamer.id} className="border-line hover:bg-surface border-t">
-									<td className="px-4 py-2.5">
+								<tr
+									key={streamer.id}
+									className="border-line hover:bg-surface border-t transition-colors"
+								>
+									<td className="px-5 py-3">
 										<Link
 											to="/$login"
 											params={{ login: streamer.login }}
-											className="flex items-center gap-2.5 font-medium"
+											className="flex items-center gap-2.5 font-semibold"
 										>
-											<Avatar src={streamer.avatar_url} name={streamer.display_name} size={26} />
+											<Avatar src={streamer.avatar_url} name={streamer.display_name} size={28} />
 											{streamer.display_name}
 										</Link>
 									</td>
-									<td className="px-4 py-2.5">
+									<td className="px-5 py-3">
 										<div className="flex items-center gap-3">
 											<span className="tabular w-16 flex-none">
 												{formatBytes(streamer.bytes)}
@@ -132,33 +136,29 @@ export function StatsPage() {
 											</div>
 										</div>
 									</td>
-									<td className="tabular px-4 py-2.5 text-right">{streamer.streams}</td>
-									<td className="tabular px-4 py-2.5 text-right">
+									<td className="tabular px-5 py-3 text-right">{streamer.streams}</td>
+									<td className="tabular px-5 py-3 text-right">
 										{formatDuration(streamer.duration_ms)}
 									</td>
-									<td className="tabular px-4 py-2.5 text-right">{streamer.kept}</td>
+									<td className="tabular px-5 py-3 text-right">{streamer.kept}</td>
 								</tr>
 							))}
 						</tbody>
 					</table>
 				</div>
-			</section>
+			</Card>
 
-			<section className="mt-10">
-				<h2 className="text-lead mb-3 font-semibold">{t.stats.server}</h2>
-				<dl className="text-small grid grid-cols-[auto_1fr] gap-x-8 gap-y-2">
-					<dt className="text-muted">{t.stats.version}</dt>
-					<dd className="font-mono">{data.version}</dd>
-					<dt className="text-muted">{t.stats.uptime}</dt>
-					<dd className="tabular">{formatDuration(data.uptime_ms)}</dd>
-					{data.memory !== null ? (
-						<>
-							<dt className="text-muted">{t.stats.memory}</dt>
-							<dd className="tabular">{formatBytes(data.memory)}</dd>
-						</>
-					) : null}
-				</dl>
-			</section>
+			<Card title={t.stats.server} flush>
+				<Facts
+					items={[
+						[t.stats.version, data.version],
+						[t.stats.uptime, formatDuration(data.uptime_ms)],
+						...(data.memory !== null
+							? ([[t.stats.memory, formatBytes(data.memory)]] as [string, string][])
+							: []),
+					]}
+				/>
+			</Card>
 		</div>
 	);
 }

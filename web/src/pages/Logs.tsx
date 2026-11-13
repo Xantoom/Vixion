@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CircleAlert, OctagonAlert, Info, Pause, Play, Trash2, X } from 'lucide-react';
+import { CircleAlert, CircleCheck, Info, OctagonAlert, Pause, Play, Trash2, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '@/i18n';
 import { type Alert, type LogEntry, api } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { useCan } from '@/lib/session';
-import { Button, IconButton } from '@/ui/Button';
+import { IconButton } from '@/ui/Button';
+import { Card } from '@/ui/Card';
 import { Segmented, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
@@ -30,7 +31,7 @@ export function LogsPage() {
 	const can = useCan('logs.view');
 	if (!can) return <NotFound forbidden />;
 	return (
-		<div className="panel-in flex flex-col pb-10">
+		<div className="panel-in flex flex-col gap-6">
 			<Alerts />
 			<Console />
 		</div>
@@ -57,19 +58,18 @@ function Alerts() {
 	};
 
 	return (
-		<section className="mb-8">
-			<h2 className="text-lead mb-3 font-semibold">{t.logs.alerts}</h2>
+		<Card title={t.logs.alerts} count={open.length} flush>
 			{isPending ? (
 				<PageLoading />
 			) : open.length === 0 ? (
-				<p className="text-ui text-muted bg-surface rounded-md px-4 py-3">{t.logs.noAlerts}</p>
+				<p className="text-small text-muted flex items-center gap-2 px-5 py-4">
+					<CircleCheck size={16} className="text-ok" />
+					{t.logs.noAlerts}
+				</p>
 			) : (
-				<ul className="flex flex-col gap-2">
+				<ul className="divide-line divide-y">
 					{open.map((alert) => (
-						<li
-							key={alert.id}
-							className={`flex items-start gap-3 rounded-md border px-4 py-3 ${alert.level === 'error' ? 'border-danger/40 bg-danger-soft' : 'border-line bg-surface'}`}
-						>
+						<li key={alert.id} className="flex items-start gap-3 px-5 py-3">
 							{alert.level === 'error' ? (
 								<OctagonAlert size={18} className="text-danger mt-0.5 flex-none" />
 							) : alert.level === 'warning' ? (
@@ -79,10 +79,7 @@ function Alerts() {
 							)}
 							<div className="min-w-0 flex-1">
 								<p className="text-ui break-words">{alert.message}</p>
-								<p className="text-caption text-muted mt-0.5">
-									<span className="font-mono">{alert.kind}</span>
-									<span className="ml-3">{formatRelative(alert.created_at)}</span>
-								</p>
+								<p className="text-caption text-muted mt-0.5">{formatRelative(alert.created_at)}</p>
 							</div>
 							<IconButton size="sm" label={t.logs.dismiss} onClick={() => void dismiss(alert.id)}>
 								<X size={16} />
@@ -91,7 +88,7 @@ function Alerts() {
 					))}
 				</ul>
 			)}
-		</section>
+		</Card>
 	);
 }
 
@@ -172,15 +169,42 @@ function Console() {
 	}, [shown]);
 
 	return (
-		<section className="flex min-h-0 flex-col">
-			<div className="mb-3 flex flex-wrap items-center gap-2">
-				<h2 className="text-lead mr-2 flex items-center gap-2 font-semibold">
+		<Card
+			title={
+				<>
 					{t.logs.console}
 					<span
 						className={`size-2 rounded-full ${connected && !paused ? 'bg-ok live-dot' : 'bg-line-2'}`}
-						title={connected ? t.logs.live : ''}
+						data-tip={connected && !paused ? t.logs.live : t.logs.pause}
 					/>
-				</h2>
+				</>
+			}
+			actions={
+				<>
+					<IconButton
+						size="sm"
+						label={paused ? t.logs.resume : t.logs.pause}
+						aria-pressed={paused}
+						onClick={() => {
+							setPaused((value) => !value);
+						}}
+					>
+						{paused ? <Play size={16} /> : <Pause size={16} />}
+					</IconButton>
+					<IconButton
+						size="sm"
+						label={t.logs.clear}
+						onClick={() => {
+							setLines([]);
+						}}
+					>
+						<Trash2 size={16} />
+					</IconButton>
+				</>
+			}
+			flush
+		>
+			<div className="border-line flex flex-wrap items-center gap-2 border-b px-5 py-2.5">
 				<Segmented
 					label={t.logs.filter}
 					value={level}
@@ -199,28 +223,8 @@ function Console() {
 					onChange={(event) => {
 						setFilter(event.target.value);
 					}}
-					className="h-9 w-48"
+					className="h-9 max-w-xs flex-1"
 				/>
-				<div className="flex-1" />
-				<Button
-					size="sm"
-					onClick={() => {
-						setPaused((value) => !value);
-					}}
-				>
-					{paused ? <Play size={14} /> : <Pause size={14} />}
-					{paused ? t.logs.resume : t.logs.pause}
-				</Button>
-				<Button
-					size="sm"
-					variant="ghost"
-					onClick={() => {
-						setLines([]);
-					}}
-				>
-					<Trash2 size={14} />
-					{t.logs.clear}
-				</Button>
 			</div>
 			<div
 				ref={scroller}
@@ -228,7 +232,7 @@ function Console() {
 					const element = event.currentTarget;
 					following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
 				}}
-				className="bg-canvas border-line h-[min(65dvh,44rem)] overflow-auto rounded-md border px-3 py-2 font-mono text-[0.78rem] leading-relaxed"
+				className="bg-canvas h-[min(65dvh,44rem)] overflow-auto px-4 py-2.5 font-mono text-[0.78rem] leading-relaxed"
 			>
 				{shown.length === 0 ? (
 					<p className="text-muted py-6 text-center font-sans text-sm">{t.logs.empty}</p>
@@ -251,6 +255,6 @@ function Console() {
 					))
 				)}
 			</div>
-		</section>
+		</Card>
 	);
 }

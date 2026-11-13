@@ -1,32 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, useEffect, useState } from 'react';
+import { Check } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useT } from '@/i18n';
 import { type Settings, type SettingsResponse, api } from '@/lib/api';
 import { useCan } from '@/lib/session';
 import { Button } from '@/ui/Button';
-import { Field, NumberInput, Select, Switch, TextInput } from '@/ui/Field';
+import { Card, Facts, InfoTip, SettingRow, Toggle } from '@/ui/Card';
+import { NumberInput, Select, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-	return (
-		<section className="border-line grid gap-4 border-t py-7 md:grid-cols-[14rem_1fr] md:gap-10">
-			<h2 className="text-lead font-semibold">{title}</h2>
-			<div className="flex max-w-2xl flex-col gap-6">{children}</div>
-		</section>
-	);
-}
-
-function Row({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
-	return (
-		<div className="flex flex-col gap-2">
-			<span className="text-ui font-medium">{label}</span>
-			{children}
-			{hint ? <span className="text-small text-muted">{hint}</span> : null}
-		</div>
-	);
-}
 
 export function SettingsPage() {
 	const t = useT();
@@ -78,25 +61,27 @@ export function SettingsPage() {
 	};
 
 	return (
-		<div className="panel-in pb-28">
-			<Section title={t.settings.recording}>
-				<p className="text-small text-muted -mb-2">{t.settings.quality}</p>
-				<Switch
-					checked={draft.h264_only}
-					onChange={(h264_only) => {
-						set({ h264_only });
-					}}
-					label={t.settings.h264Only}
-					hint={t.settings.h264OnlyHint}
-				/>
-				<Switch
-					checked={draft.record_chat}
-					onChange={(record_chat) => {
-						set({ record_chat });
-					}}
-					label={t.settings.recordChat}
-				/>
-				<Row label={t.settings.pollInterval}>
+		<div className="panel-in flex flex-col gap-6 pb-24">
+			<Card title={t.settings.recording} flush>
+				<SettingRow label={t.settings.h264Only} tip={t.settings.h264OnlyHint}>
+					<Toggle
+						label={t.settings.h264Only}
+						checked={draft.h264_only}
+						onChange={(h264_only) => {
+							set({ h264_only });
+						}}
+					/>
+				</SettingRow>
+				<SettingRow label={t.settings.recordChat}>
+					<Toggle
+						label={t.settings.recordChat}
+						checked={draft.record_chat}
+						onChange={(record_chat) => {
+							set({ record_chat });
+						}}
+					/>
+				</SettingRow>
+				<SettingRow label={t.settings.pollInterval}>
 					<NumberInput
 						aria-label={t.settings.pollInterval}
 						value={draft.poll_interval}
@@ -107,11 +92,11 @@ export function SettingsPage() {
 							set({ poll_interval });
 						}}
 					/>
-				</Row>
-			</Section>
+				</SettingRow>
+			</Card>
 
-			<Section title={t.settings.retention}>
-				<Row label={t.settings.retentionDays} hint={t.settings.retentionHint}>
+			<Card title={t.settings.retention} flush>
+				<SettingRow label={t.settings.retentionDays} tip={t.settings.retentionHint}>
 					<NumberInput
 						aria-label={t.settings.retentionDays}
 						value={draft.retention_days}
@@ -122,8 +107,8 @@ export function SettingsPage() {
 							set({ retention_days });
 						}}
 					/>
-				</Row>
-				<Row label={t.settings.diskWarning}>
+				</SettingRow>
+				<SettingRow label={t.settings.diskWarning}>
 					<NumberInput
 						aria-label={t.settings.diskWarning}
 						value={draft.disk_warning_gb}
@@ -134,8 +119,8 @@ export function SettingsPage() {
 							set({ disk_warning_gb });
 						}}
 					/>
-				</Row>
-				<Row label={t.settings.diskReserve} hint={t.settings.diskReserveHint}>
+				</SettingRow>
+				<SettingRow label={t.settings.diskReserve} tip={t.settings.diskReserveHint}>
 					<NumberInput
 						aria-label={t.settings.diskReserve}
 						value={draft.disk_reserve_gb}
@@ -146,87 +131,98 @@ export function SettingsPage() {
 							set({ disk_reserve_gb });
 						}}
 					/>
-				</Row>
-			</Section>
+				</SettingRow>
+			</Card>
 
-			<Section title={t.settings.twitch}>
-				<Row label={t.settings.token} hint={t.settings.tokenHint}>
-					<p className={`text-small font-medium ${draft.has_twitch_token ? 'text-ok' : 'text-muted'}`}>
-						{draft.has_twitch_token ? t.settings.tokenSet : t.settings.tokenNone}
-					</p>
-					<form
-						className="flex flex-wrap gap-2"
-						onSubmit={(event) => {
-							event.preventDefault();
-							void saveToken(token.trim());
-						}}
+			<Card
+				title={
+					<>
+						{t.settings.token}
+						<InfoTip text={t.settings.tokenHint} />
+					</>
+				}
+				actions={
+					<span
+						className={`text-small inline-flex items-center gap-1.5 rounded-xs px-2 py-0.5 font-semibold ${draft.has_twitch_token ? 'bg-ok/15 text-ok' : 'bg-surface-2 text-muted'}`}
 					>
-						<TextInput
-							type="password"
-							autoComplete="off"
-							spellCheck={false}
-							aria-label={t.settings.token}
-							placeholder={t.settings.tokenPlaceholder}
-							value={token}
-							onChange={(event) => {
-								setToken(event.target.value);
-							}}
-							className="max-w-sm flex-1 font-mono"
-						/>
-						<Button type="submit" disabled={token.trim().length < 20}>
-							{t.settings.tokenSave}
+						{draft.has_twitch_token ? <Check size={14} /> : null}
+						{draft.has_twitch_token ? t.settings.tokenSet : t.settings.tokenNone}
+					</span>
+				}
+			>
+				<form
+					className="flex flex-wrap gap-2"
+					onSubmit={(event) => {
+						event.preventDefault();
+						void saveToken(token.trim());
+					}}
+				>
+					<TextInput
+						type="password"
+						autoComplete="off"
+						spellCheck={false}
+						aria-label={t.settings.token}
+						placeholder={t.settings.tokenPlaceholder}
+						value={token}
+						onChange={(event) => {
+							setToken(event.target.value);
+						}}
+						className="min-w-60 flex-1 font-mono"
+					/>
+					<Button type="submit" disabled={token.trim().length < 20}>
+						{t.settings.tokenSave}
+					</Button>
+					{draft.has_twitch_token ? (
+						<Button variant="ghost" onClick={() => void saveToken(null)}>
+							{t.settings.tokenClear}
 						</Button>
-						{draft.has_twitch_token ? (
-							<Button variant="ghost" onClick={() => void saveToken(null)}>
-								{t.settings.tokenClear}
-							</Button>
-						) : null}
-					</form>
-				</Row>
-			</Section>
+					) : null}
+				</form>
+			</Card>
 
-			<Section title={t.settings.alerts}>
-				<Field label={t.settings.webhook} hint={t.settings.webhookHint}>
-					{(id, describedBy) => (
-						<div className="flex flex-wrap gap-2">
-							<Select
-								aria-label={t.settings.webhookKind}
-								value={draft.webhook_kind}
-								onChange={(event) => {
-									set({ webhook_kind: event.target.value as Settings['webhook_kind'] });
-								}}
-								className="w-36"
-							>
-								<option value="discord">Discord</option>
-								<option value="ntfy">ntfy</option>
-								<option value="generic">JSON</option>
-							</Select>
-							<TextInput
-								id={id}
-								type="url"
-								aria-describedby={describedBy}
-								placeholder={t.settings.webhookPlaceholder}
-								value={draft.webhook_url}
-								onChange={(event) => {
-									set({ webhook_url: event.target.value });
-								}}
-								className="min-w-60 flex-1"
-							/>
-						</div>
-					)}
-				</Field>
-			</Section>
+			<Card
+				title={
+					<>
+						{t.settings.alerts}
+						<InfoTip text={t.settings.webhookHint} />
+					</>
+				}
+			>
+				<div className="flex flex-wrap gap-2">
+					<Select
+						aria-label={t.settings.webhookKind}
+						value={draft.webhook_kind}
+						onChange={(event) => {
+							set({ webhook_kind: event.target.value as Settings['webhook_kind'] });
+						}}
+						className="w-36"
+					>
+						<option value="discord">Discord</option>
+						<option value="ntfy">ntfy</option>
+						<option value="generic">JSON</option>
+					</Select>
+					<TextInput
+						type="url"
+						aria-label={t.settings.webhook}
+						placeholder={t.settings.webhookPlaceholder}
+						value={draft.webhook_url}
+						onChange={(event) => {
+							set({ webhook_url: event.target.value });
+						}}
+						className="min-w-60 flex-1"
+					/>
+				</div>
+			</Card>
 
-			<Section title={t.settings.system}>
-				<dl className="text-small grid grid-cols-[auto_1fr] gap-x-8 gap-y-2.5">
-					<dt className="text-muted">{t.settings.mediaMode}</dt>
-					<dd className="font-mono">{data?.system.media_mode}</dd>
-					<dt className="text-muted">{t.settings.mediaUrl}</dt>
-					<dd className="font-mono break-all">{data?.system.media_url || t.settings.mediaSame}</dd>
-					<dt className="text-muted">{t.settings.dataDir}</dt>
-					<dd className="font-mono break-all">{data?.system.data_dir}</dd>
-				</dl>
-			</Section>
+			<Card title={t.settings.system} flush>
+				<Facts
+					items={[
+						[t.settings.mediaMode, data?.system.media_mode ?? ''],
+						[t.settings.mediaUrl, data?.system.media_url || t.settings.mediaSame],
+						[t.settings.dataDir, data?.system.data_dir ?? ''],
+					]}
+				/>
+			</Card>
 
 			{dirty ? (
 				<div

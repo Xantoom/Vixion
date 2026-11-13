@@ -23,6 +23,7 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
   chapter list by category, seeking on press, keyboard shortcuts, full screen, and a compressor
   that evens out loud and quiet moments. The chat shows the last hundred messages at the
   playhead and older ones on scrolling up. A broadcast still being recorded opens once it ends.
+- Each recording reopens where it was left, and its card shows how far it was watched.
 - Administration page gathering statistics, logs, users and settings.
 - Recordings are deleted after 14 days unless kept forever; per-streamer retention.
 - Accounts with roles and per-person permissions; statistics, logs and alerts by webhook.
