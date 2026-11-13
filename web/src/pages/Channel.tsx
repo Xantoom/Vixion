@@ -30,7 +30,15 @@ import {
 	type TwitchVideo,
 	api,
 } from '@/lib/api';
-import { formatBytes, formatClock, formatDate, formatDuration, formatNumber, formatQuality, formatRelative } from '@/lib/format';
+import {
+	formatBytes,
+	formatClock,
+	formatDate,
+	formatDuration,
+	formatNumber,
+	formatQuality,
+	formatRelative,
+} from '@/lib/format';
 import { useNow } from '@/lib/now';
 import { watched } from '@/lib/progress';
 import { useCan, useRouteParams } from '@/lib/session';
