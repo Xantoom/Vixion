@@ -75,6 +75,9 @@ docker run -d --name vixion --restart unless-stopped --stop-timeout 30 \
 Images exist for x86-64 and arm64. Create `data` before the first start so that it belongs to you rather than to
 root.
 
+> [!WARNING]
+> Don't send the video through a Cloudflare Tunnel: Cloudflare's terms forbid carrying video over it.
+
 ## Parameters
 
 | Parameter                       | Function                                                                         |
@@ -121,55 +124,6 @@ get fixes without surprises; see [Versions](#versions).
 - **Logs**: `docker logs -f vixion`, or *Administration → Logs* in the interface.
 - **Forgotten password**: `docker exec vixion vixion reset-password <user> <new-password>`.
 - **Permission denied on /data**: the folder belongs to another user; `sudo chown -R 1000:1000 data` or change `user`.
-
-## Video outside a Cloudflare Tunnel
-
-A Cloudflare Tunnel in front of the interface is fine for pages, but its terms don't allow carrying video, and it
-would slow it down. Like Plex, Vixion can serve the video on its own port:
-
-| `VIXION_MEDIA_MODE` | Video is served                          | Use it when                                               |
-| ------------------- | ---------------------------------------- | --------------------------------------------------------- |
-| `same` (default)    | by the interface, under `/media`         | on a local network, or behind your own reverse proxy      |
-| `https`             | on port 8443, with its own certificate   | the interface is behind a Cloudflare Tunnel               |
-| `http`              | on port 8443, plain HTTP                 | your own proxy (Caddy, Traefik) handles TLS for that port |
-
-For `https`, give Vixion a domain and a Cloudflare API token with *Zone → Zone → Read* and *Zone → DNS → Edit*. It
-gets a Let's Encrypt certificate by DNS challenge and renews it; with `VIXION_DDNS=true` it also keeps the domain's A
-record on your public address. Publish port 8443 and forward it on your router:
-
-```yaml
-    ports:
-      - "8080:8080"
-      - "8443:8443"
-    environment:
-      VIXION_MEDIA_MODE: https
-      VIXION_MEDIA_DOMAIN: media.example.com
-      VIXION_CLOUDFLARE_API_TOKEN: your-cloudflare-token
-      VIXION_DDNS: "true"
-```
-
-Video links are signed and expire after 12 hours: nobody can watch without signing in first.
-
-<details>
-<summary>All video variables</summary>
-
-| Variable                      | Default        | Function                                                    |
-| ----------------------------- | -------------- | ----------------------------------------------------------- |
-| `VIXION_MEDIA_MODE`           | `same`         | `same`, `https` or `http`                                   |
-| `VIXION_MEDIA_DOMAIN`         |                | The video domain, in `https` mode                           |
-| `VIXION_MEDIA_PUBLIC_PORT`    | 8443           | The port browsers use, when the router forwards another one |
-| `VIXION_MEDIA_PUBLIC_URL`     |                | The video origin browsers use (required in `http` mode)     |
-| `VIXION_CLOUDFLARE_API_TOKEN` |                | Let's Encrypt by DNS challenge, and DDNS                    |
-| `VIXION_ACME_EMAIL`           |                | Contact for Let's Encrypt                                   |
-| `VIXION_ACME_STAGING`         | `false`        | Let's Encrypt's staging server, while testing               |
-| `VIXION_ACME_DIRECTORY`       | Let's Encrypt  | Another ACME authority's directory URL                      |
-| `VIXION_TLS_CERT`, `_KEY`     |                | Your own certificate files instead of Let's Encrypt         |
-| `VIXION_DDNS`                 | `false`        | Keep the video domain's A record on the public address      |
-| `VIXION_HTTP_ADDR`            | `0.0.0.0:8080` | Where the interface listens                                 |
-| `VIXION_MEDIA_ADDR`           | `0.0.0.0:8443` | Where the video listens                                     |
-| `VIXION_LOG_FORMAT`           | text           | `json` for log collectors                                   |
-
-</details>
 
 ## Without Docker
 

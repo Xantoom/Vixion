@@ -10,13 +10,8 @@ services:
     stop_grace_period: 30s
     ports:
       - "8080:8080"
-      # - "8443:8443"   # only with VIXION_MEDIA_MODE https or http
     volumes:
       - ./data:/data
     environment:
       # Recommended: a Twitch account's auth-token, ideally with Turbo (see the README).
       VIXION_TWITCH_TOKEN: ""
-      # Optional: serve video on its own port, out of a Cloudflare Tunnel (see the README).
-      # VIXION_MEDIA_MODE: https
-      # VIXION_MEDIA_DOMAIN: media.example.com
-      # VIXION_CLOUDFLARE_API_TOKEN: ""
