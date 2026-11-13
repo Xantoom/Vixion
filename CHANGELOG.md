@@ -64,6 +64,16 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - Images are built on Debian 13 distroless, with base images and Rust (1.100) pinned and kept up to
   date by Dependabot.
 
+### Fixed
+
+- Updating can't lose settings: one stored setting a version can't read falls back alone, instead of
+  every setting going back to its default (a retention of "forever" turning into fourteen days).
+- The database is copied to `vixion.db.before-vN` before an update changes it, a failed update is
+  rolled back, and a database from a newer version is left untouched.
+- Retention waits until broadcasts left in parts are merged, so it never deletes a part being merged.
+- A tab left open across an update reloads once instead of showing a blank page, and a page that
+  fails to draw offers to reload.
+
 ### Security
 
 - Media links belong to one account and stop working when it loses access; downloads need their
