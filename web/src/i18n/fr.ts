@@ -312,6 +312,10 @@ export const fr: Messages = {
 		levels: { error: 'Erreurs', warn: 'Avertissements', info: 'Infos', debug: 'Débogage', trace: 'Trace' },
 	},
 	errors: {
+		crashed: 'Cette page n’a pas pu s’afficher',
+		crashedLead:
+			'Vixion a peut-être été mis à jour entre-temps. Recharger la page règle presque toujours le problème.',
+		reload: 'Recharger la page',
 		notFound: 'Cette page n’existe pas',
 		forbidden: 'Vous n’avez pas accès à ceci',
 		home: 'Retour aux streamers',

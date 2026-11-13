@@ -92,11 +92,41 @@ impl Db {
 
 fn migrate(conn: &Connection) -> Result<(), AppError> {
     let current: usize = conn.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))?.try_into().unwrap_or(0);
+    if current > MIGRATIONS.len() {
+        // A newer version made this database: what it added is left alone, and may not be read.
+        tracing::warn!(database = current, known = MIGRATIONS.len(), "the database comes from a newer Vixion");
+        return Ok(());
+    }
+    if current > 0 && current < MIGRATIONS.len() {
+        backup(conn, current);
+    }
     for (index, sql) in MIGRATIONS.iter().enumerate().skip(current) {
-        conn.execute_batch(&format!("BEGIN; {sql}; PRAGMA user_version = {}; COMMIT;", index + 1))?;
+        let applied = conn.execute_batch(&format!("BEGIN; {sql}; PRAGMA user_version = {}; COMMIT;", index + 1));
+        if let Err(error) = applied {
+            // Nothing of a failed step stays: the next start tries it again from the same point.
+            let _ = conn.execute_batch("ROLLBACK");
+            return Err(error.into());
+        }
         tracing::info!(version = index + 1, "database migrated");
     }
     Ok(())
+}
+
+/// A copy of the database as it was before an update changed it, next to it: the way back if
+/// the update goes wrong. Only the latest copy for each version is kept.
+fn backup(conn: &Connection, version: usize) {
+    let Ok(Some(path)) = conn.query_row("PRAGMA database_list", [], |row| row.get::<_, Option<String>>(2)) else {
+        return;
+    };
+    if path.is_empty() {
+        return;
+    }
+    let target = format!("{path}.before-v{}", version + 1);
+    let _ = std::fs::remove_file(&target);
+    match conn.execute("VACUUM INTO ?1", [&target]) {
+        Ok(_) => tracing::info!(copy = target, "database saved before updating it"),
+        Err(error) => tracing::warn!(%error, "can't save the database before updating it"),
+    }
 }
 
 /// Milliseconds since the Unix epoch: the only time format stored.
@@ -104,4 +134,39 @@ pub fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |elapsed| i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_migration_applies_once_in_order() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0)).unwrap();
+        assert_eq!(version, i64::try_from(MIGRATIONS.len()).unwrap());
+        // Starting again changes nothing.
+        migrate(&conn).unwrap();
+    }
+
+    #[test]
+    fn an_older_database_keeps_its_rows() {
+        let dir = std::env::temp_dir().join(format!("vixion-migrate-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("vixion.db");
+        let _ = std::fs::remove_file(&path);
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(&format!("BEGIN; {}; PRAGMA user_version = 1; COMMIT;", MIGRATIONS[0])).unwrap();
+            conn.execute("INSERT INTO settings (key, value) VALUES ('app', '{\"retention_days\":0}')", []).unwrap();
+        }
+        let conn = Connection::open(&path).unwrap();
+        migrate(&conn).unwrap();
+        let kept: String =
+            conn.query_row("SELECT value FROM settings WHERE key = 'app'", [], |row| row.get(0)).unwrap();
+        assert!(kept.contains("\"retention_days\":0"));
+        assert!(dir.join("vixion.db.before-v2").is_file());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

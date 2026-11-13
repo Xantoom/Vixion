@@ -81,6 +81,30 @@ impl Settings {
     }
 }
 
+/// Stored settings, read one field at a time: a value this version can't read (written by
+/// another version, say) falls back to its default alone, never taking the others with it. A
+/// retention of "forever" must not turn into fourteen days because of an unrelated field.
+fn parse(json: &str) -> Settings {
+    let Ok(serde_json::Value::Object(stored)) = serde_json::from_str::<serde_json::Value>(json) else {
+        tracing::warn!("the stored settings can't be read: defaults are used");
+        return Settings::default();
+    };
+    let Ok(serde_json::Value::Object(mut merged)) = serde_json::to_value(Settings::default()) else {
+        return Settings::default();
+    };
+    for (key, value) in stored {
+        let previous = merged.insert(key.clone(), value);
+        if serde_json::from_value::<Settings>(serde_json::Value::Object(merged.clone())).is_err() {
+            tracing::warn!(setting = key, "a stored setting can't be read: its default is used");
+            match previous {
+                Some(previous) => merged.insert(key, previous),
+                None => merged.remove(&key),
+            };
+        }
+    }
+    serde_json::from_value(serde_json::Value::Object(merged)).unwrap_or_default()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TokenSource {
@@ -112,7 +136,7 @@ impl SettingsStore {
                 Ok((stored, has_token))
             })
             .await?;
-        let mut settings: Settings = stored.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default();
+        let mut settings = stored.map(|json| parse(&json)).unwrap_or_default();
         settings.twitch_token_source = if config_token.is_some() {
             // The configuration has its own: the one saved from the interface is no longer needed.
             if has_stored_token {
@@ -169,5 +193,24 @@ impl SettingsStore {
             .await
             .ok()
             .flatten()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_unreadable_setting_keeps_the_others() {
+        let settings = parse(r#"{"retention_days":0,"webhook_kind":"carrier-pigeon","h264_only":true,"later":1}"#);
+        assert_eq!(settings.retention_days, 0);
+        assert!(settings.h264_only);
+        assert_eq!(settings.webhook_kind, WebhookKind::Discord);
+    }
+
+    #[test]
+    fn unreadable_settings_fall_back_to_defaults() {
+        assert_eq!(parse("not json").retention_days, 14);
+        assert_eq!(parse(r#"{"retention_days":"forever"}"#).retention_days, 14);
     }
 }

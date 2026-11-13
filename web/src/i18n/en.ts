@@ -310,6 +310,9 @@ export const en = {
 		>,
 	},
 	errors: {
+		crashed: 'This page couldn’t be shown',
+		crashedLead: 'Vixion may have been updated in the meantime. Reloading the page almost always fixes it.',
+		reload: 'Reload the page',
 		notFound: 'This page doesn’t exist',
 		forbidden: 'You don’t have access to this',
 		home: 'Back to streamers',

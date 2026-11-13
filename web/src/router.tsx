@@ -1,20 +1,45 @@
 import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
 import { lazy } from 'react';
 import { AdminIndex, AdminLayout } from './pages/Admin';
-import { NotFound } from './pages/NotFound';
+import { NotFound, PageError } from './pages/NotFound';
 import { Shell } from './pages/Shell';
 import { StreamersPage } from './pages/Streamers';
 
 // The player, the channel pages and the administration load apart from the rest; each is
 // fetched ahead of time (see below) so opening one doesn't wait on the network.
 const pages = {
-	channel: async () => import('./pages/Channel'),
-	studio: async () => import('./pages/Studio'),
-	stats: async () => import('./pages/Stats'),
-	settings: async () => import('./pages/Settings'),
-	users: async () => import('./pages/Users'),
-	logs: async () => import('./pages/Logs'),
+	channel: async () => fresh(import('./pages/Channel')),
+	studio: async () => fresh(import('./pages/Studio')),
+	stats: async () => fresh(import('./pages/Stats')),
+	settings: async () => fresh(import('./pages/Settings')),
+	users: async () => fresh(import('./pages/Users')),
+	logs: async () => fresh(import('./pages/Logs')),
 };
+
+/**
+ * After an update, a tab opened before it asks for files that are gone: the page reloads once to
+ * get the new ones, rather than staying blank. A second failure within a minute is a real one.
+ */
+async function fresh<T>(load: Promise<T>): Promise<T> {
+	try {
+		return await load;
+	} catch (error) {
+		const key = 'vixion:reloaded';
+		let last = 0;
+		try {
+			last = Number(sessionStorage.getItem(key) ?? 0);
+			sessionStorage.setItem(key, String(Date.now()));
+		} catch {
+			// Without storage, reloading could loop: show the error instead.
+			throw error;
+		}
+		if (Date.now() - last > 60_000) {
+			window.location.reload();
+			return new Promise<T>(() => {});
+		}
+		throw error;
+	}
+}
 const ChannelPage = lazy(async () => pages.channel().then((m) => ({ default: m.ChannelPage })));
 const StudioPage = lazy(async () => pages.studio().then((m) => ({ default: m.StudioPage })));
 const StatsPage = lazy(async () => pages.stats().then((m) => ({ default: m.StatsPage })));
@@ -62,6 +87,7 @@ const routes = [
 export const router = createRouter({
 	routeTree: root.addChildren(routes),
 	defaultPreload: 'intent',
+	defaultErrorComponent: PageError,
 	scrollRestoration: true,
 });
 
