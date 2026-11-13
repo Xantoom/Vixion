@@ -209,12 +209,7 @@ export const fr: Messages = {
 		otherFiles: 'Autres fichiers',
 		free: 'Libre',
 		perStreamer: 'Par streamer',
-		configFolder: 'Configuration',
-		recordingsFolder: 'Enregistrements',
-		onHost: 'sur l’hôte',
 		unmapped: 'Non monté : perdu si le conteneur est recréé',
-		uptime: (length) => `en marche depuis ${length}`,
-		server: 'Serveur',
 	},
 	settings: {
 		title: 'Réglages',

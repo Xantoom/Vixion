@@ -205,12 +205,7 @@ export const en = {
 		otherFiles: 'Other files',
 		free: 'Free',
 		perStreamer: 'By streamer',
-		configFolder: 'Configuration',
-		recordingsFolder: 'Recordings',
-		onHost: 'on the host',
 		unmapped: 'Not mounted: lost if the container is recreated',
-		uptime: (length: string) => `running for ${length}`,
-		server: 'Server',
 	},
 	settings: {
 		title: 'Settings',

@@ -119,6 +119,7 @@
 	--color-ok: var(--ok);
 	--color-danger: var(--danger);
 	--color-danger-soft: color-mix(in srgb, var(--danger) 12%, transparent);
+	--color-warn-soft: color-mix(in srgb, var(--warn) 12%, transparent);
 	--color-tip: var(--tip-bg);
 	--color-tip-ink: var(--tip-ink);
 	--color-focus: var(--focus);

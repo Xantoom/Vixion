@@ -2,11 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { TriangleAlert } from 'lucide-react';
 import { useT } from '@/i18n';
-import { type Folder, type Stats, api } from '@/lib/api';
+import { type Stats, api } from '@/lib/api';
 import { formatBytes, formatDuration, formatNumber } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
-import { Card, Facts } from '@/ui/Card';
+import { Card } from '@/ui/Card';
 import { PageLoading } from '@/ui/Spinner';
 import { NotFound } from './NotFound';
 
@@ -36,6 +36,7 @@ export function StatsPage() {
 	const used = disk.total - disk.free;
 	const other = Math.max(0, used - data.bytes);
 	const share = (value: number) => (disk.total > 0 ? (value / disk.total) * 100 : 0);
+	const unmapped = data.folders ? [data.folders.config, data.folders.recordings].filter((f) => f.unmapped) : [];
 	const biggest = Math.max(1, ...data.streamers.map((s) => s.bytes));
 	const segments = [
 		{ label: t.stats.usedByVixion, value: data.bytes, className: 'bg-accent-fill' },
@@ -143,57 +144,20 @@ export function StatsPage() {
 				</Card>
 			) : null}
 
-			{/* Where the files live: the free space shows only for a folder on another disk. */}
-			<Card
-				title={t.stats.server}
-				flush
-				actions={
-					<span className="text-small text-muted tabular">
-						{data.version} · {t.stats.uptime(formatDuration(data.uptime_ms))}
+			{/* Only when it matters: a folder outside any volume is lost with the container. */}
+			{unmapped.length > 0 ? (
+				<p className="reveal bg-warn-soft text-warn text-small flex items-start gap-3 rounded-md px-6 py-4">
+					<TriangleAlert size={18} className="mt-0.5 flex-none" />
+					<span>
+						{unmapped.map((folder) => (
+							<code key={folder.path} className="font-mono">
+								{folder.path}{' '}
+							</code>
+						))}
+						{t.stats.unmapped}
 					</span>
-				}
-			>
-				{data.folders ? (
-					<Facts
-						items={[
-							[
-								t.stats.configFolder,
-								<FolderFact key="config" folder={data.folders.config} disk={disk} />,
-							],
-							[
-								t.stats.recordingsFolder,
-								<FolderFact key="recordings" folder={data.folders.recordings} disk={disk} />,
-							],
-						]}
-					/>
-				) : null}
-			</Card>
+				</p>
+			) : null}
 		</div>
-	);
-}
-
-/** A folder as Vixion sees it, where it comes from on the host, and the room left on its disk. */
-function FolderFact({ folder, disk }: { folder: Folder; disk: Stats['disk'] }) {
-	const t = useT();
-	return (
-		<span className="flex flex-col items-end gap-0.5">
-			<code className="font-mono">{folder.path}</code>
-			{folder.source ? (
-				<span className="text-small text-muted">
-					<code className="font-mono">{folder.source}</code> {t.stats.onHost}
-				</span>
-			) : null}
-			{folder.unmapped ? (
-				<span className="text-small text-warn flex items-center gap-1.5">
-					<TriangleAlert size={14} className="flex-none" />
-					{t.stats.unmapped}
-				</span>
-			) : null}
-			{folder.disk.total > 0 && (folder.disk.total !== disk.total || folder.disk.free !== disk.free) ? (
-				<span className="text-small text-muted">
-					{t.stats.diskFree(formatBytes(folder.disk.free), formatBytes(folder.disk.total))}
-				</span>
-			) : null}
-		</span>
 	);
 }
