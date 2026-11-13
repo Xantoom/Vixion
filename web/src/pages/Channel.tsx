@@ -209,15 +209,9 @@ function Hero({ data, name }: { data: Page; name: string }) {
 							target="_blank"
 							rel="noreferrer"
 							data-tip={t.streamer.openTwitch}
-							className="group/name hover:text-accent-text flex min-w-0 items-center gap-2 transition-colors"
+							className="hover:text-accent-text flex min-w-0 items-center transition-colors"
 						>
 							<span className="truncate">{name}</span>
-							<ExternalLink
-								size={20}
-								strokeWidth={2.2}
-								aria-label={t.streamer.openTwitch}
-								className="text-muted group-hover/name:text-accent-text flex-none transition-colors"
-							/>
 						</a>
 						{profile?.partner ? (
 							<span data-tip={t.channel.partner} className="flex-none">
