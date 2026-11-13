@@ -28,6 +28,8 @@ pub struct Streamer {
     cover_stream_id: Option<i64>,
     monitored: bool,
     retention_days: Option<i64>,
+    /// How many days recordings stay when the streamer has no rule of its own; 0 keeps them.
+    default_retention_days: i64,
     live: Option<LiveInfo>,
     recording: Option<LiveProgress>,
     stream_count: i64,
@@ -64,6 +66,7 @@ fn streamer_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Streamer> {
         cover_stream_id: row.get(17)?,
         monitored: row.get::<_, i64>(5)? != 0,
         retention_days: row.get(6)?,
+        default_retention_days: super::streams::global_retention(),
         live: live_since.map(|since| LiveInfo {
             title: row.get(7).ok().flatten(),
             game: row.get(8).ok().flatten(),

@@ -4,6 +4,7 @@ import {
 	BadgeCheck,
 	Bookmark,
 	CalendarDays,
+	CirclePause,
 	CircleStop,
 	ExternalLink,
 	Eye,
@@ -18,7 +19,7 @@ import {
 	TriangleAlert,
 	Users,
 } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 import { useT } from '@/i18n';
 import {
 	ApiError,
@@ -43,7 +44,8 @@ import { useCan, useRouteParams } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { Confirm, Dialog } from '@/ui/Dialog';
-import { NumberInput, Segmented } from '@/ui/Field';
+import { NumberInput } from '@/ui/Field';
+import { ActionRow, ChoiceRow, Group, SwitchRow } from '@/ui/Group';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
@@ -229,6 +231,9 @@ function Hero({ data, name }: { data: Page; name: string }) {
 						{streamer ? (
 							<Meta icon={<Film size={16} />}>{t.streamers.streams(streamer.stream_count)}</Meta>
 						) : null}
+						{streamer && !streamer.monitored ? (
+							<Meta icon={<CirclePause size={16} />}>{t.streamers.paused}</Meta>
+						) : null}
 						{!live && (profile?.last_broadcast ?? streamer?.last_stream_at) ? (
 							<Meta icon={<CalendarDays size={16} />}>
 								{t.channel.lastLive(
@@ -332,84 +337,28 @@ function AddButton({ login, name }: { login: string; name: string }) {
 	);
 }
 
-/** Whether new broadcasts are recorded, switched right here; a plain status for those who can't. */
-function RecordSwitch({ streamer }: { streamer: Streamer }) {
-	const t = useT();
-	const client = useQueryClient();
-	const canManage = useCan('streamers.manage');
-	const [busy, setBusy] = useState(false);
-	if (!canManage) {
-		return (
-			<span className="text-small text-muted mr-1 font-medium">
-				{streamer.monitored ? t.channel.watched : t.streamers.paused}
-			</span>
-		);
-	}
-	const toggle = async () => {
-		setBusy(true);
-		try {
-			await api.patch(`/streamers/${streamer.id}`, { monitored: !streamer.monitored });
-			await Promise.all([
-				client.invalidateQueries({ queryKey: ['channel'] }),
-				client.invalidateQueries({ queryKey: streamersQuery.queryKey }),
-			]);
-			toast.ok(
-				streamer.monitored
-					? t.streamer.recordOff(streamer.display_name)
-					: t.streamer.recordOn(streamer.display_name),
-			);
-		} catch (error) {
-			toast.error(error);
-		} finally {
-			setBusy(false);
-		}
-	};
-	return (
-		<button
-			type="button"
-			role="switch"
-			aria-checked={streamer.monitored}
-			aria-busy={busy || undefined}
-			onClick={busy ? undefined : () => void toggle()}
-			className="group text-ui hover:bg-surface flex h-10 items-center gap-2.5 rounded-sm px-3 font-medium transition-colors max-sm:-ml-3"
-		>
-			{t.streamer.record}
-			<span className="bg-line-2 group-aria-checked:bg-accent-fill relative h-6 w-10 flex-none rounded-sm transition-colors duration-200">
-				<span className="absolute top-1 left-1 size-4 rounded-xs bg-white shadow-sm transition-transform duration-200 ease-(--ease-spring) group-aria-checked:translate-x-4" />
-			</span>
-		</button>
-	);
-}
-
 function StreamerActions({ streamer }: { streamer: Streamer }) {
 	const t = useT();
 	const canManage = useCan('streamers.manage');
 	const [settings, setSettings] = useState(false);
+	if (!canManage) return null;
 	return (
 		<>
-			<RecordSwitch streamer={streamer} />
-			{canManage ? (
-				<>
-					<Button
-						aria-label={t.streamer.settingsTitle(streamer.display_name)}
-						data-tip={t.streamer.settingsTitle(streamer.display_name)}
-						onClick={() => {
-							setSettings(true);
-						}}
-						className="max-sm:w-10 max-sm:px-0"
-					>
-						<Settings2 size={17} />
-						<span className="max-sm:hidden">{t.streamer.settings}</span>
-					</Button>
-					{settings ? (
-						<SettingsDialog
-							streamer={streamer}
-							onClose={() => {
-								setSettings(false);
-							}}
-						/>
-					) : null}
-				</>
+			<Button
+				onClick={() => {
+					setSettings(true);
+				}}
+			>
+				<Settings2 size={17} />
+				{t.streamer.settings}
+			</Button>
+			{settings ? (
+				<SettingsDialog
+					streamer={streamer}
+					onClose={() => {
+						setSettings(false);
+					}}
+				/>
 			) : null}
 		</>
 	);
@@ -664,10 +613,12 @@ function VideoCard({ video }: { video: TwitchVideo }) {
 
 type RetentionChoice = 'default' | 'forever' | 'custom';
 
-/** How long recordings stay, cutting the broadcast on air, and deleting the streamer. */
+/** Whether to record, how long recordings stay, cutting the broadcast on air, and deleting the streamer. */
 function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: () => void }) {
 	const t = useT();
 	const client = useQueryClient();
+	const name = useId();
+	const [monitored, setMonitored] = useState(streamer.monitored);
 	const initial: RetentionChoice =
 		streamer.retention_days === null ? 'default' : streamer.retention_days === 0 ? 'forever' : 'custom';
 	const [choice, setChoice] = useState<RetentionChoice>(initial);
@@ -675,11 +626,13 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 	const [busy, setBusy] = useState(false);
 	const [removing, setRemoving] = useState(false);
 	const [stopping, setStopping] = useState(false);
+	const fallback = streamer.default_retention_days;
 
 	const save = async () => {
 		setBusy(true);
 		try {
 			await api.patch(`/streamers/${streamer.id}`, {
+				monitored,
 				retention_days: choice === 'default' ? null : choice === 'forever' ? 0 : days,
 			});
 			await Promise.all([
@@ -712,19 +665,53 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 			}
 		>
 			<div className="flex flex-col gap-6">
-				<div className="flex flex-col gap-3">
-					<span className="text-ui font-medium">{t.streamer.retention}</span>
-					<Segmented
-						label={t.streamer.retention}
-						value={choice}
-						onChange={setChoice}
-						options={[
-							{ value: 'default', label: t.streamer.retentionDefault },
-							{ value: 'forever', label: t.streamer.retentionForever },
-							{ value: 'custom', label: t.streamer.retentionCustom },
-						]}
+				<Group title={t.streamer.recordSection}>
+					<SwitchRow label={t.streamer.recordLives} checked={monitored} onChange={setMonitored} />
+					{streamer.recording ? (
+						<li className="flex min-h-12 items-center justify-between gap-3 py-2 pr-2 pl-4">
+							<span className="text-ui text-live flex items-center gap-2 font-medium">
+								<LiveDot size={8} />
+								{t.streamer.liveNow}
+							</span>
+							<Button
+								size="sm"
+								variant="danger-ghost"
+								onClick={() => {
+									setStopping(true);
+								}}
+							>
+								<CircleStop size={15} />
+								{t.streamer.cut}
+							</Button>
+						</li>
+					) : null}
+				</Group>
+				<Group title={t.streamer.keepSection}>
+					<ChoiceRow
+						name={name}
+						label={t.streamer.keepDefault}
+						detail={fallback === 0 ? t.streamer.retentionForever : t.common.days(fallback)}
+						checked={choice === 'default'}
+						onChange={() => {
+							setChoice('default');
+						}}
 					/>
-					{choice === 'custom' ? (
+					<ChoiceRow
+						name={name}
+						label={t.streamer.retentionForever}
+						checked={choice === 'forever'}
+						onChange={() => {
+							setChoice('forever');
+						}}
+					/>
+					<ChoiceRow
+						name={name}
+						label={t.streamer.keepFor}
+						checked={choice === 'custom'}
+						onChange={() => {
+							setChoice('custom');
+						}}
+					>
 						<NumberInput
 							aria-label={t.streamer.retention}
 							value={days}
@@ -733,37 +720,19 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 							max={3650}
 							unit={t.common.days(days).replace(/^\d+\s*/, '')}
 						/>
-					) : null}
-				</div>
-				{streamer.recording ? (
-					<div className="bg-surface ring-line flex flex-wrap items-center justify-between gap-3 rounded-md px-4 py-3 ring-1">
-						<span className="text-ui text-live flex items-center gap-2 font-medium">
-							<LiveDot size={8} />
-							{t.streamer.liveNow}
-						</span>
-						<Button
-							size="sm"
-							onClick={() => {
-								setStopping(true);
-							}}
-						>
-							<CircleStop size={15} />
-							{t.streamer.stop}
-						</Button>
-					</div>
-				) : null}
-				<div className="border-line -mx-6 border-t px-6 pt-4">
-					<Button
-						variant="danger-ghost"
-						className="-ml-3"
+					</ChoiceRow>
+				</Group>
+				<Group>
+					<ActionRow
+						danger
 						onClick={() => {
 							setRemoving(true);
 						}}
 					>
 						<Trash2 size={16} />
 						{t.streamer.remove}
-					</Button>
-				</div>
+					</ActionRow>
+				</Group>
 			</div>
 			<RemoveDialog
 				streamer={streamer}

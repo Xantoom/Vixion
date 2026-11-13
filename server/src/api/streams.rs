@@ -82,7 +82,7 @@ pub fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StreamSumma
 /// The global retention, cached for row mapping (refreshed by every settings read in the API).
 static GLOBAL_RETENTION: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(14);
 
-fn global_retention() -> i64 {
+pub(super) fn global_retention() -> i64 {
     GLOBAL_RETENTION.load(std::sync::atomic::Ordering::Relaxed)
 }
 

@@ -8,7 +8,8 @@ import { useCan, useMe } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { Confirm, Dialog } from '@/ui/Dialog';
-import { Field, KNOB, PasswordInput, SWITCH, Select, Switch, TextInput } from '@/ui/Field';
+import { Field, PasswordInput, Select, TextInput } from '@/ui/Field';
+import { Group, SwitchRow } from '@/ui/Group';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
@@ -227,30 +228,19 @@ function PermissionSwitch({
 	changed?: boolean;
 }) {
 	const t = useT();
-	const id = useId();
 	return (
-		<li className="flex min-h-12 items-center justify-between gap-4 px-4">
-			<label htmlFor={id} className="text-ui text-ink flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-3">
-				{t.users.perm[permission] ?? permission}
-				{changed ? (
+		<SwitchRow
+			label={t.users.perm[permission] ?? permission}
+			checked={checked}
+			onChange={onChange}
+			badge={
+				changed ? (
 					<span className="bg-accent size-1.5 flex-none rounded-full" title={t.users.changed}>
 						<span className="sr-only">{t.users.changed}</span>
 					</span>
-				) : null}
-			</label>
-			<button
-				id={id}
-				type="button"
-				role="switch"
-				aria-checked={checked}
-				onClick={() => {
-					onChange(!checked);
-				}}
-				className={SWITCH}
-			>
-				<span className={`${KNOB} ${checked ? 'translate-x-5' : ''}`} />
-			</button>
-		</li>
+				) : null
+			}
+		/>
 	);
 }
 
@@ -260,14 +250,9 @@ function PermissionList({ known, item }: { known: Permission[]; item: (permissio
 	return (
 		<div className="flex flex-col gap-5">
 			{grouped(known).map((group) => (
-				<section key={group.key} className="flex flex-col gap-2">
-					<h3 className="text-caption text-ink-2 px-1 font-semibold tracking-wider uppercase">
-						{t.users.groups[group.key]}
-					</h3>
-					<ul className="bg-surface ring-line divide-line divide-y rounded-md ring-1">
-						{group.permissions.map(item)}
-					</ul>
-				</section>
+				<Group key={group.key} title={t.users.groups[group.key]}>
+					{group.permissions.map(item)}
+				</Group>
 			))}
 		</div>
 	);
@@ -451,9 +436,9 @@ function UserDialog({
 					)}
 				</Field>
 				{user && !self ? (
-					<div className="bg-surface ring-line rounded-md px-4 py-3 ring-1">
-						<Switch checked={active} onChange={setActive} label={t.users.active} />
-					</div>
+					<Group>
+						<SwitchRow label={t.users.active} checked={active} onChange={setActive} />
+					</Group>
 				) : null}
 				{user && role?.builtin !== 'admin' ? (
 					<details className="group" open={exceptions > 0 || undefined}>

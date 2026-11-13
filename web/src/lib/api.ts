@@ -97,6 +97,8 @@ export interface Streamer {
 	cover_stream_id: number | null;
 	monitored: boolean;
 	retention_days: number | null;
+	/** Days recordings stay when the streamer has no rule of its own; 0 keeps them. */
+	default_retention_days: number;
 	live: { title: string | null; game: string | null; viewers: number | null; since: number } | null;
 	recording: LiveProgress | null;
 	stream_count: number;
