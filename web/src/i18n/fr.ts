@@ -245,11 +245,6 @@ export const fr: Messages = {
 		webhookHint: 'Avertissements et erreurs envoyés à ce webhook',
 		webhookKind: 'Service',
 		webhookPlaceholder: 'https://…',
-		system: 'Système',
-		mediaMode: 'Diffusion des vidéos',
-		mediaModes: { same: 'Par l’interface', http: 'Port séparé en HTTP', https: 'Port séparé en HTTPS' },
-		mediaSame: 'Même adresse que l’interface',
-		mediaUrl: 'Adresse des vidéos',
 	},
 	users: {
 		accounts: 'Comptes',

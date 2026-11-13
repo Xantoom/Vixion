@@ -86,13 +86,7 @@ pub async fn stats(State(app): State<AppState>, user: CurrentUser) -> AppResult<
 pub async fn get_settings(State(app): State<AppState>, user: CurrentUser) -> AppResult<Json<serde_json::Value>> {
     user.require("settings.manage")?;
     let settings = app.settings.get().await;
-    Ok(Json(json!({
-        "settings": settings,
-        "system": {
-            "media_mode": format!("{:?}", app.config.media_mode).to_lowercase(),
-            "media_url": app.config.media_public_url,
-        },
-    })))
+    Ok(Json(json!({ "settings": settings })))
 }
 
 pub async fn put_settings(

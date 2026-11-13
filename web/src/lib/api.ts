@@ -258,7 +258,6 @@ export interface Settings {
 
 export interface SettingsResponse {
 	settings: Settings;
-	system: { media_mode: string; media_url: string };
 }
 
 export interface User {

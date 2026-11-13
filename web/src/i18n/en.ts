@@ -240,15 +240,6 @@ export const en = {
 		webhookHint: 'Warnings and errors are sent to this webhook',
 		webhookKind: 'Service',
 		webhookPlaceholder: 'https://…',
-		system: 'System',
-		mediaMode: 'Video delivery',
-		mediaModes: {
-			same: 'Through the interface',
-			http: 'Separate HTTP port',
-			https: 'Separate HTTPS port',
-		} as Record<string, string>,
-		mediaSame: 'Same address as the interface',
-		mediaUrl: 'Video address',
 	},
 	users: {
 		accounts: 'Accounts',

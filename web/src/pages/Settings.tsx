@@ -5,7 +5,7 @@ import { useT } from '@/i18n';
 import { type Settings, type SettingsResponse, api } from '@/lib/api';
 import { useCan } from '@/lib/session';
 import { Button, IconButton } from '@/ui/Button';
-import { Card, Facts, SettingRow, Toggle } from '@/ui/Card';
+import { Card, SettingRow, Toggle } from '@/ui/Card';
 import { NumberInput, Select, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
@@ -154,27 +154,6 @@ export function SettingsPage() {
 						/>
 					</div>
 				</SettingRow>
-			</Card>
-
-			<Card title={t.settings.system} flush>
-				<Facts
-					items={[
-						[
-							t.settings.mediaMode,
-							t.settings.mediaModes[data?.system.media_mode ?? ''] ?? data?.system.media_mode ?? '',
-						],
-						[
-							t.settings.mediaUrl,
-							data?.system.media_url ? (
-								<code key="url" className="font-mono">
-									{data.system.media_url}
-								</code>
-							) : (
-								t.settings.mediaSame
-							),
-						],
-					]}
-				/>
 			</Card>
 
 			{dirty ? (
