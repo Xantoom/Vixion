@@ -159,7 +159,7 @@ const Line = memo(function Line({
 	if (line.k === 'n') {
 		return (
 			<li className="px-3 py-1">
-				<div className="border-accent bg-accent-soft text-ui rounded-r-xs border-l-2 px-2.5 py-1.5 leading-relaxed">
+				<div className="border-accent bg-accent-soft text-small rounded-r-xs border-l-2 px-2.5 py-1.5 leading-relaxed">
 					{stamp}
 					<span className="text-accent-text font-semibold">
 						<Megaphone size={14} className="mr-1.5 inline -translate-y-px" />
@@ -176,7 +176,7 @@ const Line = memo(function Line({
 	}
 	const action = line.k === 'a';
 	return (
-		<li className={`hover:bg-surface text-ui px-3 py-0.5 leading-relaxed ${deleted ? 'opacity-45' : ''}`}>
+		<li className={`hover:bg-surface text-small px-3 py-0.5 leading-relaxed ${deleted ? 'opacity-45' : ''}`}>
 			{stamp}
 			<Badges badges={line.b} assets={assets} />
 			<Name line={line} />
