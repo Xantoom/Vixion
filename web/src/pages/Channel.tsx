@@ -693,12 +693,7 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 				</Group>
 				<Group title={t.streamer.keepSection}>
 					<li className="flex min-h-14 items-center justify-between gap-4 py-2 pr-2 pl-5">
-						<span className="flex min-w-0 flex-col gap-0.5">
-							<span className="text-ui text-ink">{t.streamer.keepRow}</span>
-							{retention === null ? (
-								<span className="text-small text-muted">{t.streamer.keepFollows}</span>
-							) : null}
-						</span>
+						<span className="text-ui text-ink min-w-0">{t.streamer.keepRow}</span>
 						<Menu
 							label={t.streamer.keepRow}
 							trigger={() => (

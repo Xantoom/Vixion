@@ -112,8 +112,7 @@ export const en = {
 	},
 	streamer: {
 		keepRow: 'Keep recordings',
-		keepFollows: 'Same as the general setting',
-		keepGeneral: (length: string) => `General setting (${length})`,
+		keepGeneral: (length: string) => `Default (${length})`,
 		keepPresets: { 7: '1 week', 30: '1 month', 90: '3 months', 365: '1 year' } as Record<number, string>,
 		recordSection: 'Recording',
 		recordLives: 'Record their broadcasts',

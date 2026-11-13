@@ -113,8 +113,7 @@ export const fr: Messages = {
 	},
 	streamer: {
 		keepRow: 'Garder les enregistrements',
-		keepFollows: 'Comme le réglage général',
-		keepGeneral: (length) => `Réglage général (${length})`,
+		keepGeneral: (length) => `Par défaut (${length})`,
 		keepPresets: { 7: '1 semaine', 30: '1 mois', 90: '3 mois', 365: '1 an' },
 		recordSection: 'Enregistrement',
 		recordLives: 'Enregistrer ses lives',
