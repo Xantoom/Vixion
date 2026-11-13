@@ -43,6 +43,9 @@ services:
     restart: unless-stopped
     user: "1000:1000"
     stop_grace_period: 30s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     ports:
       - "8080:8080"
     volumes:
@@ -67,6 +70,7 @@ add it: it is recorded whenever it goes live, starting right away if it already 
 ```bash
 mkdir config recordings
 docker run -d --name vixion --restart unless-stopped --stop-timeout 30 \
+  --read-only --cap-drop ALL --security-opt no-new-privileges \
   --user 1000:1000 -p 8080:8080 -v ./config:/config -v ./recordings:/recordings \
   -e VIXION_TWITCH_TOKEN="" \
   ghcr.io/xantoom/vixion:latest
@@ -75,7 +79,8 @@ docker run -d --name vixion --restart unless-stopped --stop-timeout 30 \
 </details>
 
 Images exist for x86-64 and arm64. Create both folders before the first start so that they belong to you rather than
-to root.
+to root. `read_only`, `cap_drop` and `no-new-privileges` are optional: Vixion writes only to its two folders and needs
+no privileges, so they cost nothing and contain the damage should it ever be compromised.
 
 > [!WARNING]
 > Don't send the video through a Cloudflare Tunnel: Cloudflare's terms forbid carrying video over it.
@@ -114,6 +119,20 @@ Put it in `VIXION_TWITCH_TOKEN` and restart the container. *Settings → Twitch*
 and copy it. Signing out of twitch.tv in that browser invalidates the token: close the tab instead, or use a private
 window to take it. Vixion only sends it to Twitch, and raises an alert if Twitch refuses it.
 
+A variable shows in `docker inspect`. To keep the token out of it, put it in a file and pass it as a secret:
+
+```yaml
+services:
+  vixion:
+    # …
+    environment:
+      VIXION_TWITCH_TOKEN_FILE: /run/secrets/twitch_token
+    secrets: [twitch_token]
+secrets:
+  twitch_token:
+    file: ./twitch_token.txt
+```
+
 ## Updating
 
 ```bash
@@ -140,11 +159,16 @@ VIXION_DATA_DIR=/var/lib/vixion VIXION_RECORDINGS_DIR=/srv/recordings VIXION_TWI
 
 Without `VIXION_RECORDINGS_DIR`, recordings go to `streams` inside the data folder.
 
+Each release lists the binaries' checksums in `SHA256SUMS` (`sha256sum -c SHA256SUMS --ignore-missing`), and
+`gh attestation verify vixion-linux-x86_64 --repo Xantoom/Vixion` proves a binary, or an image, was built by this
+repository's release workflow.
+
 `--twitch-token <token>` also works, but shows in the process list.
 
 ## Development
 
-Needs [Bun](https://bun.sh) and Rust (stable).
+Needs [Bun](https://bun.sh) 1.4 and [rustup](https://rustup.rs), which installs the Rust version
+`rust-toolchain.toml` names.
 
 ```bash
 cd web && bun install && bun run build && cd ..

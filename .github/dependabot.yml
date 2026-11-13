@@ -1,0 +1,26 @@
+# Weekly updates, one pull request per ecosystem.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule: { interval: weekly }
+    groups: { cargo: { patterns: ['*'] } }
+  - package-ecosystem: rust-toolchain
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: bun
+    directory: /web
+    schedule: { interval: weekly }
+    groups: { web: { patterns: ['*'] } }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups: { actions: { patterns: ['*'] } }
+  - package-ecosystem: docker
+    directories: [/, /.github]
+    schedule: { interval: weekly }
+    groups: { images: { patterns: ['*'] } }
+    ignore:
+      # Bun stays on 1.4 until the move to 1.5 is made by hand.
+      - dependency-name: oven/bun
+        update-types: [version-update:semver-major, version-update:semver-minor]

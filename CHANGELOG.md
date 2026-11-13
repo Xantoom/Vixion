@@ -45,6 +45,11 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
   memory instead of hundreds, and chat downloads start at once.
 - Lighter player (MP4 only), smaller channel avatars, emotes fetched as soon as a recording starts,
   and database indexes for folder lookups and purges.
+- Release binaries and images use mimalloc, tuned to rest at a few megabytes: musl's allocator
+  served video at half the speed.
+- A panic ends only the recording it happened in, which is then repaired, instead of the whole server.
+- Images are built on Debian 13 distroless, with base images and Rust (1.100) pinned and kept up to
+  date by Dependabot.
 
 ### Security
 
@@ -53,3 +58,7 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - Someone who manages accounts can't grant anyone, themselves included, more than they hold.
 - Changing one's password signs out the other devices.
 - Sign-in hashing runs a few at a time, so a flood of attempts can't exhaust memory.
+- Releases run every check first, and publish `SHA256SUMS` and signed build provenance for the
+  binaries and images (`gh attestation verify`).
+- The release workflow's write access is limited to its last step, and actions are pinned by commit.
+- The compose file runs the container read-only, without capabilities or privilege escalation.

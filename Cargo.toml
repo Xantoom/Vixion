@@ -7,7 +7,8 @@ members = ["server"]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
-panic = "abort"
+# Unwinding, so that a panic ends one recording (which is then repaired) and not the whole server.
+panic = "unwind"
 strip = true
 
 # Development builds keep no debug info, which divides the target folder's size several times.

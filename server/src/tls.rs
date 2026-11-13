@@ -50,8 +50,10 @@ impl CertSlot {
 }
 
 fn certified_key(chain_pem: &[u8], key_pem: &[u8]) -> Result<CertifiedKey, String> {
-    let chain = rustls_pemfile::certs(&mut &*chain_pem).collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
-    let key = rustls_pemfile::private_key(&mut &*key_pem).map_err(|e| e.to_string())?.ok_or("no private key")?;
+    use rustls::pki_types::pem::PemObject as _;
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+    let chain = CertificateDer::pem_slice_iter(chain_pem).collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    let key = PrivateKeyDer::from_pem_slice(key_pem).map_err(|e| e.to_string())?;
     let provider = rustls::crypto::ring::default_provider();
     CertifiedKey::from_der(chain, key, &provider).map_err(|e| e.to_string())
 }
@@ -152,7 +154,8 @@ pub async fn maintain(app: AppState, slot: Arc<CertSlot>) {
 
 /// When a certificate chain is due for renewal, in seconds since 1970.
 fn renewal_time(chain_pem: &[u8]) -> Option<i64> {
-    let first = rustls_pemfile::certs(&mut &*chain_pem).next()?.ok()?;
+    use rustls::pki_types::pem::PemObject as _;
+    let first = rustls::pki_types::CertificateDer::pem_slice_iter(chain_pem).next()?.ok()?;
     let (from, until) = validity(&first)?;
     Some(from + ((until - from) as f64 * RENEW_AT) as i64)
 }

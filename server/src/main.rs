@@ -19,6 +19,11 @@ mod tls;
 mod twitch;
 mod web;
 
+// musl's allocator is slow under many threads: video was served at half the speed of a glibc build.
+#[cfg(target_env = "musl")]
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -39,7 +44,27 @@ const USAGE: &str = "Usage:
 
 Configuration is read from VIXION_* environment variables; see the README.";
 
+/// mimalloc's defaults trade memory for speed it doesn't bring here: without eager commits and with
+/// memory returned at once, the server rests at a few megabytes instead of twenty, just as fast.
+/// `MIMALLOC_*` variables still win.
+#[cfg(target_env = "musl")]
+fn tune_allocator() {
+    // Indexes in mimalloc's `mi_option_t`.
+    const ARENA_EAGER_COMMIT: libmimalloc_sys::mi_option_t = 4;
+    const PURGE_DELAY: libmimalloc_sys::mi_option_t = 15;
+    for (option, variable) in
+        [(ARENA_EAGER_COMMIT, "MIMALLOC_ARENA_EAGER_COMMIT"), (PURGE_DELAY, "MIMALLOC_PURGE_DELAY")]
+    {
+        if std::env::var_os(variable).is_none() {
+            // SAFETY: sets a plain integer option; mimalloc allows it at any time.
+            unsafe { libmimalloc_sys::mi_option_set(option, 0) };
+        }
+    }
+}
+
 fn main() -> ExitCode {
+    #[cfg(target_env = "musl")]
+    tune_allocator();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut config = match Config::from_env() {
         Ok(config) => config,

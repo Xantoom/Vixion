@@ -1,0 +1,6 @@
+# The one Rust version for development, CI, releases and the Docker build. Dependabot proposes the
+# next one.
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

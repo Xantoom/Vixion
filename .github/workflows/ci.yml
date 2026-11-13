@@ -4,24 +4,36 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The release runs every check first, whatever changed.
+  workflow_call:
+    inputs:
+      full:
+        type: boolean
+        default: true
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ inputs.full && 'release' || 'push' }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
+# Actions are pinned by commit; Dependabot proposes their updates.
 jobs:
   # Only what changed is checked: a README edit runs nothing.
   changes:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
-      web: ${{ steps.filter.outputs.web }}
-      server: ${{ steps.filter.outputs.server }}
+      web: ${{ inputs.full || steps.filter.outputs.web == 'true' }}
+      server: ${{ inputs.full || steps.filter.outputs.server == 'true' }}
+      docker: ${{ inputs.full || steps.filter.outputs.docker == 'true' }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ !inputs.full }}
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        if: ${{ !inputs.full }}
         id: filter
         with:
           filters: |
@@ -32,25 +44,38 @@ jobs:
               - 'server/**'
               - 'Cargo.*'
               - 'rustfmt.toml'
+              - 'rust-toolchain.toml'
+              - '.github/workflows/ci.yml'
+            docker:
+              - 'Dockerfile'
+              - '.dockerignore'
+              - '.github/release.Dockerfile'
+              - 'Cargo.*'
+              - 'rust-toolchain.toml'
+              - 'web/package.json'
+              - 'web/bun.lock'
               - '.github/workflows/ci.yml'
 
   web:
     needs: changes
     if: needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          bun-version: 1.4.2
-      - uses: actions/cache@v4
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.x
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ hashFiles('web/bun.lock') }}
       - run: bun install --frozen-lockfile
+      - run: bun audit
       - run: bun run fmt:check
       - run: bun run typecheck
       - run: bun run lint
@@ -59,18 +84,53 @@ jobs:
   server:
     needs: changes
     if: needs.changes.outputs.server == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     env:
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+          persist-credentials: false
+      # rust-toolchain.toml says which version; rustup installs it on first use.
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           # The ci profile is the one built here.
           cache-targets: true
       - run: cargo fmt --check
       - run: cargo clippy --profile ci --all-targets --locked -- -D warnings
       - run: cargo test --profile ci --locked
+      # Known vulnerabilities and unmaintained crates, from the RustSec database.
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-audit
+      - run: cargo audit --deny unmaintained --deny unsound --deny yanked
+
+  # Both images build and start: the one from source, and the release one around its binary.
+  docker:
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: vixion:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: The source image starts, hardened, and reports healthy
+        run: .github/smoke-test.sh vixion:ci
+      - name: Build the release image around that binary
+        run: |
+          mkdir -p out/amd64
+          docker create --name extract vixion:ci
+          docker cp extract:/usr/local/bin/vixion out/amd64/vixion
+          docker rm extract
+          docker buildx build --load --platform linux/amd64 -f .github/release.Dockerfile -t vixion:release .
+      - name: The release image starts, hardened, and reports healthy
+        run: .github/smoke-test.sh vixion:release
