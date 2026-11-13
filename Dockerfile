@@ -20,11 +20,14 @@ COPY --from=web /src/web/dist web/dist
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --release --locked && cp target/release/vixion /vixion
+# Owned by the image's user, so that named volumes start writable.
+RUN mkdir -p /volumes/config /volumes/recordings
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=server /vixion /usr/local/bin/vixion
-ENV VIXION_DATA_DIR=/data
-VOLUME /data
+COPY --from=server --chown=65532:65532 /volumes/ /
+ENV VIXION_DATA_DIR=/config VIXION_RECORDINGS_DIR=/recordings
+VOLUME /config /recordings
 EXPOSE 8080 8443
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD ["vixion", "healthcheck"]
 ENTRYPOINT ["vixion"]

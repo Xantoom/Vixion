@@ -133,16 +133,20 @@ export class MediabunnyEngine implements Engine {
 				const [width, height, first] = await Promise.all([
 					video.getDisplayWidth(),
 					video.getDisplayHeight(),
-					video.getFirstTimestamp(),
+					video.getFirstTimestampOrNull(),
 				]);
 				this.canvas.width = width;
 				this.canvas.height = height;
-				this.firstPicture = Math.max(0, first);
+				this.firstPicture = Math.max(0, first ?? 0);
 			}
 			if (audio && (await audio.canDecode())) this.audioSink = new AudioBufferSink(audio);
-			// The index at the end of the file gives the duration at once; the server's figure is the fallback.
+			// The index at the end of the file gives the duration at once; the server's figure is the fallback,
+			// also for a recording that has only just started and holds no frames yet.
 			this.duration = await Promise.race([
-				this.input.computeDuration().catch(() => durationHint),
+				this.input
+					.computeDuration()
+					.then((duration) => duration || durationHint)
+					.catch(() => durationHint),
 				sleep(5000).then(() => durationHint),
 			]);
 			this.showStill(this.position);

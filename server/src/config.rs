@@ -37,7 +37,10 @@ pub enum TlsSource {
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    /// The database, the secret key and certificates (`VIXION_DATA_DIR`).
     pub data_dir: PathBuf,
+    /// The recordings (`VIXION_RECORDINGS_DIR`), by default `streams` in the data folder.
+    pub recordings_dir: PathBuf,
     pub http_addr: SocketAddr,
     pub media_mode: MediaMode,
     pub media_addr: SocketAddr,
@@ -93,6 +96,7 @@ impl Config {
     /// Reads `VIXION_*` variables. Every one has a default that works on a single machine.
     pub fn from_env() -> Result<Self, ConfigError> {
         let data_dir = PathBuf::from(var("VIXION_DATA_DIR").unwrap_or_else(|| "./data".to_owned()));
+        let recordings_dir = var("VIXION_RECORDINGS_DIR").map_or_else(|| data_dir.join("streams"), PathBuf::from);
         let http_addr = addr("VIXION_HTTP_ADDR", "0.0.0.0:8080")?;
         let media_addr = addr("VIXION_MEDIA_ADDR", "0.0.0.0:8443")?;
         let media_domain = var("VIXION_MEDIA_DOMAIN").unwrap_or_default();
@@ -163,6 +167,7 @@ impl Config {
         Ok(Self {
             twitch_token,
             data_dir,
+            recordings_dir,
             http_addr,
             media_mode,
             media_addr,
@@ -180,6 +185,6 @@ impl Config {
     }
 
     pub fn streams_dir(&self) -> PathBuf {
-        self.data_dir.join("streams")
+        self.recordings_dir.clone()
     }
 }

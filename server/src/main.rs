@@ -193,6 +193,7 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         data = %app.config.data_dir.display(),
+        recordings = %app.config.recordings_dir.display(),
         "starting"
     );
     if let Err(error) = retention::recover(&app).await {

@@ -171,6 +171,7 @@ export function SettingsPage() {
 							),
 						],
 						[t.settings.dataDir, <code className="font-mono">{data?.system.data_dir}</code>],
+						[t.settings.recordingsDir, <code className="font-mono">{data?.system.recordings_dir}</code>],
 					]}
 				/>
 			</Card>

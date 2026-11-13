@@ -46,13 +46,14 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/data
+      - ./config:/config
+      - ./recordings:/recordings
     environment:
       VIXION_TWITCH_TOKEN: ""
 ```
 
 ```bash
-mkdir data
+mkdir config recordings
 docker compose up -d
 ```
 
@@ -63,17 +64,17 @@ recorded whenever it goes live, starting right away if it already is.
 <summary>With <code>docker run</code></summary>
 
 ```bash
-mkdir data
+mkdir config recordings
 docker run -d --name vixion --restart unless-stopped --stop-timeout 30 \
-  --user 1000:1000 -p 8080:8080 -v ./data:/data \
+  --user 1000:1000 -p 8080:8080 -v ./config:/config -v ./recordings:/recordings \
   -e VIXION_TWITCH_TOKEN="" \
   ghcr.io/xantoom/vixion:latest
 ```
 
 </details>
 
-Images exist for x86-64 and arm64. Create `data` before the first start so that it belongs to you rather than to
-root.
+Images exist for x86-64 and arm64. Create both folders before the first start so that they belong to you rather than
+to root.
 
 > [!WARNING]
 > Don't send the video through a Cloudflare Tunnel: Cloudflare's terms forbid carrying video over it.
@@ -82,9 +83,10 @@ root.
 
 | Parameter                       | Function                                                                         |
 | ------------------------------- | -------------------------------------------------------------------------------- |
-| `-p 8080`                       | The web interface                                                                |
-| `-v /data`                      | Database, recordings and keys. Put it on the disk that holds the recordings      |
-| `--user 1000:1000`              | The owner of the data folder on the host (`id -u`, `id -g`)                       |
+| `-p 8080`                       | The web interface and its API: one server, one port                              |
+| `-v /config`                    | Database, keys and certificates: a few megabytes, worth backing up               |
+| `-v /recordings`                | The recordings: put it on a large disk                                           |
+| `--user 1000:1000`              | The owner of both folders on the host (`id -u`, `id -g`)                         |
 | `-e VIXION_TWITCH_TOKEN`        | A Twitch account's token: no ads, best quality (see below). Recommended          |
 | `-e VIXION_TWITCH_TOKEN_FILE`   | The same, read from a file, for Docker secrets                                   |
 | `-e VIXION_LOG`                 | `error`, `warn`, `info` (default) or `debug`                                     |
@@ -116,34 +118,27 @@ window to take it. Vixion only sends it to Twitch, and raises an alert if Twitch
 docker compose pull && docker compose up -d
 ```
 
-Recordings in progress close cleanly and continue as a new part once the container is back. Pin the minor line (`ghcr.io/xantoom/vixion:0.2`) to
-get fixes without surprises; see [Versions](#versions).
+Recordings in progress close cleanly and continue as a new part once the container is back. Pin the minor line
+(`ghcr.io/xantoom/vixion:0.2`) to get fixes without surprises; [CHANGELOG.md](CHANGELOG.md) lists every change.
 
 ## Troubleshooting
 
 - **Logs**: `docker logs -f vixion`, or *Administration → Logs* in the interface.
 - **Forgotten password**: `docker exec vixion vixion reset-password <user> <new-password>`.
-- **Permission denied on /data**: the folder belongs to another user; `sudo chown -R 1000:1000 data` or change `user`.
+- **Permission denied**: a folder belongs to another user; `sudo chown -R 1000:1000 config recordings` or change
+  `user`.
 
 ## Without Docker
 
 Static Linux binaries (x86-64, arm64) are attached to each [release](https://github.com/Xantoom/Vixion/releases):
 
 ```bash
-VIXION_DATA_DIR=/var/lib/vixion VIXION_TWITCH_TOKEN=... ./vixion
+VIXION_DATA_DIR=/var/lib/vixion VIXION_RECORDINGS_DIR=/srv/recordings VIXION_TWITCH_TOKEN=... ./vixion
 ```
 
+Without `VIXION_RECORDINGS_DIR`, recordings go to `streams` inside the data folder.
+
 `--twitch-token <token>` also works, but shows in the process list.
-
-## Player shortcuts
-
-`Space` or `K` play/pause · `←` `→` 5 s · `J` `L` 10 s · `↑` `↓` volume · `M` mute · `F` full screen ·
-`Home` `End` start and end · `/` search. Clicking the timeline jumps at once; chapters follow the broadcast's
-categories. On a touchscreen, double-tap the sides to jump 5 s.
-
-The player decodes with [Mediabunny](https://mediabunny.dev) and WebCodecs on HTTPS pages, and falls back to the
-browser's video element on plain HTTP, where WebCodecs isn't available. A browser that can't decode HEVC or AV1 offers
-the download instead.
 
 ## Development
 
@@ -160,24 +155,6 @@ cargo run -- serve
 cargo fmt --check && cargo clippy --all-targets && cargo test --profile ci
 cd web && bun run fmt:check && bun run typecheck && bun run lint
 ```
-
-## Versions
-
-Vixion follows [Semantic Versioning](https://semver.org): a patch release fixes, a minor release adds, a major
-release asks you to change something (configuration, data) before upgrading, and says what in the changelog.
-[CHANGELOG.md](CHANGELOG.md) lists every change. Images are tagged with the full version (`0.2.1`), the minor line
-(`0.2`) and `latest`; pin the minor line to get fixes without surprises.
-
-To cut a release, write the changes under *Unreleased* in the changelog, then:
-
-```bash
-bun scripts/release.ts minor   # or patch, major, or an exact version such as 1.0.0-rc.1
-git push origin HEAD v0.2.0
-```
-
-The script sets the version in the crate and the web package, dates the changelog section, commits and tags. The
-pushed tag builds the binaries and images and publishes the GitHub release with that section as its notes.
-Pre-releases (`-rc.1`) never move `latest`.
 
 ## Built with
 

@@ -241,7 +241,8 @@ export const fr: Messages = {
 		mediaModes: { same: 'Par l’interface', http: 'Port séparé en HTTP', https: 'Port séparé en HTTPS' },
 		mediaSame: 'Même adresse que l’interface',
 		mediaUrl: 'Adresse des vidéos',
-		dataDir: 'Dossier des données',
+		dataDir: 'Dossier de configuration',
+		recordingsDir: 'Dossier des enregistrements',
 	},
 	users: {
 		accounts: 'Comptes',

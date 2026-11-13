@@ -88,6 +88,7 @@ pub async fn get_settings(State(app): State<AppState>, user: CurrentUser) -> App
             "media_mode": format!("{:?}", app.config.media_mode).to_lowercase(),
             "media_url": app.config.media_public_url,
             "data_dir": app.config.data_dir.display().to_string(),
+            "recordings_dir": app.config.recordings_dir.display().to_string(),
         },
     })))
 }

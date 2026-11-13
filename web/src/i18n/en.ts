@@ -240,7 +240,8 @@ export const en = {
 		} as Record<string, string>,
 		mediaSame: 'Same address as the interface',
 		mediaUrl: 'Video address',
-		dataDir: 'Data folder',
+		dataDir: 'Config folder',
+		recordingsDir: 'Recordings folder',
 	},
 	users: {
 		accounts: 'Accounts',

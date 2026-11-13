@@ -249,7 +249,7 @@ export interface Settings {
 
 export interface SettingsResponse {
 	settings: Settings;
-	system: { media_mode: string; media_url: string; data_dir: string };
+	system: { media_mode: string; media_url: string; data_dir: string; recordings_dir: string };
 }
 
 export interface User {

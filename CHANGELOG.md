@@ -28,6 +28,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
   playhead and older ones on scrolling up. A broadcast still being recorded opens once it ends.
 - Each recording reopens where it was left, and its card shows how far it was watched.
 - Administration page gathering statistics, logs, users and settings.
+- Two volumes in the image: `/config` for the database, keys and certificates, `/recordings` for
+  the recordings (`VIXION_RECORDINGS_DIR` outside Docker; by default `streams` in the data folder).
 - Recordings are deleted after 14 days unless kept forever; per-streamer retention.
 - Accounts with roles and per-person permissions; statistics, logs and alerts by webhook.
 - Built-in HTTPS for the video address, with Let's Encrypt certificates through Cloudflare DNS.
