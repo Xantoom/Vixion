@@ -3,7 +3,7 @@ import { Copy, Eye, EyeOff, TriangleAlert } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useT } from '@/i18n';
 import { type Folder, type Settings, type SettingsResponse, type Stats, api } from '@/lib/api';
-import { formatBytes, formatDuration } from '@/lib/format';
+import { formatDuration } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import { Button, IconButton } from '@/ui/Button';
 import { Card, Facts, SettingRow, Toggle } from '@/ui/Card';
@@ -275,7 +275,7 @@ function ServerCard() {
 	);
 }
 
-/** A folder as Vixion sees it, where it comes from on the host, and the room left on its disk. */
+/** A folder as Vixion sees it, and where it comes from on the host. */
 function FolderFact({ folder }: { folder: Folder }) {
 	const t = useT();
 	return (
@@ -290,11 +290,6 @@ function FolderFact({ folder }: { folder: Folder }) {
 				<span className="text-small text-warn flex items-center gap-1.5">
 					<TriangleAlert size={14} className="flex-none" />
 					{t.stats.unmapped}
-				</span>
-			) : null}
-			{folder.disk.total > 0 ? (
-				<span className="text-small text-muted">
-					{t.stats.diskFree(formatBytes(folder.disk.free), formatBytes(folder.disk.total))}
 				</span>
 			) : null}
 		</span>
