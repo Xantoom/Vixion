@@ -7,7 +7,6 @@ import { formatRelative } from '@/lib/format';
 import { useCan, useMe } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
-import { Card } from '@/ui/Card';
 import { Confirm, Dialog } from '@/ui/Dialog';
 import { Field, KNOB, PasswordInput, SWITCH, Select, Switch, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
@@ -43,33 +42,59 @@ function useRoleName() {
 		role ? (role.builtin ? (t.users.roleNames[role.builtin] ?? role.name) : role.name) : '';
 }
 
-/** A list row that opens something: the whole row is the button. */
-function Row({ onClick, children }: { onClick?: () => void; children: ReactNode }) {
-	const inner = 'flex min-h-16 w-full items-center gap-3.5 px-5 py-3 text-left';
-	if (!onClick) return <li className={inner}>{children}</li>;
+/** A titled list: the name above in small capitals, an add link beside it, the rows in a box. */
+function Section({
+	title,
+	add,
+	onAdd,
+	children,
+}: {
+	title: string;
+	add: string;
+	onAdd: () => void;
+	children: ReactNode;
+}) {
+	const t = useT();
+	return (
+		<section className="flex flex-col gap-2">
+			<div className="flex min-h-8 items-center justify-between gap-3 px-1">
+				<h2 className="text-caption text-ink-2 font-semibold tracking-wider uppercase">{title}</h2>
+				<button
+					type="button"
+					onClick={onAdd}
+					aria-label={add}
+					className="text-small text-accent-text touch-target inline-flex items-center gap-1 rounded-xs font-semibold hover:underline"
+				>
+					<Plus size={15} strokeWidth={2.4} />
+					{t.common.add}
+				</button>
+			</div>
+			<ul className="bg-card ring-line divide-line divide-y overflow-hidden rounded-md ring-1">{children}</ul>
+		</section>
+	);
+}
+
+/** A list row: what it is on the left, one short fact on the right, and the whole row opens it. */
+function Row({ onClick, children, aside }: { onClick?: () => void; children: ReactNode; aside: ReactNode }) {
+	const inner = 'flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left';
+	const content = (
+		<>
+			{children}
+			<span className="text-small text-muted ml-auto flex flex-none items-center gap-1.5 pl-2">{aside}</span>
+		</>
+	);
+	if (!onClick) return <li className={inner}>{content}</li>;
 	return (
 		<li>
 			<button
 				type="button"
 				onClick={onClick}
-				className={`${inner} group hover:bg-surface focus-visible:bg-surface transition-colors duration-100 outline-none`}
+				className={`${inner} hover:bg-surface focus-visible:bg-surface transition-colors duration-100 outline-none`}
 			>
-				{children}
-				<ChevronRight
-					size={18}
-					className="text-muted flex-none transition-transform duration-150 group-hover:translate-x-0.5"
-				/>
+				{content}
+				<ChevronRight size={18} className="text-muted -mr-1 flex-none" />
 			</button>
 		</li>
-	);
-}
-
-function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
-	return (
-		<Button size="sm" onClick={onClick} aria-label={label}>
-			<Plus size={15} />
-			<span className="max-sm:hidden">{label}</span>
-		</Button>
 	);
 }
 
@@ -100,94 +125,70 @@ export function UsersPage() {
 	const roleById = new Map(roles.data.roles.map((role) => [role.id, role]));
 
 	return (
-		<div className="panel-in flex flex-col gap-6">
-			<Card
+		<div className="panel-in flex max-w-2xl flex-col gap-8">
+			<Section
 				title={t.users.accounts}
-				count={users.data.length}
-				actions={
-					<AddButton
-						label={t.users.add}
-						onClick={() => {
-							setEditing('new');
-						}}
-					/>
-				}
-				flush
+				add={t.users.add}
+				onAdd={() => {
+					setEditing('new');
+				}}
 			>
-				<ul className="divide-line divide-y">
-					{users.data.map((user) => (
-						<Row
-							key={user.id}
-							onClick={() => {
-								setEditing(user);
-							}}
-						>
-							<span className={`flex-none ${user.disabled ? 'opacity-40 grayscale' : ''}`}>
-								<Avatar src={null} name={user.username} size={36} />
-							</span>
-							<span className="flex min-w-0 flex-1 flex-col">
-								<span className="text-ui truncate font-semibold">
-									{user.username}
-									{user.id === me.id ? (
-										<span className="text-muted font-normal"> ({t.users.you})</span>
-									) : null}
-								</span>
-								<span className="text-small text-muted truncate">
-									{user.disabled
-										? t.users.disabled
-										: [
-												roleName(roleById.get(user.role_id)),
-												user.last_login_at
-													? t.users.lastLoginAt(formatRelative(user.last_login_at))
-													: t.users.neverSignedIn,
-											].join(' · ')}
-								</span>
-							</span>
-						</Row>
-					))}
-				</ul>
-			</Card>
+				{users.data.map((user) => (
+					<Row
+						key={user.id}
+						onClick={() => {
+							setEditing(user);
+						}}
+						aside={user.disabled ? t.users.disabled : roleName(roleById.get(user.role_id))}
+					>
+						<span className={`flex-none ${user.disabled ? 'opacity-40 grayscale' : ''}`}>
+							<Avatar src={null} name={user.username} size={32} />
+						</span>
+						<span className={`text-ui min-w-0 truncate font-medium ${user.disabled ? 'text-muted' : ''}`}>
+							{user.username}
+							{user.id === me.id ? (
+								<span className="text-muted font-normal"> · {t.users.you}</span>
+							) : null}
+						</span>
+					</Row>
+				))}
+			</Section>
 
-			<Card
+			<Section
 				title={t.users.roles}
-				count={roles.data.roles.length}
-				actions={
-					<AddButton
-						label={t.users.addRole}
-						onClick={() => {
-							setRoleEditing('new');
-						}}
-					/>
-				}
-				flush
+				add={t.users.addRole}
+				onAdd={() => {
+					setRoleEditing('new');
+				}}
 			>
-				<ul className="divide-line divide-y">
-					{roles.data.roles.map((role) => {
-						const admin = role.builtin === 'admin';
-						return (
-							<Row
-								key={role.id}
-								onClick={
-									admin
-										? undefined
-										: () => {
-												setRoleEditing(role);
-											}
-								}
-							>
-								<span className="flex min-w-0 flex-1 flex-col">
-									<span className="text-ui truncate font-semibold">{roleName(role)}</span>
-									<span className="text-small text-muted truncate">
-										{admin ? t.users.adminRole : t.users.rights(role.permissions.length)} ·{' '}
-										{t.users.roleUsers(role.users)}
-									</span>
-								</span>
-								{admin ? <Lock size={16} className="text-muted flex-none" aria-hidden /> : null}
-							</Row>
-						);
-					})}
-				</ul>
-			</Card>
+				{roles.data.roles.map((role) => {
+					const admin = role.builtin === 'admin';
+					return (
+						<Row
+							key={role.id}
+							onClick={
+								admin
+									? undefined
+									: () => {
+											setRoleEditing(role);
+										}
+							}
+							aside={
+								admin ? (
+									<>
+										{t.users.adminRole}
+										<Lock size={15} aria-hidden />
+									</>
+								) : (
+									t.users.rights(role.permissions.length)
+								)
+							}
+						>
+							<span className="text-ui min-w-0 truncate font-medium">{roleName(role)}</span>
+						</Row>
+					);
+				})}
+			</Section>
 
 			{editing ? (
 				<UserDialog
@@ -388,6 +389,13 @@ function UserDialog({
 			}
 		>
 			<form id={formId} className="flex flex-col gap-5" onSubmit={(event) => void submit(event)}>
+				{user ? (
+					<p className="text-small text-muted -mt-1 -mb-1">
+						{user.last_login_at
+							? t.users.lastLoginAt(formatRelative(user.last_login_at))
+							: t.users.neverSignedIn}
+					</p>
+				) : null}
 				{user ? null : (
 					<Field label={t.users.username}>
 						{(id) => (
