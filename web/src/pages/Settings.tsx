@@ -69,18 +69,6 @@ export function SettingsPage() {
 						}}
 					/>
 				</SettingRow>
-				<SettingRow label={t.settings.pollInterval}>
-					<NumberInput
-						aria-label={t.settings.pollInterval}
-						value={draft.poll_interval}
-						min={10}
-						max={600}
-						unit={t.settings.seconds}
-						onChange={(poll_interval) => {
-							set({ poll_interval });
-						}}
-					/>
-				</SettingRow>
 			</Card>
 
 			<Card title={t.settings.retention} flush>

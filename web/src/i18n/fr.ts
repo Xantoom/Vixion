@@ -213,8 +213,6 @@ export const fr: Messages = {
 		h264Only: 'H.264 uniquement',
 		h264OnlyHint: 'Même quand le streamer diffuse en HEVC ou AV1. Fichiers plus gros, lisibles partout',
 		recordChat: 'Enregistrer le chat',
-		pollInterval: 'Vérifier les lives toutes les',
-		seconds: 'secondes',
 		retention: 'Conservation',
 		retentionDays: 'Supprimer les enregistrements après',
 		retentionHint: 'Jamais pour ceux conservés. 0 garde tout',

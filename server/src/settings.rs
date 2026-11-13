@@ -25,8 +25,6 @@ pub struct Settings {
     pub retention_days: u32,
     /// Records H.264 only, even when the broadcaster sends HEVC or AV1.
     pub h264_only: bool,
-    /// Seconds between live checks.
-    pub poll_interval: u32,
     pub record_chat: bool,
     /// Free space under which an alert is raised, in gigabytes.
     pub disk_warning_gb: u32,
@@ -45,7 +43,6 @@ impl Default for Settings {
         Self {
             retention_days: 14,
             h264_only: false,
-            poll_interval: 30,
             record_chat: true,
             disk_warning_gb: 20,
             disk_reserve_gb: 5,
@@ -58,7 +55,6 @@ impl Default for Settings {
 
 impl Settings {
     fn validate(&mut self) -> AppResult<()> {
-        self.poll_interval = self.poll_interval.clamp(15, 600);
         self.retention_days = self.retention_days.min(3650);
         self.webhook_url = self.webhook_url.trim().to_owned();
         if !self.webhook_url.is_empty()

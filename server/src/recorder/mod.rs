@@ -1,7 +1,8 @@
 //! Watches channels and records them while they are live.
 //!
-//! One loop asks Twitch, in a single request, which watched channels are live. Each live
-//! channel gets a session task that follows its playlist until the broadcast ends.
+//! One loop asks Twitch which watched channels are live, a hundred per request, at a pace that
+//! follows the number of channels and backs off when Twitch refuses. Each live channel gets a
+//! session task that follows its playlist until the broadcast ends.
 
 pub mod retention;
 mod session;
@@ -18,7 +19,7 @@ use tokio::sync::{Notify, watch};
 use crate::alerts::Level;
 use crate::app::AppState;
 use crate::db::now_ms;
-use crate::twitch::api::Channel;
+use crate::twitch::api::{BATCH_SIZE, Channel, TwitchError};
 
 /// What the interface shows about a recording in progress.
 #[derive(Debug, Clone, Default, Serialize)]
@@ -123,18 +124,117 @@ struct Watched {
     monitored: bool,
 }
 
+/// How often channels are checked: often enough to catch a broadcast within seconds of its start,
+/// never more than Twitch's own web player would ask. Not a setting: the pace follows the number
+/// of channels and Twitch's answers.
+mod pace {
+    use std::time::Duration;
+
+    /// Between two checks of the same channel, with a few channels.
+    pub const BASE: Duration = Duration::from_secs(30);
+    /// Each extra batch of 100 channels adds this much to a round, so the request rate stays
+    /// at about one query every ten seconds however many channels there are.
+    pub const PER_BATCH: Duration = Duration::from_secs(10);
+    /// Between the queries of one round.
+    pub const BETWEEN_BATCHES: Duration = Duration::from_secs(2);
+    /// The least time between two rounds, even when asked to check now (channels added in a
+    /// row, recordings ending together).
+    pub const MIN_GAP: Duration = Duration::from_secs(5);
+    /// The longest wait after failures.
+    pub const MAX_BACKOFF: Duration = Duration::from_secs(10 * 60);
+
+    /// The pause after a round over `batches` queries.
+    pub fn round(batches: usize) -> Duration {
+        let extra = u32::try_from(batches.saturating_sub(1)).unwrap_or(u32::MAX);
+        BASE.max(PER_BATCH.saturating_mul(extra))
+    }
+
+    /// The pause after `failures` failed rounds in a row: doubling from the normal pace.
+    pub fn backoff(normal: Duration, failures: u32) -> Duration {
+        normal.saturating_mul(1 << failures.min(6)).min(MAX_BACKOFF)
+    }
+
+    /// Up to a tenth more or less, so that many installs don't ask at the same second.
+    pub fn jitter(duration: Duration) -> Duration {
+        let random = u16::from_le_bytes(crate::crypto::random_bytes::<2>());
+        let factor = 0.9 + 0.2 * f64::from(random) / f64::from(u16::MAX);
+        duration.mul_f64(factor)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn rounds_slow_down_with_many_channels() {
+            assert_eq!(round(0), BASE);
+            assert_eq!(round(1), BASE);
+            assert_eq!(round(3), BASE);
+            assert_eq!(round(10), Duration::from_secs(90));
+            assert_eq!(round(50), Duration::from_secs(490));
+        }
+
+        #[test]
+        fn backoff_doubles_up_to_a_limit() {
+            assert_eq!(backoff(BASE, 1), Duration::from_secs(60));
+            assert_eq!(backoff(BASE, 2), Duration::from_secs(120));
+            assert_eq!(backoff(BASE, 30), MAX_BACKOFF);
+        }
+
+        #[test]
+        fn jitter_stays_within_a_tenth() {
+            for _ in 0..200 {
+                let value = jitter(BASE);
+                assert!(value >= BASE.mul_f64(0.9) && value <= BASE.mul_f64(1.1));
+            }
+        }
+    }
+}
+
+/// What a round of checks found.
+enum Round {
+    /// Every batch answered.
+    Done { batches: usize },
+    /// Some batches failed; the others were handled.
+    Partial { batches: usize, error: String },
+    /// Twitch asked to slow down: the round stopped there.
+    Throttled { batches: usize, wait: Option<Duration> },
+    /// The database couldn't be read.
+    Failed(String),
+}
+
 /// Runs the live checks until the process ends.
 pub async fn run(app: AppState) {
     let mut failures = 0u32;
+    let mut last = tokio::time::Instant::now() - pace::MIN_GAP;
     loop {
-        match check(&app).await {
-            Ok(()) => {
+        // Asked to check now right after a round: wait a little, once for all who asked.
+        let since = last.elapsed();
+        if since < pace::MIN_GAP {
+            tokio::time::sleep(pace::MIN_GAP - since).await;
+        }
+        last = tokio::time::Instant::now();
+        let wait = match check(&app).await {
+            Round::Done { batches } => {
                 if failures >= 3 {
                     app.alerts.resolve("twitch_unreachable").await;
                 }
                 failures = 0;
+                pace::round(batches)
             }
-            Err(error) => {
+            Round::Partial { batches, error } => {
+                // Some channels were checked: not a failure of the whole round, but noted.
+                tracing::warn!(%error, "some channels couldn't be checked");
+                pace::round(batches)
+            }
+            Round::Throttled { batches, wait } => {
+                failures += 1;
+                let backoff = pace::backoff(pace::round(batches), failures);
+                let wait = wait.map_or(backoff, |asked| asked.max(pace::BASE)).min(pace::MAX_BACKOFF);
+                tracing::warn!(wait_secs = wait.as_secs(), "Twitch asked to slow down");
+                wait
+            }
+            Round::Failed(error) => {
                 failures += 1;
                 tracing::warn!(%error, failures, "live check failed");
                 if failures == 3 {
@@ -142,17 +242,18 @@ pub async fn run(app: AppState) {
                         .raise(Level::Error, "twitch_unreachable", format!("Twitch can't be reached: {error}"))
                         .await;
                 }
+                pace::backoff(pace::BASE, failures)
             }
-        }
-        let interval = u64::from(app.settings.get().await.poll_interval);
+        };
         tokio::select! {
-            () = tokio::time::sleep(Duration::from_secs(interval)) => {}
-            () = app.recorder.wake.notified() => {}
+            () = tokio::time::sleep(pace::jitter(wait)) => {}
+            // Asked again while backing off: the backoff wins, Twitch said no for a reason.
+            () = app.recorder.wake.notified(), if failures == 0 => {}
         }
     }
 }
 
-async fn check(app: &AppState) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn check(app: &AppState) -> Round {
     let watched = app
         .db
         .read(|conn| {
@@ -162,40 +263,65 @@ async fn check(app: &AppState) -> Result<(), Box<dyn std::error::Error + Send + 
             })?;
             Ok(rows.collect::<Result<Vec<_>, _>>()?)
         })
-        .await?;
+        .await;
+    let watched = match watched {
+        Ok(watched) => watched,
+        Err(error) => return Round::Failed(error.to_string()),
+    };
     if watched.is_empty() {
-        return Ok(());
+        return Round::Done { batches: 0 };
     }
     let ids: Vec<String> = watched.iter().map(|streamer| streamer.twitch_id.clone()).collect();
-    let channels = app.twitch.channels_by_id(&ids).await?;
-
-    for channel in channels {
-        let Some(streamer) = watched.iter().find(|streamer| streamer.twitch_id == channel.id) else { continue };
-        update_streamer(app, streamer.id, &channel).await;
-        let live = channel.live();
-        let running = app.recorder.sessions.lock().ok().and_then(|sessions| {
-            sessions
-                .get(&streamer.id)
-                .map(|handle| (handle.twitch_stream_id.clone(), handle.title.clone(), handle.game.clone()))
-        });
-        let stopped_by_hand = live.is_some_and(|stream| {
-            app.recorder.stopped.lock().is_ok_and(|stopped| stopped.get(&streamer.id) == Some(&stream.id))
-        });
-        match (live, running) {
-            (Some(stream), None) if streamer.monitored && !stopped_by_hand => {
-                start(app, streamer.id, &channel, stream.id.clone());
-            }
-            (Some(stream), Some((recording, title, game))) if recording == stream.id => {
-                let new_title = stream.title.clone().unwrap_or_default();
-                let new_game = stream.game.as_ref().map(|game| game.name.clone());
-                if new_title != title || new_game != game {
-                    chapter(app, streamer.id, new_title, new_game).await;
+    let batches = ids.len().div_ceil(BATCH_SIZE);
+    let mut failed: Vec<String> = Vec::new();
+    for (index, chunk) in ids.chunks(BATCH_SIZE).enumerate() {
+        if index > 0 {
+            tokio::time::sleep(pace::BETWEEN_BATCHES).await;
+        }
+        match app.twitch.channels_by_id(chunk).await {
+            Ok(channels) => {
+                for channel in channels {
+                    if let Some(streamer) = watched.iter().find(|streamer| streamer.twitch_id == channel.id) {
+                        handle(app, streamer, &channel).await;
+                    }
                 }
             }
-            _ => {}
+            Err(TwitchError::RateLimited(wait)) => return Round::Throttled { batches, wait },
+            Err(error) => failed.push(error.to_string()),
         }
     }
-    Ok(())
+    match failed.len() {
+        0 => Round::Done { batches },
+        n if n == batches => Round::Failed(failed.swap_remove(0)),
+        _ => Round::Partial { batches, error: failed.swap_remove(0) },
+    }
+}
+
+/// Starts, follows or leaves alone one channel, from what Twitch said about it.
+async fn handle(app: &AppState, streamer: &Watched, channel: &Channel) {
+    update_streamer(app, streamer.id, channel).await;
+    let live = channel.live();
+    let running = app.recorder.sessions.lock().ok().and_then(|sessions| {
+        sessions
+            .get(&streamer.id)
+            .map(|handle| (handle.twitch_stream_id.clone(), handle.title.clone(), handle.game.clone()))
+    });
+    let stopped_by_hand = live.is_some_and(|stream| {
+        app.recorder.stopped.lock().is_ok_and(|stopped| stopped.get(&streamer.id) == Some(&stream.id))
+    });
+    match (live, running) {
+        (Some(stream), None) if streamer.monitored && !stopped_by_hand => {
+            start(app, streamer.id, channel, stream.id.clone());
+        }
+        (Some(stream), Some((recording, title, game))) if recording == stream.id => {
+            let new_title = stream.title.clone().unwrap_or_default();
+            let new_game = stream.game.as_ref().map(|game| game.name.clone());
+            if new_title != title || new_game != game {
+                chapter(app, streamer.id, new_title, new_game).await;
+            }
+        }
+        _ => {}
+    }
 }
 
 async fn update_streamer(app: &AppState, streamer_id: i64, channel: &Channel) {

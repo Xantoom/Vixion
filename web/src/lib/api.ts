@@ -238,7 +238,6 @@ export interface Stats {
 export interface Settings {
 	retention_days: number;
 	h264_only: boolean;
-	poll_interval: number;
 	record_chat: boolean;
 	disk_warning_gb: number;
 	disk_reserve_gb: number;

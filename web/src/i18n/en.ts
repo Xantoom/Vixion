@@ -209,8 +209,6 @@ export const en = {
 		h264Only: 'H.264 only',
 		h264OnlyHint: 'Even when the streamer sends HEVC or AV1. Bigger files, playable everywhere',
 		recordChat: 'Record chat',
-		pollInterval: 'Check for live channels every',
-		seconds: 'seconds',
 		retention: 'Retention',
 		retentionDays: 'Delete recordings after',
 		retentionHint: 'Never for kept ones. 0 keeps everything',

@@ -20,11 +20,14 @@ pub const USER_AGENT: &str =
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
 /// The most users one query may ask about.
 const BATCH: usize = 100;
+pub const BATCH_SIZE: usize = BATCH;
 
 #[derive(Debug)]
 pub enum TwitchError {
     Http(reqwest::Error),
     Status(u16),
+    /// Too many requests: Twitch asks to wait, for this long when it says.
+    RateLimited(Option<Duration>),
     /// Twitch wants a browser-computed integrity token: not something a server can provide.
     Integrity,
     /// The token was rejected (expired, revoked, or not a token).
@@ -37,6 +40,7 @@ impl std::fmt::Display for TwitchError {
         match self {
             Self::Http(error) => write!(f, "network: {error}"),
             Self::Status(code) => write!(f, "Twitch answered {code}"),
+            Self::RateLimited(_) => f.write_str("Twitch asked to slow down"),
             Self::Integrity => f.write_str("Twitch asked for an integrity check"),
             Self::BadToken => f.write_str("the Twitch token was refused"),
             Self::Unexpected(what) => write!(f, "unexpected answer: {what}"),
@@ -120,6 +124,14 @@ impl TwitchApi {
         if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(TwitchError::BadToken);
         }
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let wait = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok()?.trim().parse::<u64>().ok())
+                .map(Duration::from_secs);
+            return Err(TwitchError::RateLimited(wait));
+        }
         if !status.is_success() {
             return Err(TwitchError::Status(status.as_u16()));
         }
@@ -150,7 +162,8 @@ impl TwitchApi {
         Ok(out)
     }
 
-    /// Channels by Twitch user ID; IDs survive renames, so monitoring uses them.
+    /// Channels by Twitch user ID; IDs survive renames, so monitoring uses them. At most
+    /// [`BATCH_SIZE`] per call: the caller paces the batches.
     pub async fn channels_by_id(&self, ids: &[String]) -> Result<Vec<Channel>, TwitchError> {
         self.channels("ids", ids).await
     }
