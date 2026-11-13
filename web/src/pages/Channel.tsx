@@ -30,6 +30,7 @@ import {
 	api,
 } from '@/lib/api';
 import { formatClock, formatDate, formatDuration, formatNumber, formatQuality, formatRelative } from '@/lib/format';
+import { useNow } from '@/lib/now';
 import { watched } from '@/lib/progress';
 import { useCan, useRouteParams } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
@@ -249,6 +250,7 @@ function Hero({ data, name }: { data: Page; name: string }) {
 /** The broadcast on air: what it is, and a way to watch it on Twitch. Recordings open once finished. */
 function LiveNow({ data }: { data: Page }) {
 	const t = useT();
+	const now = useNow();
 	const { profile, streamer } = data;
 	const live = profile?.live;
 	if (!live && !streamer?.live) return null;
@@ -288,7 +290,7 @@ function LiveNow({ data }: { data: Page }) {
 					{live ? (
 						<Meta icon={<Eye size={16} />}>{t.channel.viewers(formatNumber(live.viewers))}</Meta>
 					) : null}
-					{since ? <Meta icon={<Timer size={16} />}>{formatDuration(Date.now() - since)}</Meta> : null}
+					{since ? <Meta icon={<Timer size={16} />}>{formatDuration(now - since)}</Meta> : null}
 				</div>
 				<span className="text-small text-accent-text mt-auto inline-flex items-center gap-1.5 font-semibold">
 					<ExternalLink size={16} />

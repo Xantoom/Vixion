@@ -102,6 +102,7 @@ pub async fn put_settings(
     let saved = app.settings.update(body).await?;
     super::streams::set_global_retention(saved.retention_days);
     tracing::info!(by = %user.username, "settings changed");
+    crate::audit::record(&app, &user, "settings.update", "").await;
     app.recorder.check_now();
     Ok(Json(saved))
 }
@@ -116,6 +117,7 @@ pub struct TokenReveal {
 pub async fn reveal_twitch_token(State(app): State<AppState>, user: CurrentUser) -> AppResult<Response> {
     user.require("settings.manage")?;
     tracing::info!(by = %user.username, "Twitch token revealed");
+    crate::audit::record(&app, &user, "twitch_token.reveal", "").await;
     let token = app.settings.twitch_token().await;
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(TokenReveal { token })).into_response())
 }
@@ -138,33 +140,42 @@ pub async fn list_users(State(app): State<AppState>, user: CurrentUser) -> AppRe
         .db
         .read(|conn| {
             let mut statement = conn.prepare_cached(
-                "SELECT id, username, role_id, disabled, created_at, last_login_at FROM users ORDER BY username COLLATE NOCASE",
+                "SELECT u.id, u.username, u.role_id, u.disabled, u.created_at, u.last_login_at, r.builtin, r.permissions
+                 FROM users u JOIN roles r ON r.id = u.role_id ORDER BY u.username COLLATE NOCASE",
             )?;
             let mut users = statement
                 .query_map([], |row| {
-                    Ok(UserRow {
-                        id: row.get(0)?,
-                        username: row.get(1)?,
-                        role_id: row.get(2)?,
-                        disabled: row.get::<_, i64>(3)? != 0,
-                        created_at: row.get(4)?,
-                        last_login_at: row.get(5)?,
-                        overrides: BTreeMap::new(),
-                    })
+                    Ok((
+                        UserRow {
+                            id: row.get(0)?,
+                            username: row.get(1)?,
+                            role_id: row.get(2)?,
+                            disabled: row.get::<_, i64>(3)? != 0,
+                            created_at: row.get(4)?,
+                            last_login_at: row.get(5)?,
+                            overrides: BTreeMap::new(),
+                        },
+                        row.get::<_, Option<String>>(6)?.as_deref() == Some("admin"),
+                        row.get::<_, String>(7)?,
+                    ))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
             let mut statement = conn.prepare_cached("SELECT user_id, permission, allow FROM user_permissions")?;
-            let overrides = statement.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)? != 0)))?;
+            let overrides = statement.query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)? != 0))
+            })?;
+            let index: std::collections::HashMap<i64, usize> =
+                users.iter().enumerate().map(|(at, (row, _, _))| (row.id, at)).collect();
             for entry in overrides {
                 let (id, permission, allow) = entry?;
-                if let Some(user) = users.iter_mut().find(|user| user.id == id) {
-                    user.overrides.insert(permission, allow);
+                if let Some(&at) = index.get(&id) {
+                    users[at].0.overrides.insert(permission, allow);
                 }
             }
             let mut out = Vec::with_capacity(users.len());
-            for user in users {
-                let effective = auth::load_user(conn, user.id)?.map(|u| u.permissions).unwrap_or_default();
-                let mut value = serde_json::to_value(&user)?;
+            for (row, admin, role_permissions) in users {
+                let effective = auth::effective_permissions(admin, &role_permissions, &row.overrides);
+                let mut value = serde_json::to_value(&row)?;
                 value["permissions"] = json!(effective);
                 out.push(value);
             }
@@ -172,6 +183,44 @@ pub async fn list_users(State(app): State<AppState>, user: CurrentUser) -> AppRe
         })
         .await?;
     Ok(Json(users))
+}
+
+/// Who manages accounts without being an administrator only hands out what they have themselves:
+/// nobody can give anyone, themselves included, more than they hold.
+fn require_within<'a>(user: &CurrentUser, permissions: impl IntoIterator<Item = &'a String>) -> AppResult<()> {
+    if user.admin || permissions.into_iter().all(|permission| user.can(permission)) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden())
+    }
+}
+
+/// A role: whether it is the administrator role, and its permissions.
+async fn role_info(app: &AppState, role_id: i64) -> AppResult<(bool, Vec<String>)> {
+    let (builtin, permissions): (Option<String>, String) = app
+        .db
+        .read(move |conn| {
+            Ok(conn.query_row("SELECT builtin, permissions FROM roles WHERE id = ?1", [role_id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?)
+        })
+        .await?;
+    let admin = builtin.as_deref() == Some("admin");
+    let permissions = if admin {
+        PERMISSIONS.iter().map(|p| (*p).to_owned()).collect()
+    } else {
+        serde_json::from_str(&permissions).unwrap_or_default()
+    };
+    Ok((admin, permissions))
+}
+
+/// An account's effective permissions and role, enabled or not.
+async fn account(app: &AppState, id: i64) -> AppResult<CurrentUser> {
+    app.db
+        .read(move |conn| auth::load_account(conn, id))
+        .await?
+        .map(|(account, _)| account)
+        .ok_or_else(AppError::not_found)
 }
 
 #[derive(Deserialize)]
@@ -190,12 +239,13 @@ pub async fn create_user(
     let username = body.username.trim().to_owned();
     auth::validate_username(&username)?;
     auth::validate_password(&body.password)?;
-    let hash = auth::hash_password(body.password).await?;
     let role_id = body.role_id;
-    let admin_role = role_is_admin(&app, role_id).await?;
+    let (admin_role, role_permissions) = role_info(&app, role_id).await?;
     if admin_role && !user.admin {
         return Err(AppError::forbidden());
     }
+    require_within(&user, &role_permissions)?;
+    let hash = auth::hash_password(body.password).await?;
     let name = username.clone();
     app.db
         .write(move |conn| {
@@ -207,15 +257,8 @@ pub async fn create_user(
         })
         .await?;
     tracing::info!(%username, by = %user.username, "user created");
+    crate::audit::record(&app, &user, "user.create", &username).await;
     Ok(StatusCode::CREATED)
-}
-
-async fn role_is_admin(app: &AppState, role_id: i64) -> AppResult<bool> {
-    let builtin: Option<String> = app
-        .db
-        .read(move |conn| Ok(conn.query_row("SELECT builtin FROM roles WHERE id = ?1", [role_id], |row| row.get(0))?))
-        .await?;
-    Ok(builtin.as_deref() == Some("admin"))
 }
 
 async fn active_admins(app: &AppState) -> AppResult<i64> {
@@ -250,20 +293,37 @@ pub async fn update_user(
     Json(body): Json<UserUpdate>,
 ) -> AppResult<StatusCode> {
     user.require("users.manage")?;
-    let target_role: i64 = app
-        .db
-        .read(move |conn| Ok(conn.query_row("SELECT role_id FROM users WHERE id = ?1", [id], |row| row.get(0))?))
-        .await?;
-    let target_admin = role_is_admin(&app, target_role).await?;
+    let target = account(&app, id).await?;
+    let target_role = target.role_id;
+    let target_admin = target.admin;
+    if !user.admin {
+        // One's own permissions are changed by someone else.
+        if id == user.id && (body.overrides.is_some() || body.role_id.is_some()) {
+            return Err(AppError::forbidden());
+        }
+        // An account holding more than oneself is out of reach (its password included).
+        require_within(&user, &target.permissions)?;
+        let granted: Vec<String> = body
+            .overrides
+            .iter()
+            .flatten()
+            .filter(|(_, allow)| **allow == Some(true))
+            .map(|(permission, _)| permission.clone())
+            .collect();
+        require_within(&user, &granted)?;
+    }
     // Only administrators touch administrators, or make new ones.
     if (target_admin || body.role_id.is_some_and(|role| role != target_role)) && !user.admin {
         return Err(AppError::forbidden());
     }
     if let Some(role_id) = body.role_id
-        && role_is_admin(&app, role_id).await?
-        && !user.admin
+        && role_id != target_role
     {
-        return Err(AppError::forbidden());
+        let (admin_role, role_permissions) = role_info(&app, role_id).await?;
+        if admin_role && !user.admin {
+            return Err(AppError::forbidden());
+        }
+        require_within(&user, &role_permissions)?;
     }
     let demoting =
         target_admin && (body.role_id.is_some_and(|role| role != target_role) || body.disabled == Some(true));
@@ -314,6 +374,7 @@ pub async fn update_user(
         })
         .await?;
     tracing::info!(id, by = %user.username, "user changed");
+    crate::audit::record(&app, &user, "user.update", &target.username).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -322,11 +383,9 @@ pub async fn delete_user(State(app): State<AppState>, user: CurrentUser, Path(id
     if id == user.id {
         return Err(AppError::conflict("self", "you can't delete your own account"));
     }
-    let role: i64 = app
-        .db
-        .read(move |conn| Ok(conn.query_row("SELECT role_id FROM users WHERE id = ?1", [id], |row| row.get(0))?))
-        .await?;
-    if role_is_admin(&app, role).await? {
+    let target = account(&app, id).await?;
+    require_within(&user, &target.permissions)?;
+    if target.admin {
         if !user.admin {
             return Err(AppError::forbidden());
         }
@@ -341,6 +400,7 @@ pub async fn delete_user(State(app): State<AppState>, user: CurrentUser, Path(id
         })
         .await?;
     tracing::info!(id, by = %user.username, "user deleted");
+    crate::audit::record(&app, &user, "user.delete", &target.username).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -407,7 +467,10 @@ pub async fn create_role(
 ) -> AppResult<StatusCode> {
     user.require("users.manage")?;
     let name = clean_name(body.name.as_deref().unwrap_or_default())?;
-    let permissions = clean_permissions(body.permissions.unwrap_or_default())?;
+    let wanted = body.permissions.unwrap_or_default();
+    require_within(&user, &wanted)?;
+    let permissions = clean_permissions(wanted)?;
+    let audited = name.clone();
     app.db
         .write(move |conn| {
             conn.execute(
@@ -417,6 +480,7 @@ pub async fn create_role(
             Ok(())
         })
         .await?;
+    crate::audit::record(&app, &user, "role.create", audited).await;
     Ok(StatusCode::CREATED)
 }
 
@@ -427,8 +491,17 @@ pub async fn update_role(
     Json(body): Json<RoleBody>,
 ) -> AppResult<StatusCode> {
     user.require("users.manage")?;
-    if role_is_admin(&app, id).await? {
+    let (admin_role, current) = role_info(&app, id).await?;
+    if admin_role {
         return Err(AppError::conflict("builtin", "the administrator role can do everything"));
+    }
+    if !user.admin {
+        // One's own role is changed by someone else; a role holding more is out of reach.
+        if id == user.role_id {
+            return Err(AppError::forbidden());
+        }
+        require_within(&user, &current)?;
+        require_within(&user, body.permissions.iter().flatten())?;
     }
     let name = body.name.as_deref().map(clean_name).transpose()?;
     let permissions = body.permissions.map(clean_permissions).transpose()?;
@@ -448,12 +521,15 @@ pub async fn update_role(
             Ok(())
         })
         .await?;
+    crate::audit::record(&app, &user, "role.update", id.to_string()).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// Deletes a custom role; its users move to the built-in `user` role.
 pub async fn delete_role(State(app): State<AppState>, user: CurrentUser, Path(id): Path<i64>) -> AppResult<StatusCode> {
     user.require("users.manage")?;
+    let (_, current) = role_info(&app, id).await?;
+    require_within(&user, &current)?;
     app.db
         .write(move |conn| {
             let tx = conn.transaction()?;
@@ -469,6 +545,7 @@ pub async fn delete_role(State(app): State<AppState>, user: CurrentUser, Path(id
             Ok(())
         })
         .await?;
+    crate::audit::record(&app, &user, "role.delete", id.to_string()).await;
     Ok(StatusCode::NO_CONTENT)
 }
 

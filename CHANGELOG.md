@@ -11,6 +11,9 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ### Added
 
+- A setup code, printed in the server's log, is asked for when creating the first account.
+- `VIXION_TRUST_PROXY`: client addresses are read from proxy headers only when it is set.
+- A lasting audit log of account, role, setting and recording changes, and of token reveals.
 - Checks Twitch on its own, every 30 seconds with a few channels and less often with hundreds, backing off
   when Twitch asks to.
 - Records every broadcast of the channels you add, at source quality, H.264, HEVC or AV1 as
@@ -34,3 +37,11 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - Accounts with roles and per-person permissions; statistics, logs and alerts by webhook.
 - Built-in HTTPS for the video address, with Let's Encrypt certificates through Cloudflare DNS.
 - English and French; light, dark or system theme.
+
+### Security
+
+- Media links belong to one account and stop working when it loses access; downloads need their
+  own signed link.
+- Someone who manages accounts can't grant anyone, themselves included, more than they hold.
+- Changing one's password signs out the other devices.
+- Sign-in hashing runs a few at a time, so a flood of attempts can't exhaust memory.

@@ -63,6 +63,20 @@ impl Settings {
         {
             return Err(AppError::bad_request("invalid_webhook", "the webhook must be an http(s) URL"));
         }
+        // Cloud metadata services hand out credentials: never a webhook.
+        let host = self
+            .webhook_url
+            .split_once("://")
+            .map(|(_, rest)| rest.split(['/', '?', '#']).next().unwrap_or_default())
+            .map(|authority| authority.rsplit('@').next().unwrap_or_default().to_ascii_lowercase())
+            .unwrap_or_default();
+        let host = host.strip_prefix('[').map_or_else(
+            || host.split(':').next().unwrap_or_default().to_owned(),
+            |v6| v6.split(']').next().unwrap_or_default().to_owned(),
+        );
+        if host.starts_with("169.254.") || host == "metadata.google.internal" || host.starts_with("fd00:ec2:") {
+            return Err(AppError::bad_request("invalid_webhook", "this address can't receive alerts"));
+        }
         Ok(())
     }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type ChatLine, api } from '@/lib/api';
 
 /** Lines shown at the playhead; scrolling up reveals more, a hundred at a time. */
@@ -159,15 +159,18 @@ export function useChat(streamId: number, timeMs: number): Chat {
 	}, []);
 
 	const at = frozen ?? timeMs;
-	let lines: ChatLine[] = [];
+	let start = 0;
+	let end = 0;
 	if (covers(loaded, at)) {
-		const end = lowerBound(loaded.lines, at + 1);
-		const start =
+		end = lowerBound(loaded.lines, at + 1);
+		start =
 			anchor === null
 				? Math.max(0, end - SHOWN)
 				: Math.min(lowerBound(loaded.lines, anchor), Math.max(0, end - SHOWN));
-		lines = loaded.lines.slice(start, end);
 	}
+	// The same lines keep the same array between clock ticks, so the panel only redraws on change.
+	const source = loaded?.lines;
+	const lines = useMemo(() => source?.slice(start, end) ?? [], [source, start, end]);
 	useEffect(() => {
 		if (frozen === null && covers(loaded, timeMs)) shownAt.current = timeMs;
 	});

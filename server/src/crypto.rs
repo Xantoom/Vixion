@@ -34,6 +34,11 @@ pub fn random_token() -> String {
     URL_SAFE_NO_PAD.encode(random_bytes::<32>())
 }
 
+/// Compares two secrets in time that doesn't depend on where they differ.
+pub fn same(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
+}
+
 pub fn sha256(data: &[u8]) -> Vec<u8> {
     Sha256::digest(data).to_vec()
 }

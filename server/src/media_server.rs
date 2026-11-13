@@ -51,7 +51,7 @@ async fn live_view(id: i64, path: std::path::PathBuf) -> AppResult<(u64, bytes::
 }
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/media/{id}/{expires}/{signature}/{name}", get(serve).head(serve).options(preflight))
+    Router::new().route("/media/{id}/{user}/{expires}/{signature}/{name}", get(serve).head(serve).options(preflight))
 }
 
 fn cors(headers: &mut HeaderMap) {
@@ -102,11 +102,12 @@ fn parse_range(value: &str, length: u64) -> Option<(u64, u64)> {
 async fn serve(
     State(app): State<AppState>,
     method: Method,
-    Path((id, expires, signature, name)): Path<(i64, i64, String, String)>,
+    Path((id, user, expires, signature, name)): Path<(i64, i64, i64, String, String)>,
     Query(query): Query<MediaQuery>,
     request_headers: HeaderMap,
 ) -> Response {
-    match serve_file(&app, &method, id, expires, &signature, &name, query.dl.is_some(), &request_headers).await {
+    let link = Link { id, user, expires, signature, download: query.dl.is_some() };
+    match serve_file(&app, &method, &link, &name, &request_headers).await {
         Ok(response) => response,
         Err(error) => {
             let mut response = error.into_response();
@@ -116,19 +117,54 @@ async fn serve(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+struct Link {
+    id: i64,
+    user: i64,
+    expires: i64,
+    signature: String,
+    download: bool,
+}
+
+/// Whether the link's owner may still watch (or download): their account read at most every
+/// half minute, since a player asks for many ranges.
+async fn still_allowed(app: &AppState, user: i64, download: bool) -> AppResult<bool> {
+    type Seen = std::sync::Mutex<std::collections::HashMap<i64, (std::time::Instant, bool, bool)>>;
+    static SEEN: std::sync::OnceLock<Seen> = std::sync::OnceLock::new();
+    let seen = SEEN.get_or_init(Default::default);
+    let cached = seen.lock().ok().and_then(|map| map.get(&user).copied());
+    let (view, dl) = match cached {
+        Some((at, view, dl)) if at.elapsed() < std::time::Duration::from_secs(30) => (view, dl),
+        _ => {
+            let account = app.db.read(move |conn| crate::auth::load_user(conn, user)).await?;
+            let rights = account.map_or((false, false), |account| {
+                (account.can("streams.view"), account.can("streams.view") && account.can("streams.download"))
+            });
+            if let Ok(mut map) = seen.lock() {
+                if map.len() > 1000 {
+                    map.clear();
+                }
+                map.insert(user, (std::time::Instant::now(), rights.0, rights.1));
+            }
+            rights
+        }
+    };
+    Ok(if download { dl } else { view })
+}
+
 async fn serve_file(
     app: &AppState,
     method: &Method,
-    id: i64,
-    expires: i64,
-    signature: &str,
+    link: &Link,
     name: &str,
-    download: bool,
     request_headers: &HeaderMap,
 ) -> AppResult<Response> {
-    if !app.keys.verify_media(&format!("video:{id}"), expires, signature) {
+    let Link { id, user, expires, ref signature, download } = *link;
+    let resource = crate::api::media_resource(id, user, download);
+    if !app.keys.verify_media(&resource, expires, signature) {
         return Err(AppError::new(StatusCode::FORBIDDEN, "expired_link", "this link expired: reload the page"));
+    }
+    if !still_allowed(app, user, download).await? {
+        return Err(AppError::forbidden());
     }
     let (dir, part, status): (String, i64, String) = app
         .db

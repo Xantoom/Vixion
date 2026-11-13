@@ -5,7 +5,7 @@ mod admin;
 mod streamers;
 pub(crate) mod streams;
 
-pub use streams::set_global_retention;
+pub use streams::{media_resource, set_global_retention};
 
 use axum::Router;
 use axum::middleware;

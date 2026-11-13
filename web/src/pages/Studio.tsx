@@ -153,11 +153,17 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 					setTime(value);
 				}
 			};
-			next.onState = setState;
+			let playing = false;
+			next.onState = (value) => {
+				playing = value.playing;
+				setState(value);
+			};
 			next.onError = (kind) => {
 				if (engine.current !== next) return;
 				if (kind === 'decode' && next.kind === 'mediabunny') {
-					reopen.current(url, durationMs, at, autoplay, true);
+					// The browser's own player takes over where this one stopped, not where it opened.
+					const now = next.time();
+					reopen.current(url, durationMs, now > 0 ? now : at, autoplay || playing, true);
 					return;
 				}
 				setError(kind);

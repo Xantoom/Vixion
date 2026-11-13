@@ -35,7 +35,7 @@ impl<'a> Iterator for Boxes<'a> {
             size = (self.data.len() - start) as u64;
         }
         let end = start.checked_add(usize::try_from(size).ok()?)?;
-        if size < 8 || end > self.data.len() {
+        if size < 8 || body_start > end || end > self.data.len() {
             return None;
         }
         self.position = end;
@@ -304,6 +304,13 @@ fn read_traf(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn malformed_boxes_end_the_walk_without_panicking() {
+        // A 64-bit size smaller than its own header.
+        let data = [0, 0, 0, 1, b'm', b'o', b'o', b'f', 0, 0, 0, 0, 0, 0, 0, 9, 0];
+        assert_eq!(super::boxes(&data).count(), 0);
+    }
     use super::*;
 
     fn hev1_entry(nal_types: &[u8]) -> Vec<u8> {

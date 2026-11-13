@@ -57,8 +57,9 @@ mkdir config recordings
 docker compose up -d
 ```
 
-Open `http://your-server:8080`, create the administrator account, then search for a channel and add it. It is
-recorded whenever it goes live, starting right away if it already is.
+Open `http://your-server:8080` and create the administrator account with the setup code from the log
+(`docker logs vixion`), so that nobody else on the network can claim the install first. Then search for a channel and
+add it: it is recorded whenever it goes live, starting right away if it already is.
 
 <details>
 <summary>With <code>docker run</code></summary>
@@ -89,6 +90,7 @@ to root.
 | `--user 1000:1000`              | The owner of both folders on the host (`id -u`, `id -g`)                         |
 | `-e VIXION_TWITCH_TOKEN`        | A Twitch account's token: no ads, best quality (see below). Recommended          |
 | `-e VIXION_TWITCH_TOKEN_FILE`   | The same, read from a file, for Docker secrets                                   |
+| `-e VIXION_TRUST_PROXY`         | `true` behind a reverse proxy or Cloudflare, so sign-in limits see real addresses |
 | `-e VIXION_LOG`                 | `error`, `warn`, `info` (default) or `debug`                                     |
 
 Everything else (retention, H.264 only, chat, alerts) is in *Administration → Settings*. Twitch is checked
@@ -124,7 +126,7 @@ Recordings in progress close cleanly and continue as a new part once the contain
 ## Troubleshooting
 
 - **Logs**: `docker logs -f vixion`, or *Administration → Logs* in the interface.
-- **Forgotten password**: `docker exec vixion vixion reset-password <user> <new-password>`.
+- **Forgotten password**: `docker exec -it vixion vixion reset-password <user>`, then type the new one.
 - **Permission denied**: a folder belongs to another user; `sudo chown -R 1000:1000 config recordings` or change
   `user`.
 

@@ -21,6 +21,9 @@ pub struct Credentials {
     password: String,
     #[serde(default)]
     locale: Option<String>,
+    /// The setup code from the server's log, for the first account.
+    #[serde(default)]
+    code: Option<String>,
 }
 
 pub async fn setup_needed(State(app): State<AppState>) -> AppResult<Json<serde_json::Value>> {
@@ -33,8 +36,26 @@ pub async fn setup_needed(State(app): State<AppState>) -> AppResult<Json<serde_j
 pub async fn setup(
     State(app): State<AppState>,
     headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(body): Json<Credentials>,
 ) -> AppResult<Response> {
+    let ip_key = format!("setup:{}", auth::client_ip(&headers, Some(peer), app.config.trust_proxy));
+    if !app.limiter.allow(&[ip_key]) {
+        return Err(AppError::new(StatusCode::TOO_MANY_REQUESTS, "too_many_attempts", "try again in 15 minutes"));
+    }
+    let expected = app.setup_code.lock().ok().and_then(|code| code.clone());
+    let given: String = body.code.as_deref().unwrap_or_default().chars().filter(char::is_ascii_alphanumeric).collect();
+    let matches = expected.is_some_and(|code| {
+        let code: String = code.chars().filter(char::is_ascii_alphanumeric).collect();
+        crate::crypto::same(code.as_bytes(), given.to_ascii_uppercase().as_bytes())
+    });
+    if !matches {
+        return Err(AppError::new(
+            StatusCode::FORBIDDEN,
+            "bad_setup_code",
+            "the setup code is wrong: see the server's log",
+        ));
+    }
     let username = body.username.trim().to_owned();
     auth::validate_username(&username)?;
     auth::validate_password(&body.password)?;
@@ -58,6 +79,9 @@ pub async fn setup(
             Ok(id)
         })
         .await?;
+    if let Ok(mut code) = app.setup_code.lock() {
+        *code = None;
+    }
     tracing::info!(user_id, "administrator account created");
     signed_in(&app, user_id, &headers).await
 }
@@ -76,7 +100,7 @@ pub async fn login(
     Json(body): Json<Credentials>,
 ) -> AppResult<Response> {
     let username = body.username.trim().to_owned();
-    let ip_key = format!("ip:{}", auth::client_ip(&headers, Some(peer)));
+    let ip_key = format!("ip:{}", auth::client_ip(&headers, Some(peer), app.config.trust_proxy));
     let user_key = format!("user:{}", username.to_lowercase());
     if !app.limiter.allow(&[ip_key, user_key.clone()]) {
         tracing::warn!(%username, "sign-in blocked: too many attempts");
@@ -141,6 +165,7 @@ pub struct MeUpdate {
 pub async fn update_me(
     State(app): State<AppState>,
     user: CurrentUser,
+    headers: HeaderMap,
     Json(body): Json<MeUpdate>,
 ) -> AppResult<Json<CurrentUser>> {
     let user_id = user.id;
@@ -157,9 +182,17 @@ pub async fn update_me(
             return Err(AppError::bad_request("bad_credentials", "the current password is wrong"));
         }
         let hash = auth::hash_password(new_password).await?;
+        // Every other device signs in again: a password changed because it leaked shuts them out.
+        let current = auth::session_hash(&headers).unwrap_or_default();
         app.db
             .write(move |conn| {
-                conn.execute("UPDATE users SET password_hash = ?2 WHERE id = ?1", rusqlite::params![user_id, hash])?;
+                let tx = conn.transaction()?;
+                tx.execute("UPDATE users SET password_hash = ?2 WHERE id = ?1", rusqlite::params![user_id, hash])?;
+                tx.execute(
+                    "DELETE FROM sessions WHERE user_id = ?1 AND token_hash != ?2",
+                    rusqlite::params![user_id, current],
+                )?;
+                tx.commit()?;
                 Ok(())
             })
             .await?;

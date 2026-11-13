@@ -62,7 +62,15 @@ impl CurrentUser {
     }
 }
 
+/// Argon2 takes about 19 MB and a few tens of milliseconds per hash: a few at a time, so a flood of
+/// sign-ins waits its turn instead of filling memory and the threads the database needs.
+fn hashing() -> &'static tokio::sync::Semaphore {
+    static SLOTS: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+    SLOTS.get_or_init(|| tokio::sync::Semaphore::new(2))
+}
+
 pub async fn hash_password(password: String) -> AppResult<String> {
+    let _slot = hashing().acquire().await.map_err(|error| AppError::internal(error.to_string()))?;
     tokio::task::spawn_blocking(move || {
         Argon2::default()
             .hash_password(password.as_bytes())
@@ -74,6 +82,7 @@ pub async fn hash_password(password: String) -> AppResult<String> {
 }
 
 pub async fn verify_password(password: String, hash: String) -> bool {
+    let Ok(_slot) = hashing().acquire().await else { return false };
     tokio::task::spawn_blocking(move || {
         PasswordHash::new(&hash)
             .is_ok_and(|parsed| Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok())
@@ -115,8 +124,38 @@ pub async fn seed_roles(db: &Db) -> AppResult<()> {
     .await
 }
 
-/// Loads a user with their effective permissions.
+/// On an install without accounts, makes the setup code and prints it where only the server's
+/// owner looks: its log.
+pub async fn announce_setup(app: &AppState) -> AppResult<()> {
+    let users: i64 =
+        app.db.read(|conn| Ok(conn.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))?)).await?;
+    if users > 0 {
+        return Ok(());
+    }
+    // No 0, O, 1, I or L: read off a screen and typed without doubt.
+    const ALPHABET: &[u8] = b"23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+    let code: String = crate::crypto::random_bytes::<8>()
+        .iter()
+        .enumerate()
+        .flat_map(|(at, byte)| {
+            let dash = (at == 4).then_some('-');
+            dash.into_iter().chain(std::iter::once(char::from(ALPHABET[usize::from(*byte) % ALPHABET.len()])))
+        })
+        .collect();
+    tracing::warn!("no account yet: open the interface and enter the setup code {code}");
+    if let Ok(mut slot) = app.setup_code.lock() {
+        *slot = Some(code);
+    }
+    Ok(())
+}
+
+/// Loads a user with their effective permissions; None for a disabled account.
 pub fn load_user(conn: &rusqlite::Connection, user_id: i64) -> AppResult<Option<CurrentUser>> {
+    Ok(load_account(conn, user_id)?.filter(|(_, disabled)| !disabled).map(|(user, _)| user))
+}
+
+/// Loads an account, enabled or not, with its effective permissions and whether it is disabled.
+pub fn load_account(conn: &rusqlite::Connection, user_id: i64) -> AppResult<Option<(CurrentUser, bool)>> {
     let row = conn.query_row(
         "SELECT u.id, u.username, u.role_id, r.name, r.builtin, r.permissions, u.locale, u.disabled
          FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ?1",
@@ -139,29 +178,35 @@ pub fn load_user(conn: &rusqlite::Connection, user_id: i64) -> AppResult<Option<
         Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
         Err(error) => return Err(error.into()),
     };
-    if disabled {
-        return Ok(None);
-    }
     let admin = builtin.as_deref() == Some("admin");
-    let mut permissions: BTreeSet<String> = if admin {
-        PERMISSIONS.iter().map(|p| (*p).to_owned()).collect()
-    } else {
-        serde_json::from_str::<Vec<String>>(&role_permissions).unwrap_or_default().into_iter().collect()
-    };
-    if !admin {
-        let mut statement = conn.prepare_cached("SELECT permission, allow FROM user_permissions WHERE user_id = ?1")?;
-        let overrides = statement.query_map([id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0)))?;
-        for entry in overrides {
-            let (permission, allow) = entry?;
-            if allow {
-                permissions.insert(permission);
-            } else {
-                permissions.remove(&permission);
-            }
+    let mut statement = conn.prepare_cached("SELECT permission, allow FROM user_permissions WHERE user_id = ?1")?;
+    let overrides = statement
+        .query_map([id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0)))?
+        .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+    let permissions = effective_permissions(admin, &role_permissions, &overrides);
+    Ok(Some((CurrentUser { id, username, role_id, role, admin, locale, permissions }, disabled)))
+}
+
+/// A role's permissions (a JSON list), plus or minus one person's exceptions. Everything for admins.
+pub fn effective_permissions(
+    admin: bool,
+    role_permissions: &str,
+    overrides: &std::collections::BTreeMap<String, bool>,
+) -> BTreeSet<String> {
+    if admin {
+        return PERMISSIONS.iter().map(|p| (*p).to_owned()).collect();
+    }
+    let mut permissions: BTreeSet<String> =
+        serde_json::from_str::<Vec<String>>(role_permissions).unwrap_or_default().into_iter().collect();
+    for (permission, allow) in overrides {
+        if *allow {
+            permissions.insert(permission.clone());
+        } else {
+            permissions.remove(permission);
         }
     }
     permissions.retain(|permission| PERMISSIONS.contains(&permission.as_str()));
-    Ok(Some(CurrentUser { id, username, role_id, role, admin, locale, permissions }))
+    permissions
 }
 
 fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
@@ -204,6 +249,11 @@ pub async fn create_session(db: &Db, user_id: i64, user_agent: Option<String>) -
     })
     .await?;
     Ok(token)
+}
+
+/// The stored form of the session cookie the request carries.
+pub fn session_hash(headers: &HeaderMap) -> Option<Vec<u8>> {
+    cookie_value(headers, COOKIE).map(|token| sha256(token.as_bytes()))
 }
 
 pub async fn end_session(db: &Db, headers: &HeaderMap) -> AppResult<()> {
@@ -262,13 +312,17 @@ pub async fn require_app_header(request: Request, next: Next) -> Result<Response
     Ok(next.run(request).await)
 }
 
-/// Slows down password guessing: a few attempts per address and per account, then a pause.
+/// Slows down password guessing: a few attempts per address, more per account (so that one
+/// address can't lock an account by itself), then a pause.
 pub struct LoginLimiter {
     attempts: Mutex<HashMap<String, (u32, Instant)>>,
 }
 
 const WINDOW: Duration = Duration::from_secs(15 * 60);
-const MAX_PER_KEY: u32 = 10;
+const MAX_PER_ADDRESS: u32 = 10;
+const MAX_PER_ACCOUNT: u32 = 30;
+/// Keys remembered at most: past this, new keys count as blocked until old ones expire.
+const MAX_KEYS: usize = 10_000;
 
 impl LoginLimiter {
     pub fn new() -> Self {
@@ -279,7 +333,9 @@ impl LoginLimiter {
     pub fn allow(&self, keys: &[String]) -> bool {
         let Ok(mut attempts) = self.attempts.lock() else { return true };
         attempts.retain(|_, (_, since)| since.elapsed() < WINDOW);
-        let blocked = keys.iter().any(|key| attempts.get(key).is_some_and(|(count, _)| *count >= MAX_PER_KEY));
+        let limit = |key: &str| if key.starts_with("user:") { MAX_PER_ACCOUNT } else { MAX_PER_ADDRESS };
+        let full = attempts.len() + keys.len() > MAX_KEYS && keys.iter().any(|key| !attempts.contains_key(key));
+        let blocked = full || keys.iter().any(|key| attempts.get(key).is_some_and(|(count, _)| *count >= limit(key)));
         if !blocked {
             for key in keys {
                 attempts.entry(key.clone()).or_insert((0, Instant::now())).0 += 1;
@@ -302,8 +358,13 @@ impl Default for LoginLimiter {
     }
 }
 
-/// The client's address: Cloudflare's header when present, else the proxy's, else the socket's.
-pub fn client_ip(headers: &HeaderMap, peer: Option<std::net::SocketAddr>) -> String {
+/// The client's address. Behind a trusted proxy, Cloudflare's header or the proxy's; otherwise
+/// the socket's, since anyone can send those headers.
+pub fn client_ip(headers: &HeaderMap, peer: Option<std::net::SocketAddr>, trust_proxy: bool) -> String {
+    let peer = peer.map(|peer| peer.ip().to_string());
+    if !trust_proxy {
+        return peer.unwrap_or_default();
+    }
     headers
         .get("cf-connecting-ip")
         .or_else(|| headers.get("x-real-ip"))
@@ -316,6 +377,39 @@ pub fn client_ip(headers: &HeaderMap, peer: Option<std::net::SocketAddr>) -> Str
                 .and_then(|list| list.split(',').next())
                 .map(|ip| ip.trim().to_owned())
         })
-        .or_else(|| peer.map(|peer| peer.ip().to_string()))
+        .or(peer)
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proxy_headers_count_only_when_trusted() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "203.0.113.9".parse().expect("header"));
+        let peer = Some(std::net::SocketAddr::from(([192, 168, 1, 5], 40000)));
+        assert_eq!(client_ip(&headers, peer, false), "192.168.1.5");
+        assert_eq!(client_ip(&headers, peer, true), "203.0.113.9");
+    }
+
+    #[test]
+    fn one_address_cannot_lock_an_account() {
+        let limiter = LoginLimiter::new();
+        let account = "user:admin".to_owned();
+        for _ in 0..MAX_PER_ADDRESS {
+            assert!(limiter.allow(&["ip:a".to_owned(), account.clone()]));
+        }
+        assert!(!limiter.allow(&["ip:a".to_owned(), account.clone()]));
+        // Another address still gets through: the account's own limit is higher.
+        assert!(limiter.allow(&["ip:b".to_owned(), account]));
+    }
+
+    #[test]
+    fn exceptions_change_role_permissions() {
+        let overrides = [("streams.delete".to_owned(), true), ("stats.view".to_owned(), false)].into();
+        let permissions = effective_permissions(false, r#"["streams.view","stats.view","made.up"]"#, &overrides);
+        assert_eq!(permissions.into_iter().collect::<Vec<_>>(), ["streams.delete", "streams.view"]);
+    }
 }

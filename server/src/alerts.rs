@@ -82,8 +82,26 @@ impl Alerts {
             .await
             .unwrap_or(false);
         if inserted {
-            self.notify(level, &kind, &message).await;
+            self.notify(level, kind, message);
         }
+    }
+
+    /// Records something that happened once (it needs no resolving) and sends it every time.
+    pub async fn event(&self, level: Level, kind: impl Into<String>, message: impl Into<String>) {
+        let (kind, message) = (kind.into(), message.into());
+        tracing::warn!(%kind, "{message}");
+        let (stored_kind, stored_message) = (kind.clone(), message.clone());
+        let _ = self
+            .db
+            .write(move |conn| {
+                conn.execute(
+                    "INSERT INTO alerts (level, kind, message, created_at, resolved) VALUES (?1, ?2, ?3, ?4, 1)",
+                    rusqlite::params![level.as_str(), stored_kind, stored_message, now_ms()],
+                )?;
+                Ok(())
+            })
+            .await;
+        self.notify(level, kind, message);
     }
 
     /// Closes the open alert of `kind`, if any.
@@ -129,7 +147,13 @@ impl Alerts {
             .await
     }
 
-    async fn notify(&self, level: Level, kind: &str, message: &str) {
+    /// Sends to the webhook in the background: a slow webhook never holds up the recorder.
+    fn notify(&self, level: Level, kind: String, message: String) {
+        let this = self.clone();
+        tokio::spawn(async move { this.send(level, &kind, &message).await });
+    }
+
+    async fn send(&self, level: Level, kind: &str, message: &str) {
         let settings = self.settings.get().await;
         if settings.webhook_url.is_empty() || level == Level::Info {
             return;

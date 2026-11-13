@@ -170,10 +170,16 @@ fn download_name(located: &Located, extension: &str) -> String {
     format!("{}_{}{part}{title}.{extension}", located.login, &date[..10])
 }
 
-pub fn media_link(app: &AppState, id: i64, name: &str, download: bool) -> String {
+/// What a media link gives access to: one recording, for one person, to watch or to download.
+/// The person's rights are checked again on every request, so taking them away (or the account)
+/// ends the link too.
+pub fn media_resource(id: i64, user: i64, download: bool) -> String {
+    format!("video:{id}:{user}:{}", if download { "download" } else { "watch" })
+}
+
+pub fn media_link(app: &AppState, id: i64, user: i64, name: &str, download: bool) -> String {
     let expires = now_ms() / 1000 + LINK_LIFETIME_SECS;
-    let resource = format!("video:{id}");
-    let signature = app.keys.sign_media(&resource, expires);
+    let signature = app.keys.sign_media(&media_resource(id, user, download), expires);
     let encoded: String = name
         .bytes()
         .map(|b| {
@@ -185,7 +191,7 @@ pub fn media_link(app: &AppState, id: i64, name: &str, download: bool) -> String
         })
         .collect();
     format!(
-        "{}/media/{id}/{expires}/{signature}/{encoded}{}",
+        "{}/media/{id}/{user}/{expires}/{signature}/{encoded}{}",
         app.config.media_public_url,
         if download { "?dl=1" } else { "" }
     )
@@ -198,7 +204,7 @@ pub async fn detail(
 ) -> AppResult<Json<StreamDetail>> {
     user.require("streams.view")?;
     set_global_retention(app.settings.get().await.retention_days);
-    let (summary, login, name, avatar, audio_codec, gaps, error, chapters, parts) = app
+    let (summary, login, name, avatar, audio_codec, gaps, error, chapters, parts, dir) = app
         .db
         .read(move |conn| {
             let summary = conn.query_row(
@@ -227,15 +233,23 @@ pub async fn detail(
                 .collect::<Result<Vec<_>, _>>()?;
             let mut statement = conn.prepare_cached("SELECT id, part FROM streams WHERE dir = ?1 ORDER BY part")?;
             let parts =
-                statement.query_map([dir], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<Result<Vec<_>, _>>()?;
-            Ok((summary, login, name, avatar, audio_codec, gaps, error, chapters, parts))
+                statement.query_map([&dir], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<Result<Vec<_>, _>>()?;
+            Ok((summary, login, name, avatar, audio_codec, gaps, error, chapters, parts, dir))
         })
         .await?;
-    let located = locate(&app, id).await?;
+    let located = Located {
+        dir: storage::stream_dir(&app.config.streams_dir(), &dir).ok_or_else(AppError::not_found)?,
+        part: summary.part,
+        status: summary.status.clone(),
+        started_at: summary.started_at,
+        duration_ms: summary.duration_ms,
+        login: login.clone(),
+        title: summary.title.clone(),
+    };
     let file = download_name(&located, "mp4");
     Ok(Json(StreamDetail {
-        video_url: media_link(&app, id, &file, false),
-        download_url: user.can("streams.download").then(|| media_link(&app, id, &file, true)),
+        video_url: media_link(&app, id, user.id, &file, false),
+        download_url: user.can("streams.download").then(|| media_link(&app, id, user.id, &file, true)),
         summary,
         streamer_login: login,
         streamer_name: name,
@@ -270,6 +284,8 @@ pub async fn update(
         })
         .await?;
     tracing::info!(id, keep = body.keep_forever, by = %user.username, "retention changed");
+    crate::audit::record(&app, &user, if body.keep_forever { "stream.keep" } else { "stream.unkeep" }, id.to_string())
+        .await;
     if changed == 0 { Err(AppError::not_found()) } else { Ok(StatusCode::NO_CONTENT) }
 }
 
@@ -281,6 +297,7 @@ pub async fn remove(State(app): State<AppState>, user: CurrentUser, Path(id): Pa
     }
     delete_stream(&app, id).await?;
     tracing::info!(id, by = %user.username, "recording deleted");
+    crate::audit::record(&app, &user, "stream.delete", format!("{id} {} {}", located.login, located.title)).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -300,11 +317,33 @@ pub struct TimedLine {
     line: ChatLine,
 }
 
-type ChatCache = Mutex<HashMap<(i64, u64), Arc<Vec<TimedLine>>>>;
+/// Parsed chats kept in memory, by recording and file size, with when each was last used.
+type ChatCache = Mutex<HashMap<(i64, u64), (Arc<Vec<TimedLine>>, std::time::Instant)>>;
+
+/// Lines kept across all cached chats: a few hundred megabytes at most, whatever their number.
+const CACHED_LINES: usize = 1_500_000;
 
 fn cache() -> &'static ChatCache {
     static CACHE: OnceLock<ChatCache> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Parses a chat file line by line, without holding the whole text in memory.
+fn read_chat(path: &std::path::Path, timeline: &Timeline, keep: impl Fn(i64) -> bool) -> Vec<TimedLine> {
+    use std::io::BufRead as _;
+    let Ok(file) = std::fs::File::open(path) else { return Vec::new() };
+    let mut lines: Vec<TimedLine> = std::io::BufReader::with_capacity(256 * 1024, file)
+        .lines()
+        .map_while(Result::ok)
+        .filter_map(|line| serde_json::from_str::<ChatLine>(&line).ok())
+        .filter_map(|line| {
+            let o = timeline.video_time(line.t)?;
+            keep(o).then_some(TimedLine { o, line })
+        })
+        .collect();
+    lines.sort_by_key(|line| line.o);
+    lines.shrink_to_fit();
+    lines
 }
 
 /// The recording's chat in video time, cached while the file doesn't change.
@@ -314,7 +353,12 @@ async fn timed_chat(id: i64, located: &Located) -> AppResult<Arc<Vec<TimedLine>>
         Ok(meta) => meta.len(),
         Err(_) => return Ok(Arc::new(Vec::new())),
     };
-    if let Some(found) = cache().lock().ok().and_then(|cache| cache.get(&(id, size)).cloned()) {
+    if let Some(found) = cache().lock().ok().and_then(|mut cache| {
+        cache.get_mut(&(id, size)).map(|(lines, used)| {
+            *used = std::time::Instant::now();
+            Arc::clone(lines)
+        })
+    }) {
         return Ok(found);
     }
     let timeline_path = located.dir.join(storage::timeline_file(located.part));
@@ -322,27 +366,20 @@ async fn timed_chat(id: i64, located: &Located) -> AppResult<Arc<Vec<TimedLine>>
     let recording = located.status == "recording";
     let lines = tokio::task::spawn_blocking(move || -> Vec<TimedLine> {
         let timeline = Timeline::load(&timeline_path);
-        let Ok(text) = std::fs::read_to_string(&chat_path) else { return Vec::new() };
-        let mut lines: Vec<TimedLine> = text
-            .lines()
-            .filter_map(|line| serde_json::from_str::<ChatLine>(line).ok())
-            .filter_map(|line| {
-                let o = timeline.video_time(line.t)?;
-                (recording || o <= limit).then_some(TimedLine { o, line })
-            })
-            .collect();
-        lines.sort_by_key(|line| line.o);
-        lines
+        read_chat(&chat_path, &timeline, |o| recording || o <= limit)
     })
     .await
     .map_err(|error| AppError::internal(error.to_string()))?;
     let lines = Arc::new(lines);
     if let Ok(mut cache) = cache().lock() {
         cache.retain(|(cached, _), _| *cached != id);
-        if cache.len() >= 6 {
-            cache.clear();
+        // The least recently used go first, until the new one fits.
+        let mut total: usize = cache.values().map(|(lines, _)| lines.len()).sum();
+        while total + lines.len() > CACHED_LINES {
+            let Some(oldest) = cache.iter().min_by_key(|(_, (_, used))| *used).map(|(key, _)| *key) else { break };
+            total -= cache.remove(&oldest).map_or(0, |(lines, _)| lines.len());
         }
-        cache.insert((id, size), Arc::clone(&lines));
+        cache.insert((id, size), (Arc::clone(&lines), std::time::Instant::now()));
     }
     Ok(lines)
 }
@@ -414,7 +451,8 @@ fn ass_time(ms: i64) -> String {
 /// `#RRGGBB` as ASS's `&HBBGGRR&`.
 fn ass_color(hex: &str) -> Option<String> {
     let hex = hex.strip_prefix('#')?;
-    (hex.len() == 6).then(|| format!("&H{}{}{}&", &hex[4..6], &hex[2..4], &hex[0..2]))
+    (hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+        .then(|| format!("&H{}{}{}&", &hex[4..6], &hex[2..4], &hex[0..2]))
 }
 
 /// The chat as subtitles, for players such as VLC or mpv: each message shows for a few
@@ -466,5 +504,7 @@ mod tests {
     fn formats_subtitle_times_and_colours() {
         assert_eq!(ass_time(3_723_450), "1:02:03.45");
         assert_eq!(ass_color("#FF4500").as_deref(), Some("&H0045FF&"));
+        // Not a colour, and not a panic either.
+        assert_eq!(ass_color("#aéé0"), None);
     }
 }

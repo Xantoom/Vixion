@@ -182,7 +182,7 @@ async fn acme(app: &AppState, slot: &CertSlot, email: &str, api_token: &str, dir
         tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
     }
     write_private(&files.key, key.as_bytes()).await?;
-    tokio::fs::write(&files.chain, chain.as_bytes()).await.map_err(|e| e.to_string())?;
+    write_private(&files.chain, chain.as_bytes()).await?;
     slot.set(certified_key(chain.as_bytes(), key.as_bytes())?);
     let renew_at = renewal_time(chain.as_bytes()).ok_or("unreadable certificate")?;
     tracing::info!(%domain, renew_in_s = renew_at - now_ms() / 1000, "certificate installed");
@@ -246,14 +246,29 @@ fn validity(certificate: &[u8]) -> Option<(i64, i64)> {
     Some((der_time(from_tag, from)?, der_time(until_tag, until)?))
 }
 
+/// Writes a file only the owner can read, created that way (never readable by others, even for a
+/// moment) and swapped in whole, so that a crash never leaves half a key.
 async fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    tokio::fs::write(path, bytes).await.map_err(|e| e.to_string())?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt as _;
-        tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await.map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    let (path, bytes) = (path.to_owned(), bytes.to_vec());
+    tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+        use std::io::Write as _;
+        let temporary = path.with_extension("tmp");
+        let _ = std::fs::remove_file(&temporary);
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt as _;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&temporary)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        std::fs::rename(&temporary, &path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
 }
 
 async fn issue(

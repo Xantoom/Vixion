@@ -53,6 +53,9 @@ pub struct Config {
     /// Keeps the media domain's A record on the current public address (Cloudflare only).
     pub ddns: bool,
     pub log_json: bool,
+    /// Whether a reverse proxy (Cloudflare, Caddy, nginx…) stands in front: only then are the
+    /// client address headers it adds believed (`VIXION_TRUST_PROXY`).
+    pub trust_proxy: bool,
     pub log_filter: String,
     /// The `auth-token` cookie of a Twitch account, from `VIXION_TWITCH_TOKEN`,
     /// `VIXION_TWITCH_TOKEN_FILE` or `--twitch-token`. With Turbo or a subscription, no ads.
@@ -176,6 +179,7 @@ impl Config {
             ddns: flag("VIXION_DDNS"),
             tls,
             log_json: var("VIXION_LOG_FORMAT").is_some_and(|format| format.eq_ignore_ascii_case("json")),
+            trust_proxy: flag("VIXION_TRUST_PROXY"),
             log_filter: var("VIXION_LOG").unwrap_or_else(|| "info".to_owned()),
         })
     }

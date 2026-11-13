@@ -3,6 +3,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { browserLocale, useT } from './i18n';
 import { ApiError, api, setUnauthorizedHandler } from './lib/api';
+import { setProgressOwner } from './lib/progress';
 import { meQuery } from './lib/session';
 import { LoginPage, SetupPage } from './pages/Auth';
 import { preloadPages, router } from './router';
@@ -25,6 +26,8 @@ export function App() {
 		staleTime: Number.POSITIVE_INFINITY,
 	});
 	const me = useQuery({ ...meQuery, enabled: setup.data?.needed === false, retry: false });
+	// Before any page reads them: watch positions belong to the signed-in account.
+	if (me.data) setProgressOwner(me.data.id);
 
 	useEffect(() => {
 		setUnauthorizedHandler(() => {

@@ -49,6 +49,11 @@ pub struct Recorder {
     sessions: Mutex<HashMap<i64, SessionHandle>>,
     /// Broadcasts someone stopped by hand, by streamer: not restarted until the next broadcast.
     stopped: Mutex<HashMap<i64, String>>,
+    /// Broadcasts that never became playable (subscribers only, region locked…), by streamer:
+    /// the broadcast, failed attempts, and when to try again.
+    unplayable: Mutex<HashMap<i64, (String, u32, std::time::Instant)>>,
+    /// What was last written of each streamer, so that unchanged channels cost no write.
+    written: Mutex<HashMap<i64, u64>>,
     wake: Notify,
     /// Set when the process stops: no new recording starts.
     closing: std::sync::atomic::AtomicBool,
@@ -59,6 +64,8 @@ impl Recorder {
         Self {
             sessions: Mutex::new(HashMap::new()),
             stopped: Mutex::new(HashMap::new()),
+            unplayable: Mutex::new(HashMap::new()),
+            written: Mutex::new(HashMap::new()),
             wake: Notify::new(),
             closing: std::sync::atomic::AtomicBool::new(false),
         }
@@ -88,6 +95,16 @@ impl Recorder {
                 stopped.insert(streamer_id, handle.twitch_stream_id.clone());
             }
             let _ = handle.stop.send(true);
+        }
+    }
+
+    /// Records a streamer's broadcast again, as when monitoring is turned back on.
+    pub fn resume(&self, streamer_id: i64) {
+        if let Ok(mut stopped) = self.stopped.lock() {
+            stopped.remove(&streamer_id);
+        }
+        if let Ok(mut unplayable) = self.unplayable.lock() {
+            unplayable.remove(&streamer_id);
         }
     }
 
@@ -280,10 +297,21 @@ async fn check(app: &AppState) -> Round {
         }
         match app.twitch.channels_by_id(chunk).await {
             Ok(channels) => {
-                for channel in channels {
-                    if let Some(streamer) = watched.iter().find(|streamer| streamer.twitch_id == channel.id) {
-                        handle(app, streamer, &channel).await;
+                let by_id: HashMap<&str, &Watched> =
+                    watched.iter().map(|streamer| (streamer.twitch_id.as_str(), streamer)).collect();
+                for channel in &channels {
+                    if let Some(streamer) = by_id.get(channel.id.as_str()) {
+                        handle(app, streamer, channel).await;
                     }
+                }
+                // Channels Twitch no longer knows (banned, deleted) are not live any more.
+                let gone: Vec<i64> = chunk
+                    .iter()
+                    .filter(|id| !channels.iter().any(|channel| &channel.id == *id))
+                    .filter_map(|id| by_id.get(id.as_str()).map(|streamer| streamer.id))
+                    .collect();
+                if !gone.is_empty() {
+                    clear_live(app, gone).await;
                 }
             }
             Err(TwitchError::RateLimited(wait)) => return Round::Throttled { batches, wait },
@@ -309,8 +337,15 @@ async fn handle(app: &AppState, streamer: &Watched, channel: &Channel) {
     let stopped_by_hand = live.is_some_and(|stream| {
         app.recorder.stopped.lock().is_ok_and(|stopped| stopped.get(&streamer.id) == Some(&stream.id))
     });
+    let waiting = live.is_some_and(|stream| {
+        app.recorder.unplayable.lock().is_ok_and(|unplayable| {
+            unplayable
+                .get(&streamer.id)
+                .is_some_and(|(id, _, until)| *id == stream.id && std::time::Instant::now() < *until)
+        })
+    });
     match (live, running) {
-        (Some(stream), None) if streamer.monitored && !stopped_by_hand => {
+        (Some(stream), None) if streamer.monitored && !stopped_by_hand && !waiting => {
             start(app, streamer.id, channel, stream.id.clone());
         }
         (Some(stream), Some((recording, title, game))) if recording == stream.id => {
@@ -321,6 +356,31 @@ async fn handle(app: &AppState, streamer: &Watched, channel: &Channel) {
             }
         }
         _ => {}
+    }
+}
+
+/// Clears the live state of channels Twitch stopped answering for.
+async fn clear_live(app: &AppState, ids: Vec<i64>) {
+    if let Ok(mut written) = app.recorder.written.lock() {
+        for id in &ids {
+            written.remove(id);
+        }
+    }
+    let result = app
+        .db
+        .write(move |conn| {
+            for id in ids {
+                conn.execute(
+                    "UPDATE streamers SET live_title = NULL, live_game = NULL, live_since = NULL, live_viewers = NULL
+                     WHERE id = ?1 AND live_since IS NOT NULL",
+                    [id],
+                )?;
+            }
+            Ok(())
+        })
+        .await;
+    if let Err(error) = result {
+        tracing::warn!(%error, "can't update a streamer");
     }
 }
 
@@ -338,6 +398,16 @@ async fn update_streamer(app: &AppState, streamer_id: i64, channel: &Channel) {
         channel.banner_image_url.clone(),
         live.and_then(|stream| stream.viewers_count),
     );
+    // Most rounds change nothing: the same values aren't written again.
+    let fingerprint = {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        values.hash(&mut hasher);
+        hasher.finish()
+    };
+    if app.recorder.written.lock().is_ok_and(|written| written.get(&streamer_id) == Some(&fingerprint)) {
+        return;
+    }
     let result = app
         .db
         .write(move |conn| {
@@ -359,8 +429,13 @@ async fn update_streamer(app: &AppState, streamer_id: i64, channel: &Channel) {
             Ok(())
         })
         .await;
-    if let Err(error) = result {
-        tracing::warn!(%error, "can't update a streamer");
+    match result {
+        Ok(()) => {
+            if let Ok(mut written) = app.recorder.written.lock() {
+                written.insert(streamer_id, fingerprint);
+            }
+        }
+        Err(error) => tracing::warn!(%error, "can't update a streamer"),
     }
 }
 
@@ -423,10 +498,53 @@ fn start(app: &AppState, streamer_id: i64, channel: &Channel, twitch_stream_id: 
     tracing::info!(channel = %info.login, "live, recording");
     let app = app.clone();
     tokio::spawn(async move {
+        // Removed or no longer monitored since the round read it: leave it.
+        let wanted = app
+            .db
+            .read(move |conn| {
+                Ok(conn
+                    .query_row("SELECT monitored FROM streamers WHERE id = ?1", [streamer_id], |row| {
+                        row.get::<_, i64>(0)
+                    })
+                    .is_ok_and(|monitored| monitored != 0))
+            })
+            .await
+            .unwrap_or(false);
+        if !wanted {
+            app.recorder.finished(streamer_id);
+            return;
+        }
         if retention::room_to_record(&app).await {
             app.alerts.resolve("disk_full").await;
             let chat_count = Arc::new(AtomicU64::new(0));
-            session::run(&app, info, stop_rx, progress, chat_count).await;
+            let (login, stream_id) = (info.login.clone(), info.twitch_stream_id.clone());
+            // In its own task, so that a crash in it ends this recording and nothing else.
+            let session = {
+                let app = app.clone();
+                tokio::spawn(async move { session::run(&app, info, stop_rx, progress, chat_count).await })
+            };
+            match session.await {
+                Ok(session::Ended::Unplayable) => {
+                    if let Ok(mut unplayable) = app.recorder.unplayable.lock() {
+                        let attempts = unplayable
+                            .get(&streamer_id)
+                            .filter(|(id, _, _)| *id == stream_id)
+                            .map_or(1, |(_, attempts, _)| attempts + 1);
+                        // 2, 4, 8… minutes, up to half an hour, before asking again.
+                        let wait = Duration::from_secs(60 << attempts.min(5)).min(Duration::from_secs(1800));
+                        unplayable.insert(streamer_id, (stream_id, attempts, std::time::Instant::now() + wait));
+                    }
+                }
+                Ok(session::Ended::Done) => {}
+                Err(error) => {
+                    app.alerts
+                        .raise(Level::Error, format!("crash:{login}"), format!("Recording {login} crashed: {error}"))
+                        .await;
+                    if let Err(error) = retention::recover(&app, Some(streamer_id)).await {
+                        tracing::error!(%error, "can't close the crashed recording");
+                    }
+                }
+            }
             app.recorder.finished(streamer_id);
             // Still live after an early end (a network failure): pick it up again right away.
             app.recorder.check_now();

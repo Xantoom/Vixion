@@ -27,6 +27,8 @@ function AuthFrame({ title, lead, children }: { title: string; lead: string; chi
 export function SetupPage() {
 	const t = useT();
 	const client = useQueryClient();
+	const [code, setCode] = useState('');
+	const [codeError, setCodeError] = useState<string | null>(null);
 	const [username, setUsername] = useState('');
 	const [password, setPassword] = useState('');
 	const [confirm, setConfirm] = useState('');
@@ -41,12 +43,15 @@ export function SetupPage() {
 		}
 		setBusy(true);
 		setError(null);
+		setCodeError(null);
 		try {
-			await api.post('/setup', { username, password, locale: currentLocale() });
+			await api.post('/setup', { code, username, password, locale: currentLocale() });
 			client.setQueryData(['setup'], { needed: false });
 			await client.invalidateQueries({ queryKey: meQuery.queryKey });
 		} catch (caught) {
-			setError(caught instanceof Error ? caught.message : t.common.error);
+			if (caught instanceof ApiError && caught.code === 'bad_setup_code') setCodeError(t.auth.badSetupCode);
+			else if (caught instanceof ApiError && caught.code === 'too_many_attempts') setCodeError(t.auth.tooMany);
+			else setError(caught instanceof Error ? caught.message : t.common.error);
 		} finally {
 			setBusy(false);
 		}
@@ -55,6 +60,25 @@ export function SetupPage() {
 	return (
 		<AuthFrame title={t.auth.setupTitle} lead={t.auth.setupLead}>
 			<form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
+				<Field label={t.auth.setupCode} hint={t.auth.setupCodeHint} error={codeError}>
+					{(id, describedBy) => (
+						<TextInput
+							id={id}
+							autoComplete="off"
+							autoCapitalize="characters"
+							spellCheck={false}
+							required
+							autoFocus
+							placeholder="XXXX-XXXX"
+							aria-describedby={describedBy}
+							className="font-mono uppercase"
+							value={code}
+							onChange={(event) => {
+								setCode(event.target.value);
+							}}
+						/>
+					)}
+				</Field>
 				<Field label={t.auth.username}>
 					{(id) => (
 						<TextInput
@@ -63,7 +87,6 @@ export function SetupPage() {
 							autoCapitalize="none"
 							spellCheck={false}
 							required
-							autoFocus
 							value={username}
 							onChange={(event) => {
 								setUsername(event.target.value);
@@ -130,9 +153,11 @@ export function LoginPage() {
 			setError(
 				caught instanceof ApiError && caught.code === 'bad_credentials'
 					? t.auth.wrongPassword
-					: caught instanceof Error
-						? caught.message
-						: t.common.error,
+					: caught instanceof ApiError && caught.code === 'too_many_attempts'
+						? t.auth.tooMany
+						: caught instanceof Error
+							? caught.message
+							: t.common.error,
 			);
 			setPassword('');
 		} finally {

@@ -98,6 +98,35 @@ pub async fn list(State(app): State<AppState>, user: CurrentUser) -> AppResult<J
     Ok(Json(streamers))
 }
 
+/// Twitch profiles, kept a minute: an open channel page refreshes often, and every viewer of it
+/// would otherwise ask Twitch again, outside the pace the recorder keeps.
+async fn cached_profile(app: &AppState, login: &str) -> Option<Profile> {
+    type Profiles = std::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, Option<Profile>)>>;
+    static PROFILES: std::sync::OnceLock<Profiles> = std::sync::OnceLock::new();
+    const KEEP: std::time::Duration = std::time::Duration::from_secs(60);
+    let profiles = PROFILES.get_or_init(Default::default);
+    if let Some((_, profile)) =
+        profiles.lock().ok().and_then(|map| map.get(login).filter(|(at, _)| at.elapsed() < KEEP).cloned())
+    {
+        return profile;
+    }
+    match app.twitch.profile(login).await {
+        Ok(profile) => {
+            if let Ok(mut map) = profiles.lock() {
+                map.retain(|_, (at, _)| at.elapsed() < KEEP);
+                if map.len() < 500 {
+                    map.insert(login.to_owned(), (std::time::Instant::now(), profile.clone()));
+                }
+            }
+            profile
+        }
+        Err(error) => {
+            tracing::debug!(%error, %login, "no Twitch profile");
+            None
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub struct ChannelPage {
     /// What Twitch says of the channel; null when Twitch can't be reached.
@@ -131,13 +160,9 @@ pub async fn channel(
             let rows = statement.query_map([streamer.id], summary_from_row)?;
             Ok((Some(streamer), rows.collect::<Result<Vec<_>, _>>()?))
         }),
-        app.twitch.profile(&login),
+        cached_profile(&app, &login),
     );
     let (mut streamer, streams) = local?;
-    let profile = profile.unwrap_or_else(|error| {
-        tracing::debug!(%error, %login, "no Twitch profile");
-        None
-    });
     if streamer.is_none() && profile.is_none() {
         return Err(AppError::not_found());
     }
@@ -233,6 +258,7 @@ pub async fn add(
         })
         .await?;
     tracing::info!(%login, by = %user.username, "streamer added");
+    crate::audit::record(&app, &user, "streamer.add", &login).await;
     app.recorder.check_now();
     let streamer = app
         .db
@@ -275,8 +301,11 @@ pub async fn update(
             Ok(changed)
         })
         .await?;
-    if body.monitored == Some(false) {
-        app.recorder.stop(id);
+    match body.monitored {
+        Some(false) => app.recorder.stop(id),
+        // Turned back on during a broadcast: that broadcast is recorded again.
+        Some(true) => app.recorder.resume(id),
+        None => {}
     }
     app.recorder.check_now();
     if changed == 0 { Err(AppError::not_found()) } else { Ok(StatusCode::NO_CONTENT) }
@@ -299,7 +328,30 @@ pub async fn remove(
     if query.recordings && !user.can("streams.delete") {
         return Err(AppError::forbidden());
     }
+    // No new recording may start while the streamer goes: monitoring stops first.
+    let was_monitored: bool = app
+        .db
+        .write(move |conn| {
+            let monitored: i64 =
+                conn.query_row("SELECT monitored FROM streamers WHERE id = ?1", [id], |row| row.get(0))?;
+            conn.execute("UPDATE streamers SET monitored = 0 WHERE id = ?1", [id])?;
+            Ok(monitored != 0)
+        })
+        .await?;
+    let restore = async || {
+        let _ = app
+            .db
+            .write(move |conn| {
+                conn.execute(
+                    "UPDATE streamers SET monitored = ?2 WHERE id = ?1",
+                    rusqlite::params![id, was_monitored],
+                )?;
+                Ok(())
+            })
+            .await;
+    };
     if app.recorder.is_recording(id) {
+        restore().await;
         return Err(AppError::conflict("recording", "stop the recording first"));
     }
     let streams: Vec<i64> = app
@@ -311,6 +363,7 @@ pub async fn remove(
         })
         .await?;
     if !streams.is_empty() && !query.recordings {
+        restore().await;
         return Err(AppError::conflict("has_recordings", "this streamer still has recordings"));
     }
     for stream in streams {
@@ -323,6 +376,7 @@ pub async fn remove(
         })
         .await?;
     tracing::info!(id, by = %user.username, "streamer removed");
+    crate::audit::record(&app, &user, "streamer.remove", id.to_string()).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -334,5 +388,6 @@ pub async fn stop(State(app): State<AppState>, user: CurrentUser, Path(id): Path
     }
     app.recorder.stop(id);
     tracing::info!(id, by = %user.username, "recording stopped by hand");
+    crate::audit::record(&app, &user, "recording.stop", id.to_string()).await;
     Ok(StatusCode::NO_CONTENT)
 }

@@ -26,6 +26,9 @@ pub struct App {
     pub http: reqwest::Client,
     pub recorder: Recorder,
     pub limiter: LoginLimiter,
+    /// Asked for when creating the first account, so that only whoever reads the server's log
+    /// can claim a new install. None once an account exists.
+    pub setup_code: std::sync::Mutex<Option<String>>,
     pub started_at: i64,
 }
 

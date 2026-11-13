@@ -265,7 +265,7 @@ pub struct SearchHit {
 }
 
 /// What a channel page shows of a channel, watched or not.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Profile {
     pub id: String,
     pub login: String,
@@ -282,7 +282,7 @@ pub struct Profile {
     pub videos: Vec<Video>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ProfileLive {
     pub title: Option<String>,
     pub game: Option<String>,
@@ -291,7 +291,7 @@ pub struct ProfileLive {
     pub preview_url: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Video {
     pub id: String,
     pub title: String,

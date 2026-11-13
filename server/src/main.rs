@@ -3,6 +3,7 @@
 mod alerts;
 mod api;
 mod app;
+mod audit;
 mod auth;
 mod config;
 mod crypto;
@@ -33,7 +34,7 @@ use crate::recorder::{Recorder, retention};
 const USAGE: &str = "Usage:
   vixion [--twitch-token <token>]     run the server
   vixion healthcheck                  exit 0 when the local server answers (for Docker)
-  vixion reset-password <user> <new>  set an account's password and sign it out everywhere
+  vixion reset-password <user>        set an account's password (asked for) and sign it out everywhere
   vixion version
 
 Configuration is read from VIXION_* environment variables; see the README.";
@@ -73,7 +74,15 @@ fn main() -> ExitCode {
             println!("vixion {}", env!("CARGO_PKG_VERSION"));
             return ExitCode::SUCCESS;
         }
-        Some("reset-password") if args.len() == 3 => return reset_password(&config, &args[1], &args[2]),
+        // Read from the terminal, not the command line, which other users and the shell history see.
+        Some("reset-password") if args.len() == 2 => {
+            eprint!("New password for {}: ", args[1]);
+            let mut password = String::new();
+            if std::io::stdin().read_line(&mut password).is_err() {
+                return ExitCode::FAILURE;
+            }
+            return reset_password(&config, &args[1], password.trim_end_matches(['\r', '\n']));
+        }
         _ => {
             eprintln!("{USAGE}");
             return ExitCode::from(2);
@@ -175,7 +184,13 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
         .connect_timeout(Duration::from_secs(10))
         .pool_idle_timeout(Duration::from_secs(90))
         .build()?;
-    let alerts = alerts::Alerts::new(db.clone(), settings.clone(), http.clone());
+    // Webhooks don't follow redirects: the address set is the only one reached.
+    let webhooks = reqwest::Client::builder()
+        .user_agent(concat!("Vixion/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
+    let alerts = alerts::Alerts::new(db.clone(), settings.clone(), webhooks);
     let app: AppState = Arc::new(App {
         twitch: twitch::api::TwitchApi::new(http.clone()),
         chat_assets: twitch::emotes::ChatAssetCache::default(),
@@ -187,6 +202,7 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
         logs,
         recorder: Recorder::new(),
         limiter: auth::LoginLimiter::new(),
+        setup_code: std::sync::Mutex::new(None),
         started_at: db::now_ms(),
         config,
     });
@@ -196,7 +212,8 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
         recordings = %app.config.recordings_dir.display(),
         "starting"
     );
-    if let Err(error) = retention::recover(&app).await {
+    auth::announce_setup(&app).await?;
+    if let Err(error) = retention::recover(&app, None).await {
         tracing::error!(%error, "recovering interrupted recordings failed");
     }
 

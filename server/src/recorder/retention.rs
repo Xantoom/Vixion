@@ -59,13 +59,17 @@ pub async fn delete_stream(app: &AppState, id: i64) -> AppResult<()> {
         .await
 }
 
-/// Runs the clean-up every hour, and once at start.
+/// Deletes expired recordings every hour, and once at start. Free space is watched every minute,
+/// since a long broadcast fills a disk much faster than that.
 pub async fn run(app: AppState) {
+    let mut minutes = 0u32;
     loop {
-        if let Err(error) = sweep(&app).await {
+        let result = if minutes.is_multiple_of(60) { sweep(&app).await } else { check_disk(&app, true).await };
+        if let Err(error) = result {
             tracing::error!(%error, "retention sweep failed");
         }
-        tokio::time::sleep(Duration::from_secs(3600)).await;
+        minutes = minutes.wrapping_add(1);
+        tokio::time::sleep(Duration::from_secs(60)).await;
     }
 }
 
@@ -128,7 +132,7 @@ pub async fn check_disk(app: &AppState, free_space: bool) -> AppResult<()> {
         }
         if deleted > 0 {
             app.alerts
-                .raise(
+                .event(
                     Level::Warning,
                     "disk_reserve",
                     format!(
@@ -160,14 +164,18 @@ pub async fn room_to_record(app: &AppState) -> bool {
     system::disk_space(&app.config.streams_dir()).is_none_or(|space| space.free >= reserve)
 }
 
-/// Recordings left `recording` by a crash are repaired and closed.
-pub async fn recover(app: &AppState) -> AppResult<()> {
+/// Recordings left `recording` by a crash (of the process, or of one streamer's recording when
+/// `streamer` is given) are repaired and closed.
+pub async fn recover(app: &AppState, streamer: Option<i64>) -> AppResult<()> {
     let interrupted = app
         .db
-        .read(|conn| {
-            let mut statement = conn.prepare("SELECT id, dir, part FROM streams WHERE status = 'recording'")?;
-            let rows = statement
-                .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?)))?;
+        .read(move |conn| {
+            let mut statement = conn.prepare(
+                "SELECT id, dir, part FROM streams WHERE status = 'recording' AND (?1 IS NULL OR streamer_id = ?1)",
+            )?;
+            let rows = statement.query_map([streamer], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
+            })?;
             Ok(rows.collect::<Result<Vec<_>, _>>()?)
         })
         .await?;

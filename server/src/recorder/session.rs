@@ -34,8 +34,29 @@ const START_PATIENCE: Duration = Duration::from_secs(180);
 /// Without a new segment for this long, Twitch is asked whether the broadcast is still live.
 const STALE: Duration = Duration::from_secs(40);
 const SEGMENT_TIMEOUT: Duration = Duration::from_secs(20);
-/// Progress is written to the database this often.
+/// Progress is written to the database, and free space checked, this often.
 const SAVE_EVERY: Duration = Duration::from_secs(10);
+/// Below this much free space a recording stops cleanly rather than fail on a full disk.
+const DISK_FLOOR: u64 = 512 << 20;
+
+/// How a recording session ended.
+pub enum Ended {
+    /// Recorded until the end, a stop, or an error (noted on the recording).
+    Done,
+    /// The broadcast never became playable: tried again later rather than at once.
+    Unplayable,
+}
+
+/// Runs `future` unless `stop` turns true first.
+async fn unless_stopped<T>(stop: &mut watch::Receiver<bool>, future: impl Future<Output = T>) -> Option<T> {
+    if *stop.borrow() {
+        return None;
+    }
+    tokio::select! {
+        value = future => Some(value),
+        _ = stop.wait_for(|stopped| *stopped) => None,
+    }
+}
 
 struct Source {
     playlist: String,
@@ -135,6 +156,9 @@ async fn wait_for_source(app: &AppState, login: &str, stop: &mut watch::Receiver
         match pick_source(app, login, token.as_deref(), h264_only).await {
             Ok(Some(source)) => {
                 app.alerts.resolve("twitch_integrity").await;
+                if token.is_some() {
+                    app.alerts.resolve("twitch_token").await;
+                }
                 return Some(source);
             }
             Ok(None) => {}
@@ -171,11 +195,14 @@ pub async fn run(
     mut stop: watch::Receiver<bool>,
     progress: Arc<Mutex<LiveProgress>>,
     chat_count: Arc<AtomicU64>,
-) {
+) -> Ended {
     let login = broadcast.login.clone();
     let Some(mut source) = wait_for_source(app, &login, &mut stop).await else {
+        if *stop.borrow() {
+            return Ended::Done;
+        }
         tracing::warn!(%login, "the broadcast never became playable");
-        return;
+        return Ended::Unplayable;
     };
     tracing::info!(
         %login,
@@ -210,11 +237,12 @@ pub async fn run(
     if earlier_parts > 0 {
         tracing::info!(%login, folder, "resuming the broadcast's recording");
     }
-    let Some(path) = storage::stream_dir(&app.config.streams_dir(), &folder) else { return };
+    let Some(path) = storage::stream_dir(&app.config.streams_dir(), &folder) else { return Ended::Done };
     if let Err(error) = tokio::fs::create_dir_all(&path).await {
         app.alerts.raise(Level::Error, "storage", format!("Can't create {}: {error}", path.display())).await;
-        return;
+        return Ended::Done;
     }
+    app.alerts.resolve("storage").await;
 
     let (chat_stop, chat_stop_rx) = watch::channel(false);
     let chat_task = app.settings.get().await.record_chat.then(|| {
@@ -237,8 +265,8 @@ pub async fn run(
         chat_count,
         ads_ms: 0,
     };
-    session.follow(&mut source, &mut stop).await;
-    session.finish_part(None).await;
+    let failure = session.follow(&mut source, &mut stop).await;
+    session.finish_part(failure).await;
 
     let _ = chat_stop.send(true);
     if let Some(task) = chat_task {
@@ -252,11 +280,13 @@ pub async fn run(
         let _ = tokio::fs::remove_dir_all(&session.path).await;
     }
     tracing::info!(%login, parts = session.parts_done.len(), "recording ended");
+    Ended::Done
 }
 
 impl Session<'_> {
-    /// Follows the playlist until the broadcast ends or the session is stopped.
-    async fn follow(&mut self, source: &mut Source, stop: &mut watch::Receiver<bool>) {
+    /// Follows the playlist until the broadcast ends or the session is stopped; the error that
+    /// ended it early, if any.
+    async fn follow(&mut self, source: &mut Source, stop: &mut watch::Receiver<bool>) -> Option<String> {
         let login = self.broadcast.login.clone();
         let mut last_date: Option<i64> = None;
         let mut last_sequence: Option<u64> = None;
@@ -268,7 +298,8 @@ impl Session<'_> {
         let mut last_dodge: Option<Instant> = None;
 
         while !*stop.borrow() {
-            let playlist = match self.app.twitch.get_text(&source.playlist).await {
+            let Some(answer) = unless_stopped(stop, self.app.twitch.get_text(&source.playlist)).await else { break };
+            let playlist = match answer {
                 Ok(text) => {
                     failures = 0;
                     hls::parse_media(&text)
@@ -325,7 +356,10 @@ impl Session<'_> {
                     self.set_state("ad");
                     continue;
                 }
-                let demuxed = match self.download(segment, &mut init, &previous).await {
+                if *stop.borrow() {
+                    break;
+                }
+                let demuxed = match self.download(segment, &mut init, &previous, stop).await {
                     Some(demuxed) => demuxed,
                     None => {
                         discontinuity = true;
@@ -343,7 +377,7 @@ impl Session<'_> {
                         .alerts
                         .raise(Level::Error, format!("write:{login}"), format!("Recording {login} failed: {error}"))
                         .await;
-                    return;
+                    return Some(error);
                 }
                 discontinuity = false;
                 self.set_state("recording");
@@ -366,6 +400,7 @@ impl Session<'_> {
             let wait = (playlist.target_duration / 2.0).clamp(1.0, 3.0);
             sleep_or_stop(stop, Duration::from_secs_f64(wait)).await;
         }
+        None
     }
 
     async fn still_live(&self) -> bool {
@@ -388,18 +423,20 @@ impl Session<'_> {
         segment: &hls::MediaSegment,
         init: &mut Option<(String, Init)>,
         previous: &Segment,
+        stop: &mut watch::Receiver<bool>,
     ) -> Option<Segment> {
         let login = &self.broadcast.login;
         let mut data = None;
+        // A stop (the server shutting down) doesn't wait for a slow segment.
         for attempt in 0..3u32 {
-            match self.app.twitch.get_bytes(&segment.uri, SEGMENT_TIMEOUT).await {
+            match unless_stopped(stop, self.app.twitch.get_bytes(&segment.uri, SEGMENT_TIMEOUT)).await? {
                 Ok(bytes) => {
                     data = Some(bytes);
                     break;
                 }
                 Err(error) => {
                     tracing::debug!(%login, %error, attempt, "segment download failed");
-                    tokio::time::sleep(Duration::from_millis(500 * u64::from(attempt + 1))).await;
+                    sleep_or_stop(stop, Duration::from_millis(500 * u64::from(attempt + 1))).await;
                 }
             }
         }
@@ -410,7 +447,7 @@ impl Session<'_> {
         let result = match &segment.map {
             Some(map) => {
                 if init.as_ref().is_none_or(|(uri, _)| uri != map) {
-                    let bytes = self.app.twitch.get_bytes(map, SEGMENT_TIMEOUT).await.ok()?;
+                    let bytes = unless_stopped(stop, self.app.twitch.get_bytes(map, SEGMENT_TIMEOUT)).await?.ok()?;
                     *init = Some((map.clone(), mp4read::parse_init(&bytes).ok()?));
                 }
                 let (_, parsed) = init.as_ref()?;
@@ -455,6 +492,18 @@ impl Session<'_> {
         }
         if part.saved.elapsed() >= SAVE_EVERY {
             part.saved = Instant::now();
+            // The clean-up frees space every minute; if it couldn't, stop before the disk is full.
+            if crate::system::disk_space(&self.path).is_some_and(|space| space.free < DISK_FLOOR) {
+                self.app
+                    .alerts
+                    .raise(
+                        Level::Error,
+                        "disk_full",
+                        format!("No room left on disk: the recording of {} stopped", self.broadcast.login),
+                    )
+                    .await;
+                return Err("the disk is full".into());
+            }
             let (row, ads, chat, gaps) =
                 (part.row, self.ads_ms, self.chat_count.load(Ordering::Relaxed), part.writer.discontinuities);
             let _ = self
@@ -542,6 +591,8 @@ impl Session<'_> {
             progress.height = video.map_or(0, |config| config.height);
         }
         tracing::info!(login = %self.broadcast.login, display = %self.broadcast.display_name, part = number, "recording started");
+        self.app.alerts.resolve(&format!("write:{}", self.broadcast.login)).await;
+        self.app.alerts.resolve(&format!("crash:{}", self.broadcast.login)).await;
         Ok(Part { row, number, writer, timeline: Timeline::default(), saved: Instant::now() })
     }
 
