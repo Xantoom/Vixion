@@ -38,6 +38,14 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - Built-in HTTPS for the video address, with Let's Encrypt certificates through Cloudflare DNS.
 - English and French; light, dark or system theme.
 
+### Changed
+
+- API answers are compressed (Brotli or gzip) and carry ETags, so unchanged lists come back empty.
+- Chat is served from the file through a small index: a long, busy chat takes a few megabytes of
+  memory instead of hundreds, and chat downloads start at once.
+- Lighter player (MP4 only), smaller channel avatars, emotes fetched as soon as a recording starts,
+  and database indexes for folder lookups and purges.
+
 ### Security
 
 - Media links belong to one account and stop working when it loses access; downloads need their

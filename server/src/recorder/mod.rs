@@ -496,6 +496,12 @@ fn start(app: &AppState, streamer_id: i64, channel: &Channel, twitch_stream_id: 
         preview_url: stream.preview_image_url.clone(),
     };
     tracing::info!(channel = %info.login, "live, recording");
+    // Fetches the channel's emotes and badges now, so the first viewer doesn't wait for them.
+    let warm = (app.clone(), channel.id.clone());
+    tokio::spawn(async move {
+        let (app, channel_id) = warm;
+        app.chat_assets.get(&app.twitch, &app.http, &channel_id).await;
+    });
     let app = app.clone();
     tokio::spawn(async move {
         // Removed or no longer monitored since the round read it: leave it.

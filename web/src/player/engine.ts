@@ -1,5 +1,5 @@
 import {
-	ALL_FORMATS,
+	MP4,
 	AudioBufferSink,
 	Input,
 	type InputVideoTrack,
@@ -107,7 +107,7 @@ export class MediabunnyEngine implements Engine {
 					return attempts < 6 ? Math.min(8, 0.5 * 2 ** attempts) : null;
 				},
 			}),
-			formats: ALL_FORMATS,
+			formats: [MP4],
 		});
 		this.context = new AudioContext({ latencyHint: 'playback' });
 		this.canvas = document.createElement('canvas');

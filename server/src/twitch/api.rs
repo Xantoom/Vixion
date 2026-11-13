@@ -100,7 +100,7 @@ impl Channel {
     }
 }
 
-const CHANNEL_FIELDS: &str = "id login displayName profileImageURL(width: 300) bannerImageURL \
+const CHANNEL_FIELDS: &str = "id login displayName profileImageURL(width: 150) bannerImageURL \
     stream { id title createdAt type viewersCount game { name } previewImageURL(width: 640, height: 360) }";
 
 #[derive(Clone)]

@@ -43,6 +43,52 @@ pub fn router() -> Router<AppState> {
         .route("/alerts", get(admin::alerts))
         .route("/alerts/{id}/dismiss", post(admin::dismiss_alert))
         .layer(middleware::from_fn(crate::auth::require_app_header))
+        .layer(middleware::from_fn(revalidate))
+        // Brotli or gzip for JSON: a busy chat's five minutes shrink from megabytes to a few
+        // hundred kilobytes. Live logs (event streams) are left as they are.
+        .layer(tower_http::compression::CompressionLayer::new())
+}
+
+/// JSON answers carry an ETag, and the browser revalidates them: a page refreshed every few
+/// seconds gets an empty 304 when nothing changed instead of the same list again.
+async fn revalidate(request: axum::extract::Request, next: middleware::Next) -> axum::response::Response {
+    use axum::http::{HeaderValue, Method, StatusCode, header};
+    use axum::response::IntoResponse as _;
+
+    let conditional = request.method() == Method::GET;
+    let asked = request.headers().get(header::IF_NONE_MATCH).cloned();
+    let response = next.run(request).await;
+    let json = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.starts_with("application/json"));
+    // Files to save (chat downloads) and answers that set their own caching are left alone.
+    if !conditional
+        || response.status() != StatusCode::OK
+        || !json
+        || response.headers().contains_key(header::CONTENT_DISPOSITION)
+        || response.headers().contains_key(header::CACHE_CONTROL)
+    {
+        return response;
+    }
+    let (mut parts, body) = response.into_parts();
+    let Ok(bytes) = axum::body::to_bytes(body, 16 << 20).await else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    let digest = crate::crypto::sha256(&bytes);
+    let tag = format!("W/\"{}\"", digest[..12].iter().map(|b| format!("{b:02x}")).collect::<String>());
+    let Ok(value) = HeaderValue::from_str(&tag) else {
+        return axum::response::Response::from_parts(parts, axum::body::Body::from(bytes));
+    };
+    parts.headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("private, no-cache"));
+    parts.headers.insert(header::ETAG, value.clone());
+    if asked.is_some_and(|asked| asked == value) {
+        parts.status = StatusCode::NOT_MODIFIED;
+        parts.headers.remove(header::CONTENT_LENGTH);
+        return axum::response::Response::from_parts(parts, axum::body::Body::empty());
+    }
+    axum::response::Response::from_parts(parts, axum::body::Body::from(bytes))
 }
 
 /// Accepts a JSON body field that may be absent (leave as is) or null (clear).
