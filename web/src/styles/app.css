@@ -305,6 +305,42 @@
 	animation: fade-in 200ms ease-out backwards;
 }
 
+/*
+ * Nothing pops in: what appears in place (a message, a row, an extra field) unfolds from nothing
+ * to its height while it fades in, and pushes what is below smoothly instead of all at once.
+ */
+:root {
+	interpolate-size: allow-keywords;
+}
+
+@keyframes reveal {
+	from {
+		height: 0;
+		opacity: 0;
+	}
+}
+
+.reveal {
+	overflow: clip;
+	animation: reveal 260ms var(--ease-out-soft);
+}
+
+/* Folding panels open and close at the same pace. */
+details.fold::details-content {
+	block-size: 0;
+	overflow: clip;
+	opacity: 0;
+	transition:
+		block-size 280ms var(--ease-out-soft),
+		opacity 220ms ease,
+		content-visibility 280ms allow-discrete;
+}
+
+details.fold[open]::details-content {
+	block-size: auto;
+	opacity: 1;
+}
+
 /* Cards in a grid come in one after the other, a beat apart. */
 .stagger > * {
 	animation: panel-in 320ms var(--ease-out-soft) backwards;
@@ -366,6 +402,7 @@ dialog::backdrop {
 		animation-duration: 0.01ms !important;
 	}
 
+	.reveal,
 	.menu-in,
 	.tooltip-in,
 	.panel-in,

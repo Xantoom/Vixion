@@ -57,7 +57,7 @@ function Section({
 }) {
 	const t = useT();
 	return (
-		<section className="flex flex-col gap-2">
+		<section className="flex flex-col gap-3">
 			<div className="flex min-h-8 items-center justify-between gap-3 px-1">
 				<h2 className="text-caption text-ink-2 font-semibold tracking-wider uppercase">{title}</h2>
 				<button
@@ -77,7 +77,7 @@ function Section({
 
 /** A list row: what it is on the left, one short fact on the right, and the whole row opens it. */
 function Row({ onClick, children, aside }: { onClick?: () => void; children: ReactNode; aside: ReactNode }) {
-	const inner = 'flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left';
+	const inner = 'flex min-h-16 w-full items-center gap-3.5 px-5 py-3 text-left';
 	const content = (
 		<>
 			{children}
@@ -248,7 +248,7 @@ function PermissionSwitch({
 function PermissionList({ known, item }: { known: Permission[]; item: (permission: Permission) => ReactNode }) {
 	const t = useT();
 	return (
-		<div className="flex flex-col gap-5">
+		<div className="flex flex-col gap-7">
 			{grouped(known).map((group) => (
 				<Group key={group.key} title={t.users.groups[group.key]}>
 					{group.permissions.map(item)}
@@ -373,7 +373,7 @@ function UserDialog({
 				/>
 			}
 		>
-			<form id={formId} className="flex flex-col gap-5" onSubmit={(event) => void submit(event)}>
+			<form id={formId} className="flex flex-col gap-7" onSubmit={(event) => void submit(event)}>
 				{user ? (
 					<p className="text-small text-muted -mt-1 -mb-1">
 						{user.last_login_at
@@ -441,7 +441,7 @@ function UserDialog({
 					</Group>
 				) : null}
 				{user && role?.builtin !== 'admin' ? (
-					<details className="group" open={exceptions > 0 || undefined}>
+					<details className="group fold" open={exceptions > 0 || undefined}>
 						<summary className="text-ui text-ink bg-surface ring-line hover:bg-surface-2 flex min-h-12 cursor-pointer list-none items-center gap-2 rounded-md px-4 font-medium ring-1 transition-colors [&::-webkit-details-marker]:hidden">
 							{t.users.customPermissions}
 							{exceptions > 0 ? (
@@ -479,7 +479,7 @@ function UserDialog({
 							{exceptions > 0 ? (
 								<button
 									type="button"
-									className="text-small text-accent-text w-fit font-medium hover:underline"
+									className="reveal text-small text-accent-text w-fit font-medium hover:underline"
 									onClick={() => {
 										setOverrides({});
 									}}
@@ -491,7 +491,7 @@ function UserDialog({
 					</details>
 				) : null}
 				{error ? (
-					<p className="text-small text-danger" role="alert">
+					<p className="text-small text-danger reveal" role="alert">
 						{error}
 					</p>
 				) : null}
@@ -584,7 +584,7 @@ function RoleDialog({
 				/>
 			}
 		>
-			<form id={formId} className="flex flex-col gap-5" onSubmit={(event) => void submit(event)}>
+			<form id={formId} className="flex flex-col gap-7" onSubmit={(event) => void submit(event)}>
 				{role?.builtin ? null : (
 					<Field label={t.users.roleName}>
 						{(id) => (
@@ -617,7 +617,7 @@ function RoleDialog({
 					)}
 				/>
 				{error ? (
-					<p className="text-small text-danger" role="alert">
+					<p className="text-small text-danger reveal" role="alert">
 						{error}
 					</p>
 				) : null}

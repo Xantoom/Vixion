@@ -21,14 +21,14 @@ export function Card({
 }) {
 	return (
 		<section className={`bg-card ring-line overflow-hidden rounded-md ring-1 ${className}`}>
-			<header className="border-line flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 border-b px-5 py-2.5">
+			<header className="border-line flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 border-b px-6 py-3">
 				<h2 className="text-ui flex items-center gap-2 font-semibold">
 					{title}
 					{count !== undefined ? <span className="text-muted tabular font-medium">{count}</span> : null}
 				</h2>
 				{actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div> : null}
 			</header>
-			<div className={flush ? '' : 'p-5'}>{children}</div>
+			<div className={flush ? '' : 'p-6'}>{children}</div>
 		</section>
 	);
 }
@@ -79,7 +79,7 @@ export function SettingRow({
 	children: ReactNode;
 }) {
 	return (
-		<div className="border-line flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5 py-3 first:border-t-0">
+		<div className="border-line flex min-h-18 flex-wrap items-center justify-between gap-x-8 gap-y-3 border-t px-6 py-4 first:border-t-0">
 			{/* Inline, so the tip follows the last word when the name wraps. */}
 			<span className="text-ui min-w-0 font-medium">{tip ? <WithTip label={label} tip={tip} /> : label}</span>
 			{/* When it goes under its name it stays on the right edge, like every other control. */}
@@ -123,7 +123,7 @@ export function Facts({ items }: { items: [string, ReactNode][] }) {
 			{items.map(([label, value]) => (
 				<div
 					key={label}
-					className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-1 px-5 py-3"
+					className="flex min-h-16 flex-wrap items-center justify-between gap-x-8 gap-y-1 px-6 py-4"
 				>
 					<dt className="text-ui text-ink-2 font-medium">{label}</dt>
 					<dd className="text-ui ml-auto min-w-0 text-right break-all">{value}</dd>

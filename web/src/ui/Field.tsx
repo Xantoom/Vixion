@@ -33,7 +33,7 @@ export function Field({
 			</label>
 			{children(id, hint || error ? hintId : undefined)}
 			{error ? (
-				<p id={hintId} className="text-caption text-danger" role="alert">
+				<p id={hintId} className="text-caption text-danger reveal" role="alert">
 					{error}
 				</p>
 			) : hint ? (

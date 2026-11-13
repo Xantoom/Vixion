@@ -49,20 +49,20 @@ export function Dialog({
 				// A click on the backdrop (the dialog element itself, outside its box) closes it.
 				if (event.target === ref.current) onClose();
 			}}
-			className={`bg-bg text-ink m-auto max-h-[min(90dvh,48rem)] w-[calc(100%-2rem)] overflow-hidden rounded-md p-0 shadow-2xl ring-1 ring-line ${wide ? 'max-w-2xl' : 'max-w-md'}`}
+			className={`bg-bg text-ink m-auto max-h-[min(90dvh,48rem)] w-[calc(100%-2rem)] overflow-hidden rounded-md p-0 shadow-2xl ring-1 ring-line ${wide ? 'max-w-2xl' : 'max-w-lg'}`}
 		>
 			<div className="flex max-h-[inherit] flex-col">
-				<header className="flex items-start justify-between gap-4 px-6 pt-5 pb-4">
+				<header className="flex items-start justify-between gap-4 px-6 pt-6 pb-5 sm:px-7">
 					<h2 className="text-title font-semibold tracking-tight">{title}</h2>
 					<IconButton label={t.common.close} size="sm" onClick={onClose} className="-mt-1 -mr-2">
 						<X size={18} />
 					</IconButton>
 				</header>
-				<div data-dialog-body className="overflow-y-auto px-6 pt-1 pb-6">
+				<div data-dialog-body className="overflow-y-auto px-6 pt-1 pb-7 sm:px-7">
 					{children}
 				</div>
 				{footer ? (
-					<footer className="border-line bg-surface flex flex-wrap justify-end gap-2 border-t px-6 py-4">
+					<footer className="border-line bg-surface flex flex-wrap justify-end gap-2 border-t px-6 py-4 sm:px-7">
 						{footer}
 					</footer>
 				) : null}

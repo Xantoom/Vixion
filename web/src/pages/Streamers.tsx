@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { CalendarDays, Film, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '@/i18n';
 import { type Streamer, api } from '@/lib/api';
@@ -19,7 +19,7 @@ export const streamersQuery = {
 
 export function PageHeader({ title, children }: { title: ReactNode; children?: ReactNode }) {
 	return (
-		<div className="flex flex-wrap items-center justify-between gap-3 pt-7 pb-6 sm:pt-9">
+		<div className="flex flex-wrap items-center justify-between gap-3 pt-8 pb-7 sm:pt-10 sm:pb-8">
 			<h1 className="text-heading font-semibold tracking-tight">{title}</h1>
 			{children ? <div className="flex items-center gap-2">{children}</div> : null}
 		</div>
@@ -64,7 +64,7 @@ export function StreamersPage() {
 					) : null}
 				</div>
 			) : (
-				<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,19rem),1fr))] gap-5 pb-12 2xl:grid-cols-[repeat(auto-fill,minmax(23rem,1fr))] 2xl:gap-6">
+				<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,19rem),1fr))] gap-6 pb-12 2xl:grid-cols-[repeat(auto-fill,minmax(23rem,1fr))] 2xl:gap-7">
 					{sorted.map((streamer, index) => (
 						<li key={streamer.id} style={{ '--i': index } as React.CSSProperties}>
 							<StreamerCard streamer={streamer} />
@@ -139,27 +139,21 @@ function StreamerCard({ streamer }: { streamer: Streamer }) {
 					className="transition-transform duration-500 ease-(--ease-out-soft) group-hover:scale-[1.04]"
 				/>
 			</div>
-			<div className="flex items-center gap-3.5 px-4 pt-0 pb-4">
+			<div className="flex items-center gap-4 px-5 pt-0 pb-5">
 				<span className="bg-card relative -mt-7 flex-none self-start rounded-full p-1">
 					<Avatar src={streamer.avatar_url} name={streamer.display_name} size={64} live={live} />
 				</span>
-				<div className="flex min-w-0 flex-1 flex-col gap-1 pt-2.5">
+				<div className="flex min-w-0 flex-1 flex-col gap-1 pt-3">
 					<span className="flex items-center gap-2">
 						<span className="text-lead min-w-0 truncate font-semibold tracking-tight">
 							{streamer.display_name}
 						</span>
 						{live ? <LiveDot /> : null}
 					</span>
-					<span className="text-small text-muted flex flex-wrap items-center gap-x-4 gap-y-1">
-						<span className="tabular inline-flex items-center gap-1.5">
-							<Film size={15} />
-							{t.streamers.streams(streamer.stream_count)}
-						</span>
+					<span className="text-small text-muted truncate">
+						{t.streamers.streams(streamer.stream_count)}
 						{lastLive ? (
-							<span className="inline-flex items-center gap-1.5" data-tip={t.streamers.lastLiveTip}>
-								<CalendarDays size={15} />
-								{formatRelative(lastLive)}
-							</span>
+							<span data-tip={t.streamers.lastLiveTip}> · {formatRelative(lastLive)}</span>
 						) : null}
 					</span>
 				</div>

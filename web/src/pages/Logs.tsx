@@ -31,7 +31,7 @@ export function LogsPage() {
 	const can = useCan('logs.view');
 	if (!can) return <NotFound forbidden />;
 	return (
-		<div className="panel-in flex flex-col gap-6">
+		<div className="panel-in flex flex-col gap-8">
 			<Alerts />
 			<Console />
 		</div>
@@ -62,14 +62,14 @@ function Alerts() {
 			{isPending ? (
 				<PageLoading />
 			) : open.length === 0 ? (
-				<p className="text-small text-muted flex items-center gap-2 px-5 py-4">
+				<p className="text-small text-muted flex items-center gap-2.5 px-6 py-5">
 					<CircleCheck size={16} className="text-ok" />
 					{t.logs.noAlerts}
 				</p>
 			) : (
 				<ul className="divide-line divide-y">
 					{open.map((alert) => (
-						<li key={alert.id} className="flex items-start gap-3 px-5 py-3">
+						<li key={alert.id} className="flex items-start gap-3.5 px-6 py-4">
 							{alert.level === 'error' ? (
 								<OctagonAlert size={18} className="text-danger mt-0.5 flex-none" />
 							) : alert.level === 'warning' ? (
@@ -207,7 +207,7 @@ function Console() {
 			}
 			flush
 		>
-			<div className="border-line flex flex-wrap items-center gap-2 border-b px-5 py-2.5">
+			<div className="border-line flex flex-wrap items-center gap-3 border-b px-6 py-3.5">
 				<Segmented
 					label={t.logs.filter}
 					value={level}
@@ -235,7 +235,7 @@ function Console() {
 					const element = event.currentTarget;
 					following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
 				}}
-				className="bg-canvas max-h-[min(65dvh,44rem)] min-h-40 overflow-auto px-4 py-2.5 font-mono text-[0.8125rem] leading-relaxed"
+				className="bg-canvas max-h-[min(65dvh,44rem)] min-h-40 overflow-auto px-5 py-4 font-mono text-[0.8125rem] leading-relaxed"
 			>
 				{shown.length === 0 ? (
 					<p className="text-muted py-6 text-center font-sans text-sm">{t.logs.empty}</p>

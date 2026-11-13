@@ -14,7 +14,7 @@ import { NotFound } from './NotFound';
 function Tile({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
 	return (
 		// Values line up at the bottom when a label takes two lines.
-		<div className="bg-card ring-line flex flex-col justify-between gap-2 rounded-md px-4 py-3.5 ring-1">
+		<div className="bg-card ring-line flex flex-col justify-between gap-3 rounded-md px-5 py-5 ring-1">
 			<span className="text-small text-muted flex items-start gap-2 font-medium">
 				<span className="mt-0.5 flex-none">{icon}</span>
 				{label}
@@ -48,8 +48,8 @@ export function StatsPage() {
 	];
 
 	return (
-		<div className="panel-in flex flex-col gap-6">
-			<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+		<div className="panel-in flex flex-col gap-8">
+			<div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
 				<Tile icon={<HardDrive size={16} />} label={t.stats.space} value={formatBytes(data.bytes)} />
 				<Tile icon={<Film size={16} />} label={t.stats.recordings} value={formatNumber(data.streams)} />
 				<Tile icon={<Clock3 size={16} />} label={t.stats.watchTime} value={formatDuration(data.duration_ms)} />
@@ -80,7 +80,7 @@ export function StatsPage() {
 						) : null,
 					)}
 				</div>
-				<ul className="text-small text-ink-2 mt-3 flex flex-wrap gap-x-6 gap-y-1">
+				<ul className="text-small text-ink-2 mt-4 flex flex-wrap gap-x-7 gap-y-2">
 					{segments.map((segment) => (
 						<li key={segment.label} className="flex items-center gap-2">
 							<span className={`${segment.className} size-2.5 rounded-xs`} />
@@ -100,7 +100,7 @@ export function StatsPage() {
 				{/* On a phone, one block per streamer instead of five columns. */}
 				<ul className="divide-line divide-y sm:hidden">
 					{data.streamers.map((streamer) => (
-						<li key={streamer.id} className="flex flex-col gap-2 px-5 py-3">
+						<li key={streamer.id} className="flex flex-col gap-2.5 px-6 py-4">
 							<div className="flex items-center gap-2.5">
 								<Link
 									to="/$login"
@@ -138,11 +138,11 @@ export function StatsPage() {
 					<table className="text-small w-full min-w-[34rem]">
 						<thead className="text-caption text-muted text-left">
 							<tr>
-								<th className="px-5 py-2.5 font-medium">{t.stats.streamer}</th>
-								<th className="px-5 py-2.5 font-medium">{t.stats.size}</th>
-								<th className="px-5 py-2.5 text-right font-medium">{t.stats.count}</th>
-								<th className="px-5 py-2.5 text-right font-medium">{t.stats.duration}</th>
-								<th className="px-5 py-2.5 text-right font-medium">{t.stats.kept}</th>
+								<th className="px-6 py-3.5 font-medium">{t.stats.streamer}</th>
+								<th className="px-6 py-3.5 font-medium">{t.stats.size}</th>
+								<th className="px-6 py-3.5 text-right font-medium">{t.stats.count}</th>
+								<th className="px-6 py-3.5 text-right font-medium">{t.stats.duration}</th>
+								<th className="px-6 py-3.5 text-right font-medium">{t.stats.kept}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -151,7 +151,7 @@ export function StatsPage() {
 									key={streamer.id}
 									className="border-line hover:bg-surface border-t transition-colors"
 								>
-									<td className="px-5 py-3">
+									<td className="px-6 py-4">
 										<Link
 											to="/$login"
 											params={{ login: streamer.login }}
@@ -161,7 +161,7 @@ export function StatsPage() {
 											{streamer.display_name}
 										</Link>
 									</td>
-									<td className="px-5 py-3">
+									<td className="px-6 py-4">
 										<div className="flex items-center gap-3">
 											<span className="tabular w-16 flex-none">
 												{formatBytes(streamer.bytes)}
@@ -174,11 +174,11 @@ export function StatsPage() {
 											</div>
 										</div>
 									</td>
-									<td className="tabular px-5 py-3 text-right">{streamer.streams}</td>
-									<td className="tabular px-5 py-3 text-right">
+									<td className="tabular px-6 py-4 text-right">{streamer.streams}</td>
+									<td className="tabular px-6 py-4 text-right">
 										{formatDuration(streamer.duration_ms)}
 									</td>
-									<td className="tabular px-5 py-3 text-right">{streamer.kept}</td>
+									<td className="tabular px-6 py-4 text-right">{streamer.kept}</td>
 								</tr>
 							))}
 						</tbody>

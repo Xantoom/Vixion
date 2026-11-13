@@ -49,7 +49,7 @@ export function SettingsPage() {
 	};
 
 	return (
-		<div className="panel-in flex flex-col gap-6 pb-24">
+		<div className="panel-in flex flex-col gap-8 pb-24">
 			<Card title={t.settings.recording} flush>
 				<SettingRow label={t.settings.h264Only} tip={t.settings.h264OnlyHint}>
 					<Toggle

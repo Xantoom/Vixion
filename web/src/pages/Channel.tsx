@@ -5,12 +5,12 @@ import {
 	Bookmark,
 	CalendarDays,
 	CirclePause,
+	ChevronDown,
 	CircleStop,
 	ExternalLink,
 	Eye,
 	Film,
 	Gamepad2,
-	HardDrive,
 	Play,
 	Plus,
 	Settings2,
@@ -19,7 +19,7 @@ import {
 	TriangleAlert,
 	Users,
 } from 'lucide-react';
-import { type ReactNode, useId, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useT } from '@/i18n';
 import {
 	ApiError,
@@ -44,8 +44,8 @@ import { useCan, useRouteParams } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { Confirm, Dialog } from '@/ui/Dialog';
-import { NumberInput } from '@/ui/Field';
-import { ActionRow, ChoiceRow, Group, SwitchRow } from '@/ui/Group';
+import { ActionRow, Group, SwitchRow } from '@/ui/Group';
+import { Menu, MenuDivider, MenuItem } from '@/ui/Menu';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
@@ -91,7 +91,7 @@ export function ChannelPage() {
 					</p>
 				) : null}
 				<LiveNow data={data} />
-				<div role="tablist" aria-label={name} className="border-line mb-6 flex gap-1 border-b">
+				<div role="tablist" aria-label={name} className="border-line mt-10 mb-8 flex gap-1 border-b">
 					<Tab
 						selected={shown === 'recordings'}
 						onSelect={() => {
@@ -119,7 +119,7 @@ export function ChannelPage() {
 					) : streams.length === 0 ? (
 						<Empty>{streamer.monitored ? t.streamer.empty : t.streamer.emptyPaused}</Empty>
 					) : (
-						<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-5 gap-y-8">
+						<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-6 gap-y-10">
 							{streams.map((stream, index) => (
 								<li key={stream.id} style={{ '--i': index } as React.CSSProperties}>
 									<StreamCard stream={stream} login={login} />
@@ -128,7 +128,7 @@ export function ChannelPage() {
 						</ul>
 					)
 				) : profile && profile.videos.length > 0 ? (
-					<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-5 gap-y-8">
+					<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-6 gap-y-10">
 						{profile.videos.map((video, index) => (
 							<li key={video.id} style={{ '--i': index } as React.CSSProperties}>
 								<VideoCard video={video} />
@@ -222,7 +222,7 @@ function Hero({ data, name }: { data: Page; name: string }) {
 						) : null}
 						{live ? <LiveDot size={12} /> : null}
 					</h1>
-					<div className="text-small text-muted flex flex-wrap items-center gap-x-5 gap-y-1">
+					<div className="text-small text-muted flex flex-wrap items-center gap-x-6 gap-y-1.5">
 						{profile ? (
 							<Meta icon={<Users size={16} />}>
 								{t.channel.followers(formatNumber(profile.followers))}
@@ -522,15 +522,15 @@ function StreamCard({ stream, login }: { stream: StreamSummary; login: string })
 						{title}
 					</Link>
 				)}
-				<div className="text-caption text-muted flex flex-wrap gap-x-4 gap-y-1">
-					<Meta icon={<CalendarDays size={14} />}>{formatDate(stream.started_at)}</Meta>
-					{stream.game ? <Meta icon={<Gamepad2 size={14} />}>{stream.game}</Meta> : null}
-					{stream.size_bytes > 0 ? (
-						<Meta icon={<HardDrive size={14} />}>
-							<span className="tabular">{formatBytes(stream.size_bytes)}</span>
-						</Meta>
-					) : null}
-				</div>
+				<p className="text-small text-muted tabular">
+					{[
+						formatDate(stream.started_at),
+						stream.game,
+						stream.size_bytes > 0 ? formatBytes(stream.size_bytes) : null,
+					]
+						.filter(Boolean)
+						.join(' · ')}
+				</p>
 			</div>
 			<Confirm
 				open={deleting}
@@ -599,42 +599,47 @@ function VideoCard({ video }: { video: TwitchVideo }) {
 				>
 					{video.title || t.stream.untitled}
 				</a>
-				<div className="text-caption text-muted flex flex-wrap gap-x-4 gap-y-1">
-					{video.created_at ? (
-						<Meta icon={<CalendarDays size={14} />}>{formatDate(video.created_at)}</Meta>
-					) : null}
-					{video.game ? <Meta icon={<Gamepad2 size={14} />}>{video.game}</Meta> : null}
-					<Meta icon={<Eye size={14} />}>{formatNumber(video.views)}</Meta>
-				</div>
+				<p className="text-small text-muted tabular">
+					{[
+						video.created_at ? formatDate(video.created_at) : null,
+						video.game,
+						t.channel.views(formatNumber(video.views)),
+					]
+						.filter(Boolean)
+						.join(' · ')}
+				</p>
 			</div>
 		</article>
 	);
 }
 
-type RetentionChoice = 'default' | 'forever' | 'custom';
-
 /** Whether to record, how long recordings stay, cutting the broadcast on air, and deleting the streamer. */
 function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: () => void }) {
 	const t = useT();
 	const client = useQueryClient();
-	const name = useId();
 	const [monitored, setMonitored] = useState(streamer.monitored);
-	const initial: RetentionChoice =
-		streamer.retention_days === null ? 'default' : streamer.retention_days === 0 ? 'forever' : 'custom';
-	const [choice, setChoice] = useState<RetentionChoice>(initial);
-	const [days, setDays] = useState(streamer.retention_days || 30);
+	// null follows the general setting, 0 keeps them for good.
+	const [retention, setRetention] = useState<number | null>(streamer.retention_days);
 	const [busy, setBusy] = useState(false);
 	const [removing, setRemoving] = useState(false);
 	const [stopping, setStopping] = useState(false);
 	const fallback = streamer.default_retention_days;
 
+	const retentionLabel = (days: number | null): string =>
+		days === null
+			? t.streamer.keepGeneral(retentionLabel(fallback))
+			: days === 0
+				? t.streamer.retentionForever
+				: (t.streamer.keepPresets[days] ?? t.common.days(days));
+	// The usual lengths, and the streamer's own when it is none of them.
+	const choices = [7, 30, 90, 365];
+	if (retention && !choices.includes(retention)) choices.push(retention);
+	choices.sort((a, b) => a - b);
+
 	const save = async () => {
 		setBusy(true);
 		try {
-			await api.patch(`/streamers/${streamer.id}`, {
-				monitored,
-				retention_days: choice === 'default' ? null : choice === 'forever' ? 0 : days,
-			});
+			await api.patch(`/streamers/${streamer.id}`, { monitored, retention_days: retention });
 			await Promise.all([
 				client.invalidateQueries({ queryKey: ['channel'] }),
 				client.invalidateQueries({ queryKey: streamersQuery.queryKey }),
@@ -664,11 +669,11 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 				</>
 			}
 		>
-			<div className="flex flex-col gap-6">
+			<div className="flex flex-col gap-8">
 				<Group title={t.streamer.recordSection}>
 					<SwitchRow label={t.streamer.recordLives} checked={monitored} onChange={setMonitored} />
 					{streamer.recording ? (
-						<li className="flex min-h-12 items-center justify-between gap-3 py-2 pr-2 pl-4">
+						<li className="reveal flex min-h-14 items-center justify-between gap-3 py-2 pr-2 pl-5">
 							<span className="text-ui text-live flex items-center gap-2 font-medium">
 								<LiveDot size={8} />
 								{t.streamer.liveNow}
@@ -687,40 +692,56 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 					) : null}
 				</Group>
 				<Group title={t.streamer.keepSection}>
-					<ChoiceRow
-						name={name}
-						label={t.streamer.keepDefault}
-						detail={fallback === 0 ? t.streamer.retentionForever : t.common.days(fallback)}
-						checked={choice === 'default'}
-						onChange={() => {
-							setChoice('default');
-						}}
-					/>
-					<ChoiceRow
-						name={name}
-						label={t.streamer.retentionForever}
-						checked={choice === 'forever'}
-						onChange={() => {
-							setChoice('forever');
-						}}
-					/>
-					<ChoiceRow
-						name={name}
-						label={t.streamer.keepFor}
-						checked={choice === 'custom'}
-						onChange={() => {
-							setChoice('custom');
-						}}
-					>
-						<NumberInput
-							aria-label={t.streamer.retention}
-							value={days}
-							onChange={setDays}
-							min={1}
-							max={3650}
-							unit={t.common.days(days).replace(/^\d+\s*/, '')}
-						/>
-					</ChoiceRow>
+					<li className="flex min-h-14 items-center justify-between gap-4 py-2 pr-2 pl-5">
+						<span className="flex min-w-0 flex-col gap-0.5">
+							<span className="text-ui text-ink">{t.streamer.keepRow}</span>
+							{retention === null ? (
+								<span className="text-small text-muted">{t.streamer.keepFollows}</span>
+							) : null}
+						</span>
+						<Menu
+							label={t.streamer.keepRow}
+							trigger={() => (
+								<button
+									type="button"
+									className="text-ui text-ink-2 hover:text-ink hover:bg-surface-2 inline-flex h-10 flex-none items-center gap-1.5 rounded-sm px-3 font-medium whitespace-nowrap transition-colors"
+								>
+									{retentionLabel(retention ?? fallback)}
+									<ChevronDown size={16} className="text-muted" />
+								</button>
+							)}
+						>
+							<MenuItem
+								checked={retention === null}
+								onSelect={() => {
+									setRetention(null);
+								}}
+							>
+								{t.streamer.keepGeneral(retentionLabel(fallback))}
+							</MenuItem>
+							<MenuDivider />
+							{choices.map((days) => (
+								<MenuItem
+									key={days}
+									checked={retention === days}
+									onSelect={() => {
+										setRetention(days);
+									}}
+								>
+									{retentionLabel(days)}
+								</MenuItem>
+							))}
+							<MenuDivider />
+							<MenuItem
+								checked={retention === 0}
+								onSelect={() => {
+									setRetention(0);
+								}}
+							>
+								{t.streamer.retentionForever}
+							</MenuItem>
+						</Menu>
+					</li>
 				</Group>
 				<Group>
 					<ActionRow
