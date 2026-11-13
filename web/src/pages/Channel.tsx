@@ -204,7 +204,21 @@ function Hero({ data, name }: { data: Page; name: string }) {
 				</span>
 				<div className="flex min-w-0 flex-1 basis-72 flex-col gap-2 pb-1">
 					<h1 className="text-heading sm:text-display flex items-center gap-3 font-bold tracking-tight">
-						<span className="truncate">{name}</span>
+						<a
+							href={`https://www.twitch.tv/${login}`}
+							target="_blank"
+							rel="noreferrer"
+							data-tip={t.streamer.openTwitch}
+							className="group/name hover:text-accent-text flex min-w-0 items-center gap-2 transition-colors"
+						>
+							<span className="truncate">{name}</span>
+							<ExternalLink
+								size={20}
+								strokeWidth={2.2}
+								aria-label={t.streamer.openTwitch}
+								className="text-muted group-hover/name:text-accent-text flex-none transition-colors"
+							/>
+						</a>
 						{profile?.partner ? (
 							<span data-tip={t.channel.partner} className="flex-none">
 								<BadgeCheck size={28} className="text-accent-text" aria-label={t.channel.partner} />
@@ -235,17 +249,6 @@ function Hero({ data, name }: { data: Page; name: string }) {
 				</div>
 				<div className="flex items-center gap-1.5 pb-1">
 					{streamer ? <StreamerActions streamer={streamer} /> : <AddButton login={login} name={name} />}
-					<a
-						href={`https://www.twitch.tv/${login}`}
-						target="_blank"
-						rel="noreferrer"
-						aria-label={t.streamer.openTwitch}
-						data-tip={t.streamer.openTwitch}
-						className="text-ui text-ink-2 hover:text-ink hover:bg-surface flex h-10 items-center gap-2 rounded-sm px-3 font-medium transition-colors max-sm:w-10 max-sm:justify-center max-sm:px-0"
-					>
-						<ExternalLink size={17} />
-						<span className="max-sm:hidden">Twitch</span>
-					</a>
 				</div>
 			</div>
 		</header>
