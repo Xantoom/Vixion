@@ -5,12 +5,12 @@ import {
 	Bookmark,
 	BookmarkCheck,
 	CalendarDays,
+	ChevronDown,
 	CircleStop,
 	ExternalLink,
 	Eye,
 	Film,
 	Gamepad2,
-	MoreHorizontal,
 	Play,
 	Plus,
 	SlidersHorizontal,
@@ -34,7 +34,7 @@ import { useNow } from '@/lib/now';
 import { watched } from '@/lib/progress';
 import { useCan, useRouteParams } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
-import { Button, IconButton } from '@/ui/Button';
+import { Button } from '@/ui/Button';
 import { Confirm, Dialog } from '@/ui/Dialog';
 import { NumberInput, Segmented, Switch } from '@/ui/Field';
 import { Menu, MenuDivider, MenuItem } from '@/ui/Menu';
@@ -223,6 +223,9 @@ function Hero({ data, name }: { data: Page; name: string }) {
 							</Meta>
 						) : null}
 					</div>
+					{profile?.description ? (
+						<p className="text-body text-ink-2 mt-1 max-w-3xl">{profile.description}</p>
+					) : null}
 				</div>
 				<div className="flex items-center gap-1.5 pb-1">
 					{streamer ? <StreamerActions streamer={streamer} /> : <AddButton login={login} name={name} />}
@@ -237,11 +240,6 @@ function Hero({ data, name }: { data: Page; name: string }) {
 						<ExternalLink size={19} />
 					</a>
 				</div>
-				{profile?.description ? (
-					<div className="basis-full">
-						<p className="text-body text-ink-2 max-w-3xl">{profile.description}</p>
-					</div>
-				) : null}
 			</div>
 		</header>
 	);
@@ -338,7 +336,9 @@ function StreamerActions({ streamer }: { streamer: Streamer }) {
 	const [stopping, setStopping] = useState(false);
 	return (
 		<>
-			<span className="text-small bg-accent-soft text-accent-text inline-flex h-10 items-center gap-2 rounded-sm px-3.5 font-semibold">
+			<span
+				className={`text-small mr-2 inline-flex items-center gap-1.5 font-semibold ${streamer.monitored ? 'text-accent-text' : 'text-muted'}`}
+			>
 				<BookmarkCheck size={17} />
 				{streamer.monitored ? t.channel.watched : t.streamers.paused}
 			</span>
@@ -347,9 +347,11 @@ function StreamerActions({ streamer }: { streamer: Streamer }) {
 					<Menu
 						label={t.streamer.options}
 						trigger={() => (
-							<IconButton label={t.streamer.options}>
-								<MoreHorizontal size={20} />
-							</IconButton>
+							<Button>
+								<SlidersHorizontal size={17} />
+								{t.streamer.options}
+								<ChevronDown size={16} className="text-muted -mr-1" />
+							</Button>
 						)}
 					>
 						<MenuItem
@@ -443,7 +445,7 @@ function OverlayButton({
 			aria-pressed={pressed}
 			disabled={disabled}
 			onClick={onClick}
-			className={`grid size-8 place-items-center rounded-sm bg-black/70 text-white backdrop-blur-sm transition-colors disabled:opacity-50 aria-pressed:bg-[var(--accent)] aria-pressed:text-[var(--accent-ink)] ${danger ? 'hover:bg-[var(--danger)]' : 'hover:bg-[var(--accent)] hover:text-[var(--accent-ink)]'}`}
+			className={`grid size-8 place-items-center pointer-coarse:size-10 rounded-sm bg-black/70 text-white backdrop-blur-sm transition-colors disabled:opacity-50 aria-pressed:bg-[var(--accent)] aria-pressed:text-[var(--accent-ink)] ${danger ? 'hover:bg-[var(--danger)]' : 'hover:bg-[var(--accent)] hover:text-[var(--accent-ink)]'}`}
 		>
 			{children}
 		</button>
@@ -619,7 +621,7 @@ function VideoCard({ video }: { video: TwitchVideo }) {
 						className="size-full object-cover transition-transform duration-500 ease-(--ease-out-soft) group-hover:scale-[1.03]"
 					/>
 				) : null}
-				<span className="absolute top-2.5 right-2.5 opacity-0 transition-opacity group-hover:opacity-100">
+				<span className="absolute top-2.5 right-2.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
 					<Pill>
 						<ExternalLink size={13} />
 						Twitch
@@ -693,7 +695,7 @@ function OptionsDialog({ streamer, open, onClose }: { streamer: Streamer; open: 
 					<Button variant="ghost" onClick={onClose}>
 						{t.common.cancel}
 					</Button>
-					<Button variant="primary" busy={busy} onClick={() => void save()}>
+					<Button variant="accent" busy={busy} onClick={() => void save()}>
 						{t.common.save}
 					</Button>
 				</>

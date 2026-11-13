@@ -60,6 +60,8 @@ export const en = {
 		currentPassword: 'Current password',
 		newPassword: 'New password',
 		passwordChanged: 'Password changed',
+		showPassword: 'Show password',
+		hidePassword: 'Hide password',
 	},
 	streamers: {
 		title: 'Streamers',
@@ -252,8 +254,10 @@ export const en = {
 		role: 'Role',
 		disabled: 'Disabled',
 		enabled: 'Active',
-		lastLogin: 'Last sign-in',
 		you: 'you',
+		lastLoginAt: (when: string) => `Last sign-in ${when}`,
+		neverSignedIn: 'Never signed in',
+		cantDeleteSelf: 'You can’t delete your own account',
 		editTitle: (name: string) => `Edit ${name}`,
 		deleteTitle: (name: string) => `Delete ${name}?`,
 		deleteLead: 'They are signed out and can’t sign in again',
@@ -293,6 +297,8 @@ export const en = {
 		live: 'Live',
 		pause: 'Pause',
 		resume: 'Resume',
+		paused: 'Paused',
+		disconnected: 'Disconnected',
 		clear: 'Clear',
 		filter: 'Filter',
 		all: 'All',
@@ -306,6 +312,8 @@ export const en = {
 		notFound: 'This page doesn’t exist',
 		forbidden: 'You don’t have access to this',
 		home: 'Back to streamers',
+		notFoundLead: 'The address may be wrong, or what was here has been deleted.',
+		forbiddenLead: 'Ask an administrator to give you access.',
 	},
 };
 

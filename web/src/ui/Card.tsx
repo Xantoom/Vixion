@@ -48,6 +48,23 @@ export function InfoTip({ text }: { text: string }) {
 	);
 }
 
+/** A name and its tip, the tip glued to the last word so it never sits alone on a line. */
+function WithTip({ label, tip }: { label: ReactNode; tip: string }) {
+	const text = typeof label === 'string' ? label : null;
+	const cut = text ? text.lastIndexOf(' ') + 1 : 0;
+	return (
+		<>
+			{text ? text.slice(0, cut) : label}
+			<span className="whitespace-nowrap">
+				{text ? text.slice(cut) : null}
+				<span className="ml-1.5 inline-block align-middle">
+					<InfoTip text={tip} />
+				</span>
+			</span>
+		</>
+	);
+}
+
 /** One setting: its name on the left, its control on the right, every control ending on the same edge. */
 export function SettingRow({
 	label,
@@ -63,11 +80,10 @@ export function SettingRow({
 }) {
 	return (
 		<div className="border-line flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5 py-3 first:border-t-0">
-			<span className="text-ui flex min-w-0 items-center gap-1.5 font-medium">
-				{label}
-				{tip ? <InfoTip text={tip} /> : null}
-			</span>
-			<div className={`flex max-w-full items-center justify-end gap-2 ${wide ? 'max-sm:w-full' : ''}`}>
+			{/* Inline, so the tip follows the last word when the name wraps. */}
+			<span className="text-ui min-w-0 font-medium">{tip ? <WithTip label={label} tip={tip} /> : label}</span>
+			{/* When it goes under its name it stays on the right edge, like every other control. */}
+			<div className={`ml-auto flex max-w-full items-center justify-end gap-2 ${wide ? 'max-sm:w-full' : ''}`}>
 				{children}
 			</div>
 		</div>

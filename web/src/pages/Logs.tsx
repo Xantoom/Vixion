@@ -173,10 +173,13 @@ function Console() {
 			title={
 				<>
 					{t.logs.console}
-					<span
-						className={`size-2 rounded-full ${connected && !paused ? 'bg-ok live-dot' : 'bg-line-2'}`}
-						data-tip={connected && !paused ? t.logs.live : t.logs.pause}
-					/>
+					<span className="text-caption text-muted inline-flex items-center gap-1.5 font-medium">
+						<span
+							aria-hidden
+							className={`size-2 rounded-full ${connected && !paused ? 'bg-ok live-dot' : 'bg-line-2'}`}
+						/>
+						{paused ? t.logs.paused : connected ? t.logs.live : t.logs.disconnected}
+					</span>
 				</>
 			}
 			actions={
@@ -223,7 +226,7 @@ function Console() {
 					onChange={(event) => {
 						setFilter(event.target.value);
 					}}
-					className="h-9 min-w-40 flex-[1_1_12rem] sm:max-w-xs"
+					className="h-9 min-w-40 flex-[1_1_12rem] sm:ml-auto sm:max-w-xs"
 				/>
 			</div>
 			<div
@@ -232,7 +235,7 @@ function Console() {
 					const element = event.currentTarget;
 					following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
 				}}
-				className="bg-canvas h-[min(65dvh,44rem)] overflow-auto px-4 py-2.5 font-mono text-[0.78rem] leading-relaxed"
+				className="bg-canvas max-h-[min(65dvh,44rem)] min-h-40 overflow-auto px-4 py-2.5 font-mono text-[0.8125rem] leading-relaxed"
 			>
 				{shown.length === 0 ? (
 					<p className="text-muted py-6 text-center font-sans text-sm">{t.logs.empty}</p>

@@ -64,7 +64,7 @@ export function StreamersPage() {
 					) : null}
 				</div>
 			) : (
-				<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,19rem),1fr))] gap-5 pb-12">
+				<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,19rem),1fr))] gap-5 pb-12 2xl:grid-cols-[repeat(auto-fill,minmax(23rem,1fr))] 2xl:gap-6">
 					{sorted.map((streamer, index) => (
 						<li key={streamer.id} style={{ '--i': index } as React.CSSProperties}>
 							<StreamerCard streamer={streamer} />
@@ -151,12 +151,9 @@ function StreamerCard({ streamer }: { streamer: Streamer }) {
 						{live ? <LiveDot /> : null}
 					</span>
 					<span className="text-small text-muted flex flex-wrap items-center gap-x-4 gap-y-1">
-						<span
-							className="tabular inline-flex items-center gap-1.5"
-							data-tip={t.streamers.streams(streamer.stream_count)}
-						>
+						<span className="tabular inline-flex items-center gap-1.5">
 							<Film size={15} />
-							{streamer.stream_count}
+							{t.streamers.streams(streamer.stream_count)}
 						</span>
 						{lastLive ? (
 							<span className="inline-flex items-center gap-1.5" data-tip={t.streamers.lastLiveTip}>

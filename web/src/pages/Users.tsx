@@ -9,7 +9,7 @@ import { Avatar } from '@/ui/Avatar';
 import { Button, IconButton } from '@/ui/Button';
 import { Card } from '@/ui/Card';
 import { Confirm, Dialog } from '@/ui/Dialog';
-import { Field, Segmented, Select, Switch, TextInput } from '@/ui/Field';
+import { Field, PasswordInput, Segmented, Select, Switch, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
@@ -89,30 +89,24 @@ export function UsersPage() {
 					{users.data.map((user) => (
 						<li key={user.id} className="flex items-center gap-3.5 px-5 py-3">
 							<Avatar src={null} name={user.username} size={36} />
-							<div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
-								<span className="text-ui truncate font-semibold">{user.username}</span>
-								{user.id === me.id ? <Chip>{t.users.you}</Chip> : null}
-								{user.disabled ? <Chip tone="muted">{t.users.disabled}</Chip> : null}
-								{/* On a phone the role goes under the name, which then keeps its width. */}
-								<span className="basis-full sm:hidden">
+							<div className="flex min-w-0 flex-1 flex-col gap-1.5">
+								<div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+									<span className="text-ui truncate font-semibold">{user.username}</span>
+									{user.id === me.id ? <Chip>{t.users.you}</Chip> : null}
+									{user.disabled ? <Chip tone="muted">{t.users.disabled}</Chip> : null}
+								</div>
+								<div className="text-small text-muted flex flex-wrap items-center gap-x-3 gap-y-1">
 									<Chip tone="accent">
 										{roleName(roleById.get(user.role_id))}
 										{Object.keys(user.overrides).length > 0 ? ' +' : ''}
 									</Chip>
-								</span>
+									<span>
+										{user.last_login_at
+											? t.users.lastLoginAt(formatRelative(user.last_login_at))
+											: t.users.neverSignedIn}
+									</span>
+								</div>
 							</div>
-							<span className="max-sm:hidden">
-								<Chip tone="accent">
-									{roleName(roleById.get(user.role_id))}
-									{Object.keys(user.overrides).length > 0 ? ' +' : ''}
-								</Chip>
-							</span>
-							<span
-								className="text-small text-muted hidden w-36 flex-none text-right sm:block"
-								data-tip={t.users.lastLogin}
-							>
-								{user.last_login_at ? formatRelative(user.last_login_at) : t.common.never}
-							</span>
 							<div className="flex flex-none">
 								<IconButton
 									size="sm"
@@ -125,11 +119,11 @@ export function UsersPage() {
 								</IconButton>
 								<IconButton
 									size="sm"
-									label={t.common.delete}
-									disabled={user.id === me.id}
-									className="hover:!text-danger"
+									label={user.id === me.id ? t.users.cantDeleteSelf : t.common.delete}
+									aria-disabled={user.id === me.id || undefined}
+									className="aria-disabled:cursor-not-allowed aria-disabled:opacity-40 [&:not([aria-disabled])]:hover:!text-danger"
 									onClick={() => {
-										setDeleting(user);
+										if (user.id !== me.id) setDeleting(user);
 									}}
 								>
 									<Trash2 size={16} />
@@ -162,12 +156,9 @@ export function UsersPage() {
 							<div className="flex min-w-0 flex-1 flex-col gap-2">
 								<div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
 									<span className="text-ui font-semibold">{roleName(role)}</span>
-									<span
-										className="text-small text-muted tabular inline-flex items-center gap-1"
-										data-tip={t.users.roleUsers(role.users)}
-									>
+									<span className="text-small text-muted tabular inline-flex items-center gap-1">
 										<UsersIcon size={14} />
-										{role.users}
+										{t.users.roleUsers(role.users)}
 									</span>
 								</div>
 								<div className="flex flex-wrap gap-1.5">
@@ -357,9 +348,8 @@ function UserDialog({
 					hint={user ? t.users.newPasswordHint : t.auth.passwordHint}
 				>
 					{(id, describedBy) => (
-						<TextInput
+						<PasswordInput
 							id={id}
-							type="password"
 							autoComplete="new-password"
 							required={!user}
 							minLength={8}
@@ -449,7 +439,7 @@ function UserDialog({
 					<Button variant="ghost" onClick={onClose}>
 						{t.common.cancel}
 					</Button>
-					<Button type="submit" variant="primary" busy={busy}>
+					<Button type="submit" variant="accent" busy={busy}>
 						{user ? t.common.save : t.common.create}
 					</Button>
 				</div>
@@ -544,7 +534,7 @@ function RoleDialog({
 					<Button variant="ghost" onClick={onClose}>
 						{t.common.cancel}
 					</Button>
-					<Button type="submit" variant="primary" busy={busy}>
+					<Button type="submit" variant="accent" busy={busy}>
 						{role ? t.common.save : t.common.create}
 					</Button>
 				</div>

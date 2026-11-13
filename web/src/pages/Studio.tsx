@@ -721,7 +721,7 @@ function StreamOverlay({ stream, visible }: { stream: StreamDetail; visible: boo
 								to="/$login/$id"
 								params={{ login, id: String(id) }}
 								aria-current={id === stream.id ? 'page' : undefined}
-								className="text-small rounded-sm bg-white/15 px-2 py-0.5 font-semibold backdrop-blur-sm transition-colors hover:bg-white/25 aria-[current=page]:bg-white aria-[current=page]:text-black @md:px-2.5 @md:py-1"
+								className="text-small touch-target relative rounded-sm bg-white/15 px-2 py-0.5 font-semibold backdrop-blur-sm transition-colors hover:bg-white/25 aria-[current=page]:bg-white aria-[current=page]:text-black @md:px-2.5 @md:py-1"
 							>
 								{t.stream.part(part)}
 							</Link>

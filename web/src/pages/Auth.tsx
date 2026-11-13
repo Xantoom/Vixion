@@ -4,21 +4,26 @@ import { currentLocale, useT } from '@/i18n';
 import { ApiError, type Me, api } from '@/lib/api';
 import { meQuery } from '@/lib/session';
 import { Button } from '@/ui/Button';
-import { Field, TextInput } from '@/ui/Field';
+import { Field, PasswordInput, TextInput } from '@/ui/Field';
 import { Logo } from '@/ui/Logo';
+import { LocaleMenu, ThemeButton } from './Shell';
 
 function AuthFrame({ title, lead, children }: { title: string; lead: string; children: ReactNode }) {
 	return (
-		<main className="bg-canvas grid min-h-dvh place-items-center px-4 py-10">
+		<main className="relative grid min-h-dvh place-items-center px-4 py-16">
+			<div className="absolute top-3 right-3 flex items-center gap-1 sm:top-4 sm:right-4">
+				<ThemeButton />
+				<LocaleMenu />
+			</div>
 			<div className="panel-in w-full max-w-sm">
 				<div className="mb-8 flex flex-col items-center gap-4 text-center">
 					<Logo size={44} />
 					<div>
 						<h1 className="text-heading font-semibold tracking-tight">{title}</h1>
-						<p className="text-ui text-muted mt-2">{lead}</p>
+						<p className="text-ui text-ink-2 mt-2">{lead}</p>
 					</div>
 				</div>
-				<div className="bg-bg border-line rounded-md border p-6 shadow-sm">{children}</div>
+				<div className="bg-card ring-line rounded-md p-6 shadow-(--shadow-card) ring-1">{children}</div>
 			</div>
 		</main>
 	);
@@ -96,9 +101,8 @@ export function SetupPage() {
 				</Field>
 				<Field label={t.auth.password} hint={t.auth.passwordHint}>
 					{(id, describedBy) => (
-						<TextInput
+						<PasswordInput
 							id={id}
-							type="password"
 							autoComplete="new-password"
 							required
 							minLength={8}
@@ -112,9 +116,8 @@ export function SetupPage() {
 				</Field>
 				<Field label={t.auth.passwordConfirm} error={error}>
 					{(id, describedBy) => (
-						<TextInput
+						<PasswordInput
 							id={id}
-							type="password"
 							autoComplete="new-password"
 							required
 							aria-describedby={describedBy}
@@ -186,9 +189,8 @@ export function LoginPage() {
 				</Field>
 				<Field label={t.auth.password} error={error}>
 					{(id, describedBy) => (
-						<TextInput
+						<PasswordInput
 							id={id}
-							type="password"
 							autoComplete="current-password"
 							required
 							aria-describedby={describedBy}

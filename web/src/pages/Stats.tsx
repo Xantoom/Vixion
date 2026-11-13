@@ -13,9 +13,10 @@ import { NotFound } from './NotFound';
 
 function Tile({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
 	return (
-		<div className="bg-card ring-line flex flex-col gap-1 rounded-md px-4 py-3.5 ring-1">
-			<span className="text-small text-muted flex items-center gap-2 font-medium">
-				{icon}
+		// Values line up at the bottom when a label takes two lines.
+		<div className="bg-card ring-line flex flex-col justify-between gap-2 rounded-md px-4 py-3.5 ring-1">
+			<span className="text-small text-muted flex items-start gap-2 font-medium">
+				<span className="mt-0.5 flex-none">{icon}</span>
 				{label}
 			</span>
 			<span className="text-heading tabular font-semibold tracking-tight">{value}</span>

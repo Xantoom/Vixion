@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, Outlet, useRouterState } from '@tanstack/react-router';
+import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { Check, KeyRound, Languages, LogOut, Monitor, Moon, Search, ShieldCheck, Sun, X } from 'lucide-react';
 import { type FormEvent, Suspense, useEffect, useRef, useState } from 'react';
 import { LOCALES, type Locale, useLocale, useT } from '@/i18n';
@@ -9,13 +9,13 @@ import { type Theme, usePrefs } from '@/stores/prefs';
 import { Avatar } from '@/ui/Avatar';
 import { Button, IconButton } from '@/ui/Button';
 import { Dialog } from '@/ui/Dialog';
-import { Field, TextInput } from '@/ui/Field';
+import { Field, PasswordInput } from '@/ui/Field';
 import { Flag } from '@/ui/Flag';
 import { Logo } from '@/ui/Logo';
-import { Menu, MenuDivider, MenuItem } from '@/ui/Menu';
+import { Menu, MenuDivider, MenuItem, MenuLabel } from '@/ui/Menu';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
-import { firstAdminPage } from './Admin';
+import { type AdminPath, firstAdminPage } from './Admin';
 import { ChannelSearch } from './ChannelSearch';
 
 /** Open alerts, polled for the dot on the administration button. */
@@ -78,7 +78,7 @@ export function Shell() {
 				}}
 				className={`bg-bg/90 border-line z-40 border-b backdrop-blur-md transition-transform duration-200 ease-(--ease-out-soft) ${studio ? 'fixed inset-x-0 top-0' : 'sticky top-0'} ${hidden ? '-translate-y-full' : ''}`}
 			>
-				<div className="mx-auto flex h-16 max-w-[120rem] items-center gap-2 px-3 sm:gap-3 sm:px-5">
+				<div className="mx-auto flex h-16 max-w-[120rem] items-center gap-2 px-4 sm:gap-3 sm:px-6">
 					{searching ? (
 						<>
 							<ChannelSearch
@@ -114,7 +114,7 @@ export function Shell() {
 							>
 								<Search size={20} />
 							</IconButton>
-							<div className="flex items-center gap-1">
+							<div className="flex items-center gap-1 max-lg:hidden">
 								<ThemeButton />
 								<LocaleMenu />
 								{admin ? (
@@ -135,7 +135,7 @@ export function Shell() {
 									</Link>
 								) : null}
 							</div>
-							<AccountMenu />
+							<AccountMenu admin={admin} alerts={alerts} />
 						</>
 					)}
 				</div>
@@ -152,7 +152,7 @@ export function Shell() {
 const THEMES: Theme[] = ['system', 'light', 'dark'];
 
 /** One button that steps through system, light and dark. */
-function ThemeButton() {
+export function ThemeButton() {
 	const t = useT();
 	const theme = usePrefs((state) => state.theme);
 	const setPrefs = usePrefs((state) => state.set);
@@ -170,15 +170,16 @@ function ThemeButton() {
 	);
 }
 
-function LocaleMenu() {
+function pickLocale(setPrefs: (changes: { locale: Locale }) => void, next: Locale) {
+	setPrefs({ locale: next });
+	// Remembered on the account too, for other devices.
+	void api.patch('/me', { locale: next }).catch(() => undefined);
+}
+
+export function LocaleMenu() {
 	const t = useT();
 	const locale = useLocale();
 	const setPrefs = usePrefs((state) => state.set);
-	const pick = (next: Locale) => {
-		setPrefs({ locale: next });
-		// Remembered on the account too, for other devices.
-		void api.patch('/me', { locale: next }).catch(() => undefined);
-	};
 	return (
 		<Menu
 			label={t.nav.language}
@@ -194,7 +195,7 @@ function LocaleMenu() {
 					icon={<Flag locale={value} size={18} />}
 					checked={locale === value}
 					onSelect={() => {
-						pick(value);
+						pickLocale(setPrefs, value);
 					}}
 				>
 					{LOCALES[value]}
@@ -204,9 +205,19 @@ function LocaleMenu() {
 	);
 }
 
-function AccountMenu() {
+/**
+ * The account, and below the large breakpoint the theme, the language and the administration too:
+ * there they get their name, which an icon alone can't give on a touch screen.
+ */
+function AccountMenu({ admin, alerts }: { admin: AdminPath | null; alerts: number }) {
 	const t = useT();
 	const me = useMe();
+	const navigate = useNavigate();
+	const theme = usePrefs((state) => state.theme);
+	const locale = useLocale();
+	const setPrefs = usePrefs((state) => state.set);
+	const themeIcons = { system: <Monitor size={16} />, light: <Sun size={16} />, dark: <Moon size={16} /> };
+	const themeNames = { system: t.nav.themeSystem, light: t.nav.themeLight, dark: t.nav.themeDark };
 	const client = useQueryClient();
 	const [password, setPassword] = useState(false);
 
@@ -228,7 +239,15 @@ function AccountMenu() {
 						data-tip={t.nav.account}
 						className={`hover:bg-surface flex h-10 flex-none items-center gap-2.5 rounded-sm px-1.5 transition-colors lg:pr-3 ${open ? 'bg-surface' : ''}`}
 					>
-						<Avatar src={null} name={me.username} size={30} />
+						<span className="relative flex-none">
+							<Avatar src={null} name={me.username} size={30} />
+							{alerts > 0 ? (
+								<span
+									className="bg-danger ring-bg absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 lg:hidden"
+									aria-hidden
+								/>
+							) : null}
+						</span>
 						<span className="text-ui hidden max-w-36 truncate font-medium lg:inline">{me.username}</span>
 					</button>
 				)}
@@ -238,6 +257,55 @@ function AccountMenu() {
 					<div className="text-caption text-muted">{t.users.roleNames[me.role] ?? me.role}</div>
 				</div>
 				<MenuDivider />
+				<div className="lg:hidden">
+					{admin ? (
+						<>
+							<MenuItem
+								icon={<ShieldCheck size={16} />}
+								onSelect={() => {
+									void navigate({ to: admin });
+								}}
+							>
+								<span className="flex items-center gap-2">
+									{t.nav.admin}
+									{alerts > 0 ? (
+										<span className="bg-danger text-caption grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-semibold text-white">
+											{alerts}
+										</span>
+									) : null}
+								</span>
+							</MenuItem>
+							<MenuDivider />
+						</>
+					) : null}
+					<MenuLabel>{t.nav.theme}</MenuLabel>
+					{THEMES.map((value) => (
+						<MenuItem
+							key={value}
+							icon={themeIcons[value]}
+							checked={theme === value}
+							onSelect={() => {
+								setPrefs({ theme: value });
+							}}
+						>
+							{themeNames[value]}
+						</MenuItem>
+					))}
+					<MenuLabel>{t.nav.language}</MenuLabel>
+					{(Object.keys(LOCALES) as Locale[]).map((value) => (
+						<MenuItem
+							key={value}
+							icon={<Flag locale={value} size={16} />}
+							checked={locale === value}
+							onSelect={() => {
+								pickLocale(setPrefs, value);
+							}}
+						>
+							{LOCALES[value]}
+						</MenuItem>
+					))}
+					<MenuDivider />
+				</div>
 				<MenuItem
 					icon={<KeyRound size={16} />}
 					onSelect={() => {
@@ -290,9 +358,8 @@ function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void 
 			<form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
 				<Field label={t.auth.currentPassword}>
 					{(id) => (
-						<TextInput
+						<PasswordInput
 							id={id}
-							type="password"
 							autoComplete="current-password"
 							required
 							value={current}
@@ -304,9 +371,8 @@ function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void 
 				</Field>
 				<Field label={t.auth.newPassword} hint={t.auth.passwordHint} error={error}>
 					{(id, describedBy) => (
-						<TextInput
+						<PasswordInput
 							id={id}
-							type="password"
 							autoComplete="new-password"
 							required
 							minLength={8}
@@ -322,7 +388,7 @@ function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void 
 					<Button variant="ghost" onClick={onClose}>
 						{t.common.cancel}
 					</Button>
-					<Button type="submit" variant="primary" busy={busy}>
+					<Button type="submit" variant="accent" busy={busy}>
 						<Check size={16} />
 						{t.common.save}
 					</Button>

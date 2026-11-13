@@ -24,9 +24,7 @@
 	--field-line: light-dark(#8a8a92, #6c6c74);
 	--ink: light-dark(#111113, #f3f3f5);
 	--ink-2: light-dark(#3a3a40, #c8c8ce);
-	--muted: light-dark(#6c6c74, #8e8e97);
-	--primary: light-dark(#111113, #f3f3f5);
-	--primary-ink: light-dark(#ffffff, #111113);
+	--muted: light-dark(#66666e, #8e8e97);
 	--accent: light-dark(#6a4bff, #8c72ff);
 	--accent-ink: light-dark(#ffffff, #0d0921);
 	--accent-text: light-dark(#5537ee, #b5a3ff);
@@ -105,8 +103,6 @@
 	--color-ink: var(--ink);
 	--color-ink-2: var(--ink-2);
 	--color-muted: var(--muted);
-	--color-primary: var(--primary);
-	--color-primary-ink: var(--primary-ink);
 	--color-accent: var(--accent);
 	--color-accent-ink: var(--accent-ink);
 	--color-accent-text: var(--accent-text);

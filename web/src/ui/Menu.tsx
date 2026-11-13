@@ -68,16 +68,16 @@ export function Menu({
 		const left = align === 'end' ? box.right - width : box.left;
 		const shift = Math.min(0, window.innerWidth - EDGE - (left + width)) + Math.max(0, EDGE - left);
 		setPlace({ shift, maxHeight: height > room ? Math.max(room, 120) : undefined });
-		panel.current.querySelector<HTMLElement>('[role^=menuitem]')?.focus({ preventScroll: true });
+		items(panel.current)[0]?.focus({ preventScroll: true });
 	}, [open, align]);
 
 	const onKeyDown = (event: React.KeyboardEvent) => {
-		const items = [...(panel.current?.querySelectorAll<HTMLElement>('[role^=menuitem]:not(:disabled)') ?? [])];
-		const index = items.indexOf(document.activeElement as HTMLElement);
+		const list = items(panel.current);
+		const index = list.indexOf(document.activeElement as HTMLElement);
 		const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
-		if (step === 0 || items.length === 0) return;
+		if (step === 0 || list.length === 0) return;
 		event.preventDefault();
-		items[(index + step + items.length) % items.length]?.focus();
+		list[(index + step + list.length) % list.length]?.focus();
 	};
 
 	return (
@@ -114,6 +114,13 @@ export function Menu({
 				</div>
 			) : null}
 		</div>
+	);
+}
+
+/** The items the keyboard can reach: some only show on small screens. */
+function items(panel: HTMLElement | null): HTMLElement[] {
+	return [...(panel?.querySelectorAll<HTMLElement>('[role^=menuitem]:not(:disabled)') ?? [])].filter((item) =>
+		item.checkVisibility(),
 	);
 }
 

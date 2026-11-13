@@ -1,5 +1,6 @@
-import { ChevronDown, Minus, Plus } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, Minus, Plus } from 'lucide-react';
 import { type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, useId, useState } from 'react';
+import { useT } from '@/i18n';
 
 /**
  * The frame of everything that takes input: white, with an edge that can be found (3:1), a darker
@@ -46,6 +47,29 @@ export function Field({
 
 export function TextInput({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
 	return <input className={`${FIELD} ${className}`} {...props} />;
+}
+
+/** A password, with a button to read back what was typed: easier than typing it twice blind. */
+export function PasswordInput({ className = '', ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+	const t = useT();
+	const [shown, setShown] = useState(false);
+	return (
+		<div className="relative">
+			<input type={shown ? 'text' : 'password'} className={`${FIELD} pr-12 ${className}`} {...props} />
+			<button
+				type="button"
+				aria-label={shown ? t.auth.hidePassword : t.auth.showPassword}
+				aria-pressed={shown}
+				data-tip={shown ? t.auth.hidePassword : t.auth.showPassword}
+				onClick={() => {
+					setShown((value) => !value);
+				}}
+				className="text-muted hover:text-ink absolute top-1/2 right-1 grid size-9 -translate-y-1/2 place-items-center rounded-xs transition-colors"
+			>
+				{shown ? <EyeOff size={18} /> : <Eye size={18} />}
+			</button>
+		</div>
+	);
 }
 
 export function Select({ className = '', children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {

@@ -151,7 +151,7 @@ const Line = memo(function Line({
 				onSeek(line.o);
 			}}
 			data-tip={t.player.seekHere}
-			className="text-caption text-muted hover:text-accent-text tabular mr-2 align-baseline transition-colors"
+			className="text-caption text-muted hover:text-accent-text tabular mr-2 rounded-xs align-baseline transition-colors pointer-coarse:-mx-1 pointer-coarse:px-1 pointer-coarse:py-1.5"
 		>
 			{formatClock(line.o / 1000)}
 		</button>
