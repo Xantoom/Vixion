@@ -21,7 +21,9 @@ pub fn timeline_file(part: i64) -> String {
 /// Resolves a stream's folder, refusing anything that would leave the streams directory.
 pub fn stream_dir(streams_root: &Path, dir: &str) -> Option<PathBuf> {
     let relative = Path::new(dir);
-    let safe = relative.components().all(|part| matches!(part, std::path::Component::Normal(_)));
+    // At least one name: an empty one would be the streams directory itself.
+    let safe = relative.components().next().is_some()
+        && relative.components().all(|part| matches!(part, std::path::Component::Normal(_)));
     safe.then(|| streams_root.join(relative))
 }
 
@@ -148,5 +150,7 @@ mod tests {
         assert!(stream_dir(root, "someone/2026-11-12_1").is_some());
         assert!(stream_dir(root, "../secret.key").is_none());
         assert!(stream_dir(root, "/etc").is_none());
+        // Nothing would be the streams directory itself: deleting it would delete everything.
+        assert!(stream_dir(root, "").is_none());
     }
 }

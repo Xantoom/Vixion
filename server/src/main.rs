@@ -242,8 +242,8 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
         tracing::error!(%error, "recovering interrupted recordings failed");
     }
 
+    // Retention starts from there, once the recordings are in order.
     tokio::spawn(recorder::run(app.clone()));
-    tokio::spawn(retention::run(app.clone()));
 
     let mut main_router = Router::new().nest("/api", api::router());
     if app.config.media_mode == MediaMode::Same {

@@ -223,8 +223,10 @@ enum Round {
 
 /// Runs the live checks until the process ends.
 pub async fn run(app: AppState) {
-    // Broadcasts left in parts by earlier versions become one recording before anything records.
+    // Broadcasts left in parts by earlier versions become one recording before anything records,
+    // and before retention looks at them: deleting a part being appended would lose both.
     merge::run(&app).await;
+    tokio::spawn(retention::run(app.clone()));
     let mut failures = 0u32;
     let mut last = tokio::time::Instant::now() - pace::MIN_GAP;
     loop {
