@@ -9,6 +9,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-14
+
 ### Added
 
 - `VIXION_UPNP` opens the video port on the router by UPnP, as Plex does, renews it and closes it on shutdown.
@@ -110,5 +112,6 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - The release workflow's write access is limited to its last step, and actions are pinned by commit.
 - The compose file runs the container read-only, without capabilities or privilege escalation.
 
-[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Xantoom/Vixion/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Xantoom/Vixion/releases/tag/v0.1.0
