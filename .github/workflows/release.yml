@@ -115,7 +115,9 @@ jobs:
           chmod +x out/*/vixion vixion-linux-*
           sha256sum vixion-linux-* > SHA256SUMS
       # `gh attestation verify vixion-linux-x86_64 --repo Xantoom/Vixion` proves where a binary was built.
+      # GitHub keeps attestations only for public repositories (or organization plans).
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: ${{ !github.event.repository.private }}
         with:
           subject-path: vixion-linux-*
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -163,6 +165,7 @@ jobs:
             index:org.opencontainers.image.version=${{ steps.meta.outputs.version }}
             index:org.opencontainers.image.revision=${{ github.sha }}
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: ${{ !github.event.repository.private }}
         with:
           subject-name: ${{ steps.meta.outputs.image }}
           subject-digest: ${{ steps.build.outputs.digest }}
