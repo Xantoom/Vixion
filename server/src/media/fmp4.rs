@@ -686,24 +686,8 @@ impl FragmentIndex {
         use std::os::unix::fs::FileExt;
 
         let mut position = self.complete;
-        let mut header = [0u8; 16];
         let mut moof: Option<(u64, Vec<u8>)> = None;
-        while position + 8 <= length {
-            file.read_exact_at(&mut header[..8], position)?;
-            let mut size = u64::from(u32::from_be_bytes([header[0], header[1], header[2], header[3]]));
-            let kind = [header[4], header[5], header[6], header[7]];
-            let mut header_len = 8;
-            if size == 1 {
-                if position + 16 > length {
-                    break;
-                }
-                file.read_exact_at(&mut header[8..16], position + 8)?;
-                size = u64::from_be_bytes(header[8..16].try_into().unwrap_or_default());
-                header_len = 16;
-            }
-            if size < header_len || position + size > length {
-                break;
-            }
+        while let Some((kind, size, header_len)) = box_at(file, position, length)? {
             match &kind {
                 b"moof" => {
                     let mut body = vec![0u8; usize::try_from(size - header_len).unwrap_or(0)];

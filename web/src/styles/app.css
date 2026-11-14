@@ -35,7 +35,6 @@
 	--accent-ink: #2a1508;
 	--accent-text: light-dark(#a8461c, #ffb08f);
 	--live: light-dark(#e5262f, #ff4d55);
-	--live-ink: #ffffff;
 	--warn: light-dark(#a45d00, #ffb547);
 	--ok: light-dark(#0b7a4c, #63dda3);
 	--danger: light-dark(#c4321f, #ff6b57);
@@ -114,7 +113,6 @@
 	--color-accent-text: var(--accent-text);
 	--color-accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
 	--color-live: var(--live);
-	--color-live-ink: var(--live-ink);
 	--color-warn: var(--warn);
 	--color-ok: var(--ok);
 	--color-danger: var(--danger);
