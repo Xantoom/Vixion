@@ -296,7 +296,8 @@ export const fr: Messages = {
 	logs: {
 		title: 'Journaux',
 		alerts: 'Alertes',
-		noAlerts: 'Aucune alerte',
+		noAlerts: 'Aucune alerte en cours',
+		pausedWaiting: (n) => (n <= 1 ? 'En pause · 1 nouvelle ligne' : `En pause · ${n} nouvelles lignes`),
 		dismiss: 'Ignorer',
 		resolved: 'Résolue',
 		console: 'Console',

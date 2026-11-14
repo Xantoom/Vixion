@@ -8,7 +8,6 @@ import { useCan } from '@/lib/session';
 import { IconButton } from '@/ui/Button';
 import { Card } from '@/ui/Card';
 import { Segmented, TextInput } from '@/ui/Field';
-import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
 
@@ -18,13 +17,17 @@ type Level = 'all' | 'warn' | 'error';
 const LEVEL_STYLE: Record<string, string> = {
 	error: 'text-danger',
 	warn: 'text-warn',
-	info: 'text-ok',
+	info: 'text-ink-2',
 	debug: 'text-muted',
 	trace: 'text-muted',
 };
 
+/** The hour, and the day too when it isn't today. */
 function time(at: number): string {
-	return new Date(at).toLocaleTimeString(undefined, { hour12: false });
+	const date = new Date(at);
+	const clock = date.toLocaleTimeString(undefined, { hour12: false });
+	if (date.toDateString() === new Date().toDateString()) return clock;
+	return `${date.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })} ${clock}`;
 }
 
 export function LogsPage() {
@@ -57,16 +60,19 @@ function Alerts() {
 		}
 	};
 
+	// Nothing wrong: one quiet line rather than an empty card.
+	if (isPending) return null;
+	if (open.length === 0) {
+		return (
+			<p className="reveal text-small text-muted -mt-2 flex items-center gap-2.5">
+				<CircleCheck size={16} className="text-ok" />
+				{t.logs.noAlerts}
+			</p>
+		);
+	}
 	return (
-		<Card title={t.logs.alerts} count={open.length} flush>
-			{isPending ? (
-				<PageLoading />
-			) : open.length === 0 ? (
-				<p className="text-small text-muted flex items-center gap-2.5 px-6 py-5">
-					<CircleCheck size={16} className="text-ok" />
-					{t.logs.noAlerts}
-				</p>
-			) : (
+		<Card title={t.logs.alerts} count={open.length} flush className="reveal">
+			{
 				<ul className="divide-line divide-y">
 					{open.map((alert) => (
 						<li key={alert.id} className="flex items-start gap-3.5 px-6 py-4">
@@ -87,7 +93,7 @@ function Alerts() {
 						</li>
 					))}
 				</ul>
-			)}
+			}
 		</Card>
 	);
 }
@@ -99,6 +105,7 @@ function Console() {
 	const [level, setLevel] = useState<Level>('all');
 	const [filter, setFilter] = useState('');
 	const [connected, setConnected] = useState(false);
+	const [waiting, setWaiting] = useState(0);
 	const pausedRef = useRef(paused);
 	const held = useRef<LogEntry[]>([]);
 	const scroller = useRef<HTMLDivElement>(null);
@@ -113,6 +120,7 @@ function Console() {
 		const push = (entries: LogEntry[]) => {
 			if (pausedRef.current) {
 				held.current.push(...entries);
+				setWaiting(held.current.length);
 				return;
 			}
 			setLines((current) => [...current, ...entries].slice(-MAX_LINES));
@@ -147,6 +155,7 @@ function Console() {
 		if (!paused && held.current.length > 0) {
 			const entries = held.current;
 			held.current = [];
+			setWaiting(0);
 			setLines((current) => [...current, ...entries].slice(-MAX_LINES));
 		}
 	}, [paused]);
@@ -178,7 +187,13 @@ function Console() {
 							aria-hidden
 							className={`size-2 rounded-full ${connected && !paused ? 'bg-ok live-dot' : 'bg-line-2'}`}
 						/>
-						{paused ? t.logs.paused : connected ? t.logs.live : t.logs.disconnected}
+						{paused
+							? waiting > 0
+								? t.logs.pausedWaiting(waiting)
+								: t.logs.paused
+							: connected
+								? t.logs.live
+								: t.logs.disconnected}
 					</span>
 				</>
 			}
@@ -252,7 +267,10 @@ function Console() {
 							<span className="min-w-0 break-words max-sm:basis-full max-sm:pb-1">
 								<span className="text-ink">{line.message}</span>
 								{line.fields ? <span className="text-muted"> {line.fields}</span> : null}
-								<span className="text-muted/60"> {line.target}</span>
+								{/* Vixion's own lines don't repeat its name; a library's say which. */}
+								{line.target.startsWith('vixion') ? null : (
+									<span className="text-muted/60"> {line.target}</span>
+								)}
 							</span>
 						</div>
 					))

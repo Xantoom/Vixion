@@ -291,7 +291,8 @@ export const en = {
 	logs: {
 		title: 'Logs',
 		alerts: 'Alerts',
-		noAlerts: 'No alerts',
+		noAlerts: 'No open alerts',
+		pausedWaiting: (n: number) => (n === 1 ? 'Paused · 1 new line' : `Paused · ${n} new lines`),
 		dismiss: 'Dismiss',
 		resolved: 'Resolved',
 		console: 'Console',
