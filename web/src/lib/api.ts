@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 /** The server's API: typed requests and the shapes it answers with. */
 
 export class ApiError extends Error {
@@ -30,12 +31,14 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 			credentials: 'same-origin',
 		});
 	} catch {
-		throw new ApiError(0, 'network', 'The server can’t be reached.');
+		throw new ApiError(0, 'network', t().serverErrors.network ?? 'The server can’t be reached');
 	}
 	if (response.status === 401 && path !== '/auth/login') onUnauthorized();
 	if (!response.ok) {
 		const error = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
-		throw new ApiError(response.status, error?.error ?? 'error', error?.message ?? response.statusText);
+		const code = error?.error ?? 'error';
+		// In the interface's language when the code is known; the server's words otherwise.
+		throw new ApiError(response.status, code, t().serverErrors[code] ?? error?.message ?? response.statusText);
 	}
 	if (response.status === 204 || response.headers.get('content-length') === '0') return undefined as T;
 	const type = response.headers.get('content-type') ?? '';
