@@ -9,6 +9,14 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Added
+
+- `VIXION_UPNP` opens the media port on the router by UPnP, as Plex does, renews it and closes it on shutdown.
+
+### Fixed
+
+- The server's errors show in the interface's language.
+
 ## [0.1.0] - 2026-11-14
 
 ### Added

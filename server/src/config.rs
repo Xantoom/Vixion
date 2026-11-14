@@ -52,6 +52,10 @@ pub struct Config {
     pub tls: Option<TlsSource>,
     /// Keeps the media domain's A record on the current public address (Cloudflare only).
     pub ddns: bool,
+    /// The port the media listener is reached on from outside (`VIXION_MEDIA_PUBLIC_PORT`).
+    pub media_public_port: u16,
+    /// Asks the router to forward that port here by UPnP, as Plex does (`VIXION_UPNP`).
+    pub upnp: bool,
     pub log_json: bool,
     /// Whether a reverse proxy (Cloudflare, Caddy, nginx…) stands in front: only then are the
     /// client address headers it adds believed (`VIXION_TRUST_PROXY`).
@@ -152,6 +156,12 @@ impl Config {
             }
         };
 
+        let upnp = flag("VIXION_UPNP");
+        if upnp && media_mode == MediaMode::Same {
+            // The main listener carries the interface in plain HTTP: never opened to the internet.
+            return Err(ConfigError("VIXION_UPNP opens the media port: set VIXION_MEDIA_MODE to https".into()));
+        }
+
         let twitch_token = match (var("VIXION_TWITCH_TOKEN"), var("VIXION_TWITCH_TOKEN_FILE")) {
             (Some(token), _) => {
                 Some(parse_twitch_token(&token).map_err(|error| ConfigError(format!("VIXION_TWITCH_TOKEN: {error}")))?)
@@ -177,6 +187,8 @@ impl Config {
             media_public_url,
             media_domain,
             ddns: flag("VIXION_DDNS"),
+            media_public_port,
+            upnp,
             tls,
             log_json: var("VIXION_LOG_FORMAT").is_some_and(|format| format.eq_ignore_ascii_case("json")),
             trust_proxy: flag("VIXION_TRUST_PROXY"),

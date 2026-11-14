@@ -17,6 +17,7 @@ mod settings;
 mod system;
 mod tls;
 mod twitch;
+mod upnp;
 mod web;
 
 // musl's allocator is slow under many threads: video was served at half the speed of a glibc build.
@@ -303,6 +304,9 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
         }
     }
 
+    // The router forwards the media port here, and stops when the process does.
+    let upnp = app.config.upnp.then(|| tokio::spawn(upnp::run(app.clone(), shutdown.subscribe())));
+
     wait_for_signal().await;
     tracing::info!("stopping: closing recordings");
     app.recorder.stop_all();
@@ -313,6 +317,9 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
     let _ = shutdown.send(());
     for server in servers {
         let _ = tokio::time::timeout(Duration::from_secs(5), server).await;
+    }
+    if let Some(upnp) = upnp {
+        let _ = tokio::time::timeout(Duration::from_secs(5), upnp).await;
     }
     tracing::info!("stopped");
     Ok(())

@@ -104,6 +104,26 @@ no privileges, so they cost nothing and contain the damage should it ever be com
 Everything else (retention, H.264 only, chat, alerts) is in *Administration → Settings*. Twitch is checked
 automatically, every 30 seconds with a few channels and less often with hundreds, within what Twitch allows.
 
+## Video outside the tunnel
+
+When the interface sits behind a Cloudflare Tunnel, the video can't go through it. Vixion can serve it itself, over
+HTTPS on its own port, with a certificate it gets from Let's Encrypt through Cloudflare's DNS:
+
+```yaml
+    network_mode: host # instead of ports, for UPnP
+    environment:
+      VIXION_MEDIA_MODE: https
+      VIXION_MEDIA_DOMAIN: vixion-media.example.com
+      VIXION_CLOUDFLARE_API_TOKEN: "" # Zone: DNS: Edit on that domain
+      VIXION_MEDIA_PUBLIC_PORT: 8443  # the port seen from the internet
+      VIXION_DDNS: true               # keeps the domain on your public address
+      VIXION_UPNP: true               # asks the router to forward that port, as Plex does
+```
+
+With `VIXION_UPNP`, the router forwards `VIXION_MEDIA_PUBLIC_PORT` to the media port (8443) of this machine, renews it
+every twenty minutes and closes it when Vixion stops. UPnP must be on in the router, and the container on the host
+network so it can find it. Without UPnP, forward the port by hand. *Administration → Logs* says if the router refused.
+
 ## Twitch token
 
 Without a token Vixion records anyway: it skips ads by switching players, which leaves a few seconds missing where each
