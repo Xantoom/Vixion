@@ -9,6 +9,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-14
+
 ### Added
 
 - A setup code, printed in the server's log, is asked for when creating the first account.
@@ -87,3 +89,6 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
   binaries and images (`gh attestation verify`).
 - The release workflow's write access is limited to its last step, and actions are pinned by commit.
 - The compose file runs the container read-only, without capabilities or privilege escalation.
+
+[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Xantoom/Vixion/releases/tag/v0.1.0
