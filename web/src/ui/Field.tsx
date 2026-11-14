@@ -179,44 +179,6 @@ export const SWITCH =
 export const KNOB =
 	'absolute top-1 left-1 size-5 rounded-xs bg-white shadow-sm transition-transform duration-200 ease-(--ease-spring)';
 
-/** An on/off setting: the label and its explanation, the switch at the end of the row. */
-export function Switch({
-	checked,
-	onChange,
-	label,
-	hint,
-	disabled,
-}: {
-	checked: boolean;
-	onChange: (checked: boolean) => void;
-	label: ReactNode;
-	hint?: ReactNode;
-	disabled?: boolean;
-}) {
-	const id = useId();
-	return (
-		<div className={`flex items-start justify-between gap-4 ${disabled ? 'opacity-55' : ''}`}>
-			<label htmlFor={id} className="flex min-w-0 flex-col gap-0.5">
-				<span className="text-ui text-ink font-medium">{label}</span>
-				{hint ? <span className="text-small text-muted">{hint}</span> : null}
-			</label>
-			<button
-				id={id}
-				type="button"
-				role="switch"
-				aria-checked={checked}
-				disabled={disabled}
-				onClick={() => {
-					onChange(!checked);
-				}}
-				className={SWITCH}
-			>
-				<span className={`${KNOB} ${checked ? 'translate-x-5' : ''}`} />
-			</button>
-		</div>
-	);
-}
-
 /** Choices side by side, one selected: a segmented control. */
 export function Segmented<T extends string>({
 	value,
