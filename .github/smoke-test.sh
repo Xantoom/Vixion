@@ -11,7 +11,8 @@ cleanup() {
 trap 'cleanup $?' EXIT
 docker run -d --name "$name" --read-only --cap-drop ALL --security-opt no-new-privileges \
   --health-interval 1s --mount type=volume,dst=/config --mount type=volume,dst=/recordings \
-  -p 127.0.0.1:18080:8080 "$image" >/dev/null
+  -e VIXION_TWITCH_TOKEN=smoketest0000000000000000000000 \
+  -p 127.0.0.1:18080:6280 "$image" >/dev/null
 for _ in $(seq 60); do
   [ "$(docker inspect -f '{{.State.Health.Status}}' "$name")" = healthy ] && break
   [ "$(docker inspect -f '{{.State.Running}}' "$name")" = true ] || { echo "the container stopped"; exit 1; }

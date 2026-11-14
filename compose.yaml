@@ -1,4 +1,4 @@
-# Vixion: `mkdir config recordings && docker compose up -d`, then open http://your-server:8080.
+# Vixion: `mkdir config recordings && docker compose up -d`, then open http://your-server:6280.
 services:
   vixion:
     image: ghcr.io/xantoom/vixion:latest
@@ -13,12 +13,14 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     ports:
-      - "8080:8080"
+      # The interface, then the video: two ports, so the video never goes through a tunnel.
+      - "6280:6280"
+      - "6281:6281"
     volumes:
       # Database, keys and certificates.
       - ./config:/config
       # The recordings: put this on a large disk.
       - ./recordings:/recordings
     environment:
-      # Recommended: a Twitch account's auth-token, ideally with Turbo (see the README).
+      # Required: a Twitch account's auth-token, ideally with Turbo (see the README).
       VIXION_TWITCH_TOKEN: ""

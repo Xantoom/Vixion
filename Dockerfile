@@ -36,6 +36,6 @@ COPY --from=server /vixion /usr/local/bin/vixion
 COPY --from=server --chown=65532:65532 /volumes/ /
 ENV VIXION_DATA_DIR=/config VIXION_RECORDINGS_DIR=/recordings
 VOLUME /config /recordings
-EXPOSE 8080 8443
+EXPOSE 6280 6281
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD ["vixion", "healthcheck"]
 ENTRYPOINT ["vixion"]

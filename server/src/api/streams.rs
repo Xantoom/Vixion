@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 
@@ -179,7 +179,7 @@ pub fn media_resource(id: i64, user: i64, download: bool) -> String {
     format!("video:{id}:{user}:{}", if download { "download" } else { "watch" })
 }
 
-pub fn media_link(app: &AppState, id: i64, user: i64, name: &str, download: bool) -> String {
+pub fn media_link(app: &AppState, origin: &str, id: i64, user: i64, name: &str, download: bool) -> String {
     let expires = now_ms() / 1000 + LINK_LIFETIME_SECS;
     let signature = app.keys.sign_media(&media_resource(id, user, download), expires);
     let encoded: String = name
@@ -192,19 +192,17 @@ pub fn media_link(app: &AppState, id: i64, user: i64, name: &str, download: bool
             }
         })
         .collect();
-    format!(
-        "{}/media/{id}/{user}/{expires}/{signature}/{encoded}{}",
-        app.config.media_public_url,
-        if download { "?dl=1" } else { "" }
-    )
+    format!("{origin}/media/{id}/{user}/{expires}/{signature}/{encoded}{}", if download { "?dl=1" } else { "" })
 }
 
 pub async fn detail(
     State(app): State<AppState>,
     user: CurrentUser,
     Path(id): Path<i64>,
+    headers: HeaderMap,
 ) -> AppResult<Json<StreamDetail>> {
     user.require("streams.view")?;
+    let origin = crate::web::media_origin(&app, &headers);
     set_global_retention(app.settings.get().await.retention_days);
     let (summary, login, name, avatar, audio_codec, gaps, error, chapters, parts, dir) = app
         .db
@@ -252,8 +250,8 @@ pub async fn detail(
     let timeline_path = located.dir.join(storage::timeline_file(located.part));
     let cuts = tokio::task::spawn_blocking(move || Timeline::load(&timeline_path).cuts()).await.unwrap_or_default();
     Ok(Json(StreamDetail {
-        video_url: media_link(&app, id, user.id, &file, false),
-        download_url: user.can("streams.download").then(|| media_link(&app, id, user.id, &file, true)),
+        video_url: media_link(&app, &origin, id, user.id, &file, false),
+        download_url: user.can("streams.download").then(|| media_link(&app, &origin, id, user.id, &file, true)),
         summary,
         streamer_login: login,
         streamer_name: name,

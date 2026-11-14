@@ -34,16 +34,52 @@ use axum::Router;
 use axum::middleware;
 
 use crate::app::{App, AppState};
-use crate::config::{Config, MediaMode};
+use crate::config::Config;
 use crate::recorder::{Recorder, retention};
 
 const USAGE: &str = "Usage:
-  vixion [--twitch-token <token>]     run the server
-  vixion healthcheck                  exit 0 when the local server answers (for Docker)
+  vixion [options]                    run the server
+  vixion healthcheck [--port <port>]  exit 0 when the local server answers (for Docker)
   vixion reset-password <user>        set an account's password (asked for) and sign it out everywhere
   vixion version
 
-Configuration is read from VIXION_* environment variables; see the README.";
+Options:
+  --twitch-token <token>   the Twitch account's auth-token cookie (or VIXION_TWITCH_TOKEN): required
+  --port <port>            the interface, 6280 by default; or an address, such as 127.0.0.1:6280
+  --video-port <port>      the video, 6281 by default
+
+Reaching the video from the internet is set with VIXION_* variables; see the README.";
+
+/// Takes `--name <value>` or `--name=value` out of the arguments.
+fn take_option(args: &mut Vec<String>, name: &str) -> Result<Option<String>, String> {
+    let prefix = format!("{name}=");
+    let Some(at) = args.iter().position(|arg| arg == name || arg.starts_with(&prefix)) else {
+        return Ok(None);
+    };
+    let arg = args.remove(at);
+    match arg.strip_prefix(&prefix) {
+        Some(value) => Ok(Some(value.to_owned())),
+        None if at < args.len() => Ok(Some(args.remove(at))),
+        None => Err(format!("{name} needs a value")),
+    }
+}
+
+/// Applies the options to the configuration read from the environment.
+fn apply_options(args: &mut Vec<String>, config: &mut Config) -> Result<(), String> {
+    if let Some(token) = take_option(args, "--twitch-token")? {
+        config.twitch_token = Some(config::parse_twitch_token(&token).map_err(|e| format!("--twitch-token: {e}"))?);
+    }
+    if let Some(port) = take_option(args, "--port")? {
+        config.http_addr = config::parse_addr(&port).map_err(|e| format!("--port: {e}"))?;
+    }
+    if let Some(port) = take_option(args, "--video-port")? {
+        config.media_addr = config::parse_addr(&port).map_err(|e| format!("--video-port: {e}"))?;
+    }
+    if config.http_addr.port() == config.media_addr.port() {
+        return Err("the interface and the video need two different ports".into());
+    }
+    Ok(())
+}
 
 /// mimalloc's defaults trade memory for speed it doesn't bring here: without eager commits and with
 /// memory returned at once, the server rests at a few megabytes instead of twenty, just as fast.
@@ -74,24 +110,10 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    // `--twitch-token <token>` (or `=token`) wins over the environment.
-    if let Some(at) = args.iter().position(|arg| arg == "--twitch-token" || arg.starts_with("--twitch-token=")) {
-        let arg = args.remove(at);
-        let value = match arg.strip_prefix("--twitch-token=") {
-            Some(value) => Some(value.to_owned()),
-            None => (at < args.len()).then(|| args.remove(at)),
-        };
-        match value.as_deref().map(config::parse_twitch_token) {
-            Some(Ok(token)) => config.twitch_token = Some(token),
-            Some(Err(error)) => {
-                eprintln!("configuration error: --twitch-token: {error}");
-                return ExitCode::from(2);
-            }
-            None => {
-                eprintln!("configuration error: --twitch-token needs a value");
-                return ExitCode::from(2);
-            }
-        }
+    // Options win over the environment.
+    if let Err(error) = apply_options(&mut args, &mut config) {
+        eprintln!("configuration error: {error}");
+        return ExitCode::from(2);
     }
     match args.first().map(String::as_str) {
         None | Some("serve") => {}
@@ -204,6 +226,20 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
     let keys = crypto::Keys::load_or_create(&config.data_dir.join("secret.key"))?;
     auth::seed_roles(&db).await?;
     let settings = settings::SettingsStore::load(db.clone(), keys.clone(), config.twitch_token.clone()).await?;
+    match settings.get().await.twitch_token_source {
+        Some(settings::TokenSource::Config) => {}
+        // Saved from the interface by an earlier version: still used, so an update doesn't stop recording.
+        Some(settings::TokenSource::Stored) => {
+            tracing::warn!(
+                "the Twitch token was saved by an earlier version: set VIXION_TWITCH_TOKEN, it will be required"
+            );
+        }
+        None => {
+            return Err("Vixion needs a Twitch token: set VIXION_TWITCH_TOKEN (or --twitch-token) to the auth-token \
+                        cookie of twitch.tv; see the README"
+                .into());
+        }
+    }
     api_retention(&settings).await;
     let http = reqwest::Client::builder()
         .user_agent(twitch::api::USER_AGENT)
@@ -246,11 +282,8 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
     // Retention starts from there, once the recordings are in order.
     tokio::spawn(recorder::run(app.clone()));
 
-    let mut main_router = Router::new().nest("/api", api::router());
-    if app.config.media_mode == MediaMode::Same {
-        main_router = main_router.merge(media_server::router());
-    }
-    let main_router = main_router
+    let main_router = Router::new()
+        .nest("/api", api::router())
         .fallback(web::serve)
         .layer(middleware::from_fn_with_state(app.clone(), web::security_headers))
         .with_state(app.clone());
@@ -271,38 +304,38 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
     }
 
     let media_router = media_server::router().with_state(app.clone());
-    match app.config.media_mode {
-        MediaMode::Same => {}
-        MediaMode::Http => {
+    let media = match &app.config.tls {
+        None => {
             let listener = tokio::net::TcpListener::bind(app.config.media_addr).await?;
-            tracing::info!(address = %app.config.media_addr, public = %app.config.media_public_url, "media listening (HTTP)");
+            tracing::info!(address = %app.config.media_addr, public = ?app.config.media_public_url, "video listening (HTTP)");
             let mut stop = shutdown.subscribe();
-            servers.push(tokio::spawn(async move {
+            tokio::spawn(async move {
                 axum::serve(listener, media_router)
                     .with_graceful_shutdown(async move {
                         let _ = stop.recv().await;
                     })
                     .await
-            }));
+            })
         }
-        MediaMode::Https => {
+        Some(_) => {
             let slot = Arc::new(tls::CertSlot::default());
             tokio::spawn(tls::maintain(app.clone(), Arc::clone(&slot)));
             if app.config.ddns {
                 tokio::spawn(tls::dynamic_dns(app.clone()));
             }
             let listener = tls::listen(app.config.media_addr, slot).await?;
-            tracing::info!(address = %app.config.media_addr, public = %app.config.media_public_url, "media listening (HTTPS)");
+            tracing::info!(address = %app.config.media_addr, domain = %app.config.media_domain, "video listening (HTTPS)");
             let mut stop = shutdown.subscribe();
-            servers.push(tokio::spawn(async move {
+            tokio::spawn(async move {
                 axum::serve(listener, media_router)
                     .with_graceful_shutdown(async move {
                         let _ = stop.recv().await;
                     })
                     .await
-            }));
+            })
         }
-    }
+    };
+    servers.push(media);
 
     // The router forwards the media port here, and stops when the process does.
     let upnp = app.config.upnp.then(|| tokio::spawn(upnp::run(app.clone(), shutdown.subscribe())));

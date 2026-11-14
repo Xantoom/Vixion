@@ -5,9 +5,9 @@ use std::convert::Infallible;
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::{StatusCode, header};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::response::sse::{Event, KeepAlive, Sse};
-use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -100,21 +100,6 @@ pub async fn put_settings(
     crate::audit::record(&app, &user, "settings.update", "").await;
     app.recorder.check_now();
     Ok(Json(saved))
-}
-
-#[derive(Serialize)]
-pub struct TokenReveal {
-    token: Option<String>,
-}
-
-/// The Twitch token in clear, for an administrator who asks to see it. It is set in the
-/// configuration, never from here.
-pub async fn reveal_twitch_token(State(app): State<AppState>, user: CurrentUser) -> AppResult<Response> {
-    user.require("settings.manage")?;
-    tracing::info!(by = %user.username, "Twitch token revealed");
-    crate::audit::record(&app, &user, "twitch_token.reveal", "").await;
-    let token = app.settings.twitch_token().await;
-    Ok(([(header::CACHE_CONTROL, "no-store")], Json(TokenReveal { token })).into_response())
 }
 
 #[derive(Serialize)]

@@ -33,7 +33,6 @@ pub fn router() -> Router<AppState> {
         .route("/streams/{id}/thumbnail", get(streams::thumbnail))
         .route("/stats", get(admin::stats))
         .route("/settings", get(admin::get_settings).put(admin::put_settings))
-        .route("/settings/twitch-token", get(admin::reveal_twitch_token))
         .route("/users", get(admin::list_users).post(admin::create_user))
         .route("/users/{id}", patch(admin::update_user).delete(admin::delete_user))
         .route("/roles", get(admin::list_roles).post(admin::create_role))

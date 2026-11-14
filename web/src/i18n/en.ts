@@ -215,12 +215,9 @@ export const en = {
 		token: 'Twitch token',
 		tokenHint:
 			'The auth-token cookie of twitch.tv. With Turbo or a subscription Twitch sends no ads. Set with VIXION_TWITCH_TOKEN or --twitch-token at startup',
-		tokenStoredHint: 'Saved from the interface by an earlier version. Copy it into VIXION_TWITCH_TOKEN to keep it',
-		tokenReveal: 'Reveal',
-		tokenHide: 'Hide',
-		tokenCopy: 'Copy',
-		tokenCopied: 'Token copied',
-		tokenNone: 'None',
+		tokenStoredHint:
+			'Saved from the interface by an earlier version. Put it in VIXION_TWITCH_TOKEN: it will soon be required there',
+		tokenSet: 'Set',
 		alerts: 'Alerts',
 		webhook: 'Webhook address',
 		webhookHint: 'Warnings and errors are sent to this webhook',

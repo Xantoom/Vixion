@@ -35,7 +35,7 @@ struct Gateway {
 
 /// Keeps the media port forwarded until `stop`, then removes the mapping.
 pub async fn run(app: AppState, mut stop: broadcast::Receiver<()>) {
-    let public = app.config.media_public_port;
+    let public = app.config.video_public_port();
     let internal = app.config.media_addr.port();
     let mut mapped: Option<Gateway> = None;
     loop {

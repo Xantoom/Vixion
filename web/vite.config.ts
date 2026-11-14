@@ -6,8 +6,8 @@ import { defineConfig } from 'vite';
 
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
-// The server (cargo run) answers the API and the media; the dev server only serves the interface.
-const backend = process.env.VIXION_BACKEND ?? 'http://127.0.0.1:8080';
+// The server (cargo run) answers the API; the browser fetches the video from its port directly.
+const backend = process.env.VIXION_BACKEND ?? 'http://127.0.0.1:6280';
 
 export default defineConfig({
 	define: { __VIXION_VERSION__: JSON.stringify(version) },
@@ -16,7 +16,6 @@ export default defineConfig({
 	server: {
 		proxy: {
 			'/api': { target: backend, changeOrigin: false },
-			'/media': { target: backend, changeOrigin: false },
 		},
 	},
 	build: {

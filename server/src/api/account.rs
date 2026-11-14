@@ -11,7 +11,6 @@ use serde_json::json;
 
 use crate::app::AppState;
 use crate::auth::{self, CurrentUser};
-use crate::config::MediaMode;
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 
@@ -144,12 +143,10 @@ struct Me {
     #[serde(flatten)]
     user: CurrentUser,
     version: &'static str,
-    /// Whether media is served by the same address as the interface.
-    media_same_origin: bool,
 }
 
-pub async fn me(State(app): State<AppState>, user: CurrentUser) -> Json<impl Serialize> {
-    Json(Me { user, version: env!("CARGO_PKG_VERSION"), media_same_origin: app.config.media_mode == MediaMode::Same })
+pub async fn me(user: CurrentUser) -> Json<impl Serialize> {
+    Json(Me { user, version: env!("CARGO_PKG_VERSION") })
 }
 
 #[derive(Deserialize)]

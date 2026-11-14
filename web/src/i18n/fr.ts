@@ -220,12 +220,8 @@ export const fr: Messages = {
 		tokenHint:
 			'Cookie auth-token de twitch.tv. Avec Turbo ou un abonnement, Twitch n’envoie aucune pub. Se définit avec VIXION_TWITCH_TOKEN ou --twitch-token au démarrage',
 		tokenStoredHint:
-			'Enregistré depuis l’interface par une version précédente. Copiez-le dans VIXION_TWITCH_TOKEN pour le garder',
-		tokenReveal: 'Révéler',
-		tokenHide: 'Masquer',
-		tokenCopy: 'Copier',
-		tokenCopied: 'Jeton copié',
-		tokenNone: 'Aucun',
+			'Enregistré depuis l’interface par une version précédente. Mettez-le dans VIXION_TWITCH_TOKEN : il y sera bientôt obligatoire',
+		tokenSet: 'Défini',
 		alerts: 'Alertes',
 		webhook: 'Adresse du webhook',
 		webhookHint: 'Avertissements et erreurs envoyés à ce webhook',

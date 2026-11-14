@@ -1,12 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Eye, EyeOff, TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useT } from '@/i18n';
 import { useAction } from '@/lib/action';
 import { type Folder, type Settings, type SettingsResponse, type Stats, api } from '@/lib/api';
 import { formatDuration } from '@/lib/format';
 import { useCan } from '@/lib/session';
-import { Button, IconButton } from '@/ui/Button';
+import { Button } from '@/ui/Button';
 import { Card, Facts, SettingRow, Toggle } from '@/ui/Card';
 import { NumberInput, Select, TextInput } from '@/ui/Field';
 import { PageLoading } from '@/ui/Spinner';
@@ -113,13 +113,9 @@ export function SettingsPage() {
 					label={t.settings.token}
 					tip={draft.twitch_token_source === 'stored' ? t.settings.tokenStoredHint : t.settings.tokenHint}
 				>
-					{draft.twitch_token_source ? (
-						<TokenField />
-					) : (
-						<span className="text-small bg-surface-2 text-muted inline-flex h-8 items-center rounded-xs px-2.5 font-semibold">
-							{t.settings.tokenNone}
-						</span>
-					)}
+					<span className="text-small bg-surface-2 text-ink-2 inline-flex h-8 items-center rounded-xs px-2.5 font-semibold">
+						{t.settings.tokenSet}
+					</span>
 				</SettingRow>
 			</Card>
 
@@ -177,61 +173,6 @@ export function SettingsPage() {
 					</div>
 				</div>
 			) : null}
-		</div>
-	);
-}
-
-/** The Twitch token, hidden until asked for. It can be copied but not changed here. */
-function TokenField() {
-	const t = useT();
-	const [token, setToken] = useState<string | null>(null);
-	const { busy, run } = useAction('toast');
-
-	const fetchToken = async () => {
-		if (token !== null) return token;
-		const answer = await run(async () => api.get<{ token: string | null }>('/settings/twitch-token'));
-		return answer?.token ?? null;
-	};
-
-	return (
-		<div className="flex w-full items-center gap-1 sm:w-auto">
-			<input
-				readOnly
-				aria-label={t.settings.token}
-				value={token ?? '••••••••••••••••••••••••••••••'}
-				onFocus={(event) => {
-					event.currentTarget.select();
-				}}
-				className="text-ui text-ink-2 bg-surface-2 border-line h-11 w-[22rem] max-w-full min-w-0 flex-1 rounded-sm border px-3.5 font-mono outline-none pointer-fine:h-10"
-			/>
-			<IconButton
-				size="sm"
-				label={token === null ? t.settings.tokenReveal : t.settings.tokenHide}
-				disabled={busy}
-				onClick={() => {
-					if (token !== null) {
-						setToken(null);
-						return;
-					}
-					void fetchToken().then(setToken);
-				}}
-			>
-				{token === null ? <Eye size={16} /> : <EyeOff size={16} />}
-			</IconButton>
-			<IconButton
-				size="sm"
-				label={t.settings.tokenCopy}
-				disabled={busy}
-				onClick={() => {
-					void fetchToken().then(async (value) => {
-						if (!value) return;
-						await navigator.clipboard.writeText(value);
-						toast.ok(t.settings.tokenCopied);
-					});
-				}}
-			>
-				<Copy size={16} />
-			</IconButton>
 		</div>
 	);
 }

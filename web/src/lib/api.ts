@@ -73,7 +73,6 @@ export interface Me {
 	locale: string | null;
 	permissions: Permission[];
 	version: string;
-	media_same_origin: boolean;
 }
 
 export interface LiveProgress {

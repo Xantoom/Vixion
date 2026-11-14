@@ -11,7 +11,19 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ### Added
 
-- `VIXION_UPNP` opens the media port on the router by UPnP, as Plex does, renews it and closes it on shutdown.
+- `VIXION_UPNP` opens the video port on the router by UPnP, as Plex does, renews it and closes it on shutdown.
+- `--port` and `--video-port` choose the ports without Docker.
+
+### Changed
+
+- **The ports are now 6280 (interface) and 6281 (video)**, away from those other self-hosted apps take: update the
+  `ports:` of your compose file (`"6280:6280"` and `"6281:6281"`).
+- The video always has its own port. On a local network it needs no setting: the browser asks for it at the
+  interface's address, on port 6281. `VIXION_MEDIA_MODE`, `VIXION_HTTP_ADDR` and `VIXION_MEDIA_ADDR` are gone;
+  `VIXION_MEDIA_DOMAIN` with a Cloudflare token or certificate files turns HTTPS on by itself.
+- The Twitch token is required: Vixion doesn't start without `VIXION_TWITCH_TOKEN`. One saved from the interface by
+  an earlier version still works, with a warning in the log.
+- *Settings* no longer reveals or copies the Twitch token.
 
 ### Fixed
 

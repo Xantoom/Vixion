@@ -72,10 +72,19 @@ pub async fn serve(uri: Uri, headers: HeaderMap) -> Response {
     (StatusCode::OK, response_headers, Body::from(body.into_owned())).into_response()
 }
 
+/// Where the browser asks for the video, from the host the page was loaded on.
+pub fn media_origin(app: &AppState, headers: &HeaderMap) -> String {
+    let header = |name| headers.get(name).and_then(|value| value.to_str().ok());
+    // A proxy's own Host is believed only when it is trusted.
+    let forwarded = app.config.trust_proxy.then(|| header("x-forwarded-host")).flatten();
+    let host = forwarded.or_else(|| header("host")).unwrap_or("localhost");
+    app.config.media_origin(host.split(',').next().unwrap_or(host).trim())
+}
+
 /// Headers that keep pages from being framed, sniffed or made to load foreign code.
 pub async fn security_headers(State(app): State<AppState>, request: Request, next: Next) -> Response {
+    let media = media_origin(&app, request.headers());
     let mut response = next.run(request).await;
-    let media = &app.config.media_public_url;
     let csp = format!(
         "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; \
          img-src 'self' data: blob: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net \
