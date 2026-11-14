@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { currentLocale, useT } from '@/i18n';
+import { useAction } from '@/lib/action';
 import { ApiError, type Me, api } from '@/lib/api';
 import { meQuery } from '@/lib/session';
 import { Button } from '@/ui/Button';
@@ -37,8 +38,7 @@ export function SetupPage() {
 	const [username, setUsername] = useState('');
 	const [password, setPassword] = useState('');
 	const [confirm, setConfirm] = useState('');
-	const [error, setError] = useState<string | null>(null);
-	const [busy, setBusy] = useState(false);
+	const { busy, error, setError, run } = useAction();
 
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();
@@ -46,20 +46,20 @@ export function SetupPage() {
 			setError(t.auth.mismatch);
 			return;
 		}
-		setBusy(true);
-		setError(null);
 		setCodeError(null);
-		try {
-			await api.post('/setup', { code, username, password, locale: currentLocale() });
-			client.setQueryData(['setup'], { needed: false });
-			await client.invalidateQueries({ queryKey: meQuery.queryKey });
-		} catch (caught) {
-			if (caught instanceof ApiError && caught.code === 'bad_setup_code') setCodeError(t.auth.badSetupCode);
-			else if (caught instanceof ApiError && caught.code === 'too_many_attempts') setCodeError(t.auth.tooMany);
-			else setError(caught instanceof Error ? caught.message : t.common.error);
-		} finally {
-			setBusy(false);
-		}
+		await run(
+			async () => {
+				await api.post('/setup', { code, username, password, locale: currentLocale() });
+				client.setQueryData(['setup'], { needed: false });
+				await client.invalidateQueries({ queryKey: meQuery.queryKey });
+			},
+			(caught) => {
+				const code = caught instanceof ApiError ? caught.code : '';
+				if (code !== 'bad_setup_code' && code !== 'too_many_attempts') return undefined;
+				setCodeError(code === 'bad_setup_code' ? t.auth.badSetupCode : t.auth.tooMany);
+				return null;
+			},
+		);
 	};
 
 	return (
@@ -141,31 +141,25 @@ export function LoginPage() {
 	const client = useQueryClient();
 	const [username, setUsername] = useState('');
 	const [password, setPassword] = useState('');
-	const [error, setError] = useState<string | null>(null);
-	const [busy, setBusy] = useState(false);
+	const { busy, error, run } = useAction();
 
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();
-		setBusy(true);
-		setError(null);
-		try {
-			await api.post('/auth/login', { username, password });
-			const me = await api.get<Me>('/me');
-			client.setQueryData(meQuery.queryKey, me);
-		} catch (caught) {
-			setError(
-				caught instanceof ApiError && caught.code === 'bad_credentials'
+		await run(
+			async () => {
+				await api.post('/auth/login', { username, password });
+				client.setQueryData(meQuery.queryKey, await api.get<Me>('/me'));
+			},
+			(caught) => {
+				setPassword('');
+				const code = caught instanceof ApiError ? caught.code : '';
+				return code === 'bad_credentials'
 					? t.auth.wrongPassword
-					: caught instanceof ApiError && caught.code === 'too_many_attempts'
+					: code === 'too_many_attempts'
 						? t.auth.tooMany
-						: caught instanceof Error
-							? caught.message
-							: t.common.error,
-			);
-			setPassword('');
-		} finally {
-			setBusy(false);
-		}
+						: undefined;
+			},
+		);
 	};
 
 	return (

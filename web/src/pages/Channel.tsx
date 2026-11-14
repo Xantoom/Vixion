@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { useT } from '@/i18n';
+import { useAction } from '@/lib/action';
 import {
 	ApiError,
 	type ChannelPage as Page,
@@ -312,22 +313,17 @@ function AddButton({ login, name }: { login: string; name: string }) {
 	const t = useT();
 	const client = useQueryClient();
 	const canManage = useCan('streamers.manage');
-	const [busy, setBusy] = useState(false);
+	const { busy, run } = useAction('toast');
 	if (!canManage) return null;
 	const add = async () => {
-		setBusy(true);
-		try {
+		await run(async () => {
 			await api.post<Streamer>('/streamers', { login });
 			await Promise.all([
 				client.invalidateQueries({ queryKey: ['channel', login] }),
 				client.invalidateQueries({ queryKey: streamersQuery.queryKey }),
 			]);
 			toast.ok(t.streamers.added(name));
-		} catch (error) {
-			toast.error(error);
-		} finally {
-			setBusy(false);
-		}
+		});
 	};
 	return (
 		<Button variant="accent" busy={busy} data-tip={t.channel.addHint} onClick={() => void add()}>
@@ -412,21 +408,16 @@ function StreamCard({ stream, login }: { stream: StreamSummary; login: string })
 	const canKeep = useCan('streams.keep');
 	const canDelete = useCan('streams.delete');
 	const [deleting, setDeleting] = useState(false);
-	const [keeping, setKeeping] = useState(false);
+	const { busy: keeping, run } = useAction('toast');
 	const recording = stream.status === 'recording';
 	const refresh = async () => client.invalidateQueries({ queryKey: ['channel', login] });
 	const params = { login, id: String(stream.id) };
 
 	const toggleKeep = async () => {
-		setKeeping(true);
-		try {
+		await run(async () => {
 			await api.patch(`/streams/${stream.id}`, { keep_forever: !stream.keep_forever });
 			await refresh();
-		} catch (error) {
-			toast.error(error);
-		} finally {
-			setKeeping(false);
-		}
+		});
 	};
 
 	const quality = formatQuality(stream.height, stream.fps, stream.video_codec);
@@ -620,7 +611,7 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 	const [monitored, setMonitored] = useState(streamer.monitored);
 	// null follows the general setting, 0 keeps them for good.
 	const [retention, setRetention] = useState<number | null>(streamer.retention_days);
-	const [busy, setBusy] = useState(false);
+	const { busy, run } = useAction('toast');
 	const [removing, setRemoving] = useState(false);
 	const [stopping, setStopping] = useState(false);
 	const fallback = streamer.default_retention_days;
@@ -637,8 +628,7 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 	choices.sort((a, b) => a - b);
 
 	const save = async () => {
-		setBusy(true);
-		try {
+		await run(async () => {
 			await api.patch(`/streamers/${streamer.id}`, { monitored, retention_days: retention });
 			await Promise.all([
 				client.invalidateQueries({ queryKey: ['channel'] }),
@@ -646,11 +636,7 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 			]);
 			toast.ok(t.common.saved);
 			onClose();
-		} catch (error) {
-			toast.error(error);
-		} finally {
-			setBusy(false);
-		}
+		});
 	};
 
 	return (

@@ -3,6 +3,7 @@ import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-route
 import { Check, KeyRound, Languages, LogOut, Monitor, Moon, Search, ShieldCheck, Sun, X } from 'lucide-react';
 import { type FormEvent, Suspense, useEffect, useRef, useState } from 'react';
 import { LOCALES, type Locale, useLocale, useT } from '@/i18n';
+import { useAction } from '@/lib/action';
 import { type Alert, api } from '@/lib/api';
 import { meQuery, useCan, useMe } from '@/lib/session';
 import { type Theme, usePrefs } from '@/stores/prefs';
@@ -332,24 +333,17 @@ function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void 
 	const t = useT();
 	const [current, setCurrent] = useState('');
 	const [next, setNext] = useState('');
-	const [error, setError] = useState<string | null>(null);
-	const [busy, setBusy] = useState(false);
+	const { busy, error, run } = useAction();
 
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();
-		setBusy(true);
-		setError(null);
-		try {
+		await run(async () => {
 			await api.patch('/me', { current_password: current, new_password: next });
 			toast.ok(t.auth.passwordChanged);
 			setCurrent('');
 			setNext('');
 			onClose();
-		} catch (caught) {
-			setError(caught instanceof Error ? caught.message : t.common.error);
-		} finally {
-			setBusy(false);
-		}
+		});
 	};
 
 	return (

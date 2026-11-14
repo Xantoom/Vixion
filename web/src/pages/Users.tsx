@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Lock, Plus } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { useT } from '@/i18n';
+import { useAction } from '@/lib/action';
 import { type Permission, type Role, type User, api } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { useCan, useMe } from '@/lib/session';
@@ -311,8 +312,7 @@ function UserDialog({
 	const [roleId, setRoleId] = useState(user?.role_id ?? fallbackRole);
 	const [active, setActive] = useState(!(user?.disabled ?? false));
 	const [overrides, setOverrides] = useState<Partial<Record<Permission, boolean>>>(user?.overrides ?? {});
-	const [error, setError] = useState<string | null>(null);
-	const [busy, setBusy] = useState(false);
+	const { busy, error, run } = useAction();
 	const [deleting, setDeleting] = useState(false);
 	const self = user?.id === me.id;
 	const role = roles.roles.find((entry) => entry.id === roleId);
@@ -326,9 +326,7 @@ function UserDialog({
 
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();
-		setBusy(true);
-		setError(null);
-		try {
+		await run(async () => {
 			if (user) {
 				const changes = {} as Record<Permission, boolean | null>;
 				for (const permission of roles.permissions)
@@ -345,11 +343,7 @@ function UserDialog({
 			await onSaved();
 			toast.ok(t.common.saved);
 			onClose();
-		} catch (caught) {
-			setError(caught instanceof Error ? caught.message : t.common.error);
-		} finally {
-			setBusy(false);
-		}
+		});
 	};
 
 	return (
@@ -538,15 +532,12 @@ function RoleDialog({
 	const formId = useId();
 	const [name, setName] = useState(role?.name ?? '');
 	const [granted, setGranted] = useState<Set<Permission>>(new Set(role?.permissions ?? ['streams.view']));
-	const [error, setError] = useState<string | null>(null);
-	const [busy, setBusy] = useState(false);
+	const { busy, error, run } = useAction();
 	const [deleting, setDeleting] = useState(false);
 
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();
-		setBusy(true);
-		setError(null);
-		try {
+		await run(async () => {
 			const body = {
 				name: name.trim(),
 				permissions: permissions.filter((permission) => granted.has(permission)),
@@ -556,11 +547,7 @@ function RoleDialog({
 			await onSaved();
 			toast.ok(t.common.saved);
 			onClose();
-		} catch (caught) {
-			setError(caught instanceof Error ? caught.message : t.common.error);
-		} finally {
-			setBusy(false);
-		}
+		});
 	};
 
 	return (

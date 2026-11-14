@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, Eye, EyeOff, TriangleAlert } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useT } from '@/i18n';
+import { useAction } from '@/lib/action';
 import { type Folder, type Settings, type SettingsResponse, type Stats, api } from '@/lib/api';
 import { formatDuration } from '@/lib/format';
 import { useCan } from '@/lib/session';
@@ -22,7 +23,7 @@ export function SettingsPage() {
 		enabled: can,
 	});
 	const [draft, setDraft] = useState<Settings | null>(null);
-	const [busy, setBusy] = useState(false);
+	const { busy, run } = useAction('toast');
 
 	useEffect(() => {
 		if (data) setDraft(data.settings);
@@ -37,16 +38,11 @@ export function SettingsPage() {
 	const dirty = JSON.stringify(draft) !== JSON.stringify(data?.settings);
 
 	const save = async () => {
-		setBusy(true);
-		try {
+		await run(async () => {
 			const saved = await api.put<Settings>('/settings', draft);
 			client.setQueryData<SettingsResponse>(['settings'], (old) => (old ? { ...old, settings: saved } : old));
 			toast.ok(t.common.saved);
-		} catch (caught) {
-			toast.error(caught);
-		} finally {
-			setBusy(false);
-		}
+		});
 	};
 
 	return (
@@ -189,20 +185,12 @@ export function SettingsPage() {
 function TokenField() {
 	const t = useT();
 	const [token, setToken] = useState<string | null>(null);
-	const [busy, setBusy] = useState(false);
+	const { busy, run } = useAction('toast');
 
 	const fetchToken = async () => {
 		if (token !== null) return token;
-		setBusy(true);
-		try {
-			const answer = await api.get<{ token: string | null }>('/settings/twitch-token');
-			return answer.token;
-		} catch (caught) {
-			toast.error(caught);
-			return null;
-		} finally {
-			setBusy(false);
-		}
+		const answer = await run(async () => api.get<{ token: string | null }>('/settings/twitch-token'));
+		return answer?.token ?? null;
 	};
 
 	return (
