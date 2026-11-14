@@ -73,6 +73,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - Retention waits until broadcasts left in parts are merged, so it never deletes a part being merged.
 - A tab left open across an update reloads once instead of showing a blank page, and a page that
   fails to draw offers to reload.
+- The live console connects at once behind a reverse proxy, instead of after fifteen seconds.
+- A recording part counts only its own skipped ads and chat messages: merged parts no longer double them.
 
 ### Security
 
