@@ -79,6 +79,16 @@ struct Part {
     saved: Instant,
     /// What the part had before this session, when it goes on after a restart.
     before: Counts,
+    /// The session's skipped ads and chat messages when the part started: a part counts only its own.
+    from: Counts,
+}
+
+impl Part {
+    /// Skipped ads, in milliseconds, and chat messages of this part.
+    fn counts(&self, ads_ms: i64, chat: &AtomicU64) -> (i64, i64) {
+        let chat = i64::try_from(chat.load(Ordering::Relaxed)).unwrap_or(0);
+        (self.before.ads_ms + ads_ms - self.from.ads_ms, self.before.chat + chat - self.from.chat)
+    }
 }
 
 /// Gaps, skipped ads and chat messages: counted per session, added up per part.
@@ -526,13 +536,13 @@ impl Session<'_> {
             let _ = tokio::task::block_in_place(|| part.timeline.save(&path));
         }
         let written = part.writer.progress();
+        let (ads, chat) = part.counts(self.ads_ms, &self.chat_count);
         if let Ok(mut progress) = self.progress.lock() {
             progress.stream_id = part.row;
             progress.duration_ms = written.duration_ms;
             progress.bytes = written.bytes;
-            progress.ads_skipped_ms = part.before.ads_ms + self.ads_ms;
-            progress.chat_messages =
-                u64::try_from(part.before.chat).unwrap_or(0) + self.chat_count.load(Ordering::Relaxed);
+            progress.ads_skipped_ms = ads;
+            progress.chat_messages = u64::try_from(chat).unwrap_or(0);
             progress.fps = written.fps;
         }
         if part.saved.elapsed() >= SAVE_EVERY {
@@ -549,12 +559,7 @@ impl Session<'_> {
                     .await;
                 return Err("the disk is full".into());
             }
-            let (row, ads, chat, gaps) = (
-                part.row,
-                part.before.ads_ms + self.ads_ms,
-                part.before.chat + i64::try_from(self.chat_count.load(Ordering::Relaxed)).unwrap_or(0),
-                part.before.gaps + i64::from(part.writer.discontinuities),
-            );
+            let (row, gaps) = (part.row, part.before.gaps + i64::from(part.writer.discontinuities));
             let _ = self
                 .app
                 .db
@@ -577,6 +582,15 @@ impl Session<'_> {
                 .await;
         }
         Ok(())
+    }
+
+    /// The session's counts so far, where a new part starts counting from.
+    fn counts_now(&self) -> Counts {
+        Counts {
+            gaps: 0,
+            ads_ms: self.ads_ms,
+            chat: i64::try_from(self.chat_count.load(Ordering::Relaxed)).unwrap_or(0),
+        }
     }
 
     /// Opens the last part recorded before a restart again, when this picture can go on in it.
@@ -630,6 +644,7 @@ impl Session<'_> {
             timeline,
             saved: Instant::now(),
             before: Counts { gaps: earlier.gaps, ads_ms: earlier.ads_ms, chat: earlier.chat },
+            from: self.counts_now(),
         })
     }
 
@@ -712,6 +727,7 @@ impl Session<'_> {
             timeline: Timeline::default(),
             saved: Instant::now(),
             before: Counts::default(),
+            from: self.counts_now(),
         })
     }
 
@@ -721,16 +737,13 @@ impl Session<'_> {
         let path = self.path.join(storage::timeline_file(part.number));
         let _ = tokio::task::block_in_place(|| part.timeline.save(&path));
         let gaps = part.before.gaps + i64::from(part.writer.discontinuities);
+        let (ads, chat) = part.counts(self.ads_ms, &self.chat_count);
         let finished = tokio::task::block_in_place(|| part.writer.finish());
         let (status, written, error) = match finished {
             Ok(written) => (if error.is_some() { "failed" } else { "done" }, written, error),
             Err(failure) => ("failed", crate::media::fmp4::Progress::default(), Some(failure.to_string())),
         };
-        let (row, ads, chat) = (
-            part.row,
-            part.before.ads_ms + self.ads_ms,
-            part.before.chat + i64::try_from(self.chat_count.load(Ordering::Relaxed)).unwrap_or(0),
-        );
+        let row = part.row;
         let result = self
             .app
             .db
