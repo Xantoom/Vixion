@@ -64,6 +64,12 @@ impl Segment {
         self.video.as_ref().is_none_or(|track| track.samples.is_empty())
             && self.audio.as_ref().is_none_or(|track| track.samples.is_empty())
     }
+
+    /// The same tracks without their samples: what demuxing the next segment may need.
+    pub fn settings_only(&self) -> Self {
+        let settings = |track: &TrackData| TrackData { config: track.config.clone(), samples: Vec::new() };
+        Self { video: self.video.as_ref().map(settings), audio: self.audio.as_ref().map(settings) }
+    }
 }
 
 #[derive(Debug)]

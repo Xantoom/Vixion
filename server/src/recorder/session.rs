@@ -39,6 +39,49 @@ const SAVE_EVERY: Duration = Duration::from_secs(10);
 /// Below this much free space a recording stops cleanly rather than fail on a full disk.
 const DISK_FLOOR: u64 = 512 << 20;
 
+/// Why a recording stopped before the broadcast did.
+#[derive(Debug)]
+enum RecordError {
+    /// Below the floor of free space: stopped cleanly rather than fail on a full disk.
+    DiskFull,
+    /// Writing the video failed.
+    Io(std::io::Error),
+    /// The recording's row couldn't be written.
+    Database(crate::error::AppError),
+}
+
+impl std::fmt::Display for RecordError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DiskFull => f.write_str("the disk is full"),
+            Self::Io(error) => write!(f, "writing the video: {error}"),
+            Self::Database(error) => write!(f, "saving the recording: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for RecordError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::DiskFull => None,
+            Self::Io(error) => Some(error),
+            Self::Database(error) => Some(error),
+        }
+    }
+}
+
+impl From<std::io::Error> for RecordError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+impl From<crate::error::AppError> for RecordError {
+    fn from(error: crate::error::AppError) -> Self {
+        Self::Database(error)
+    }
+}
+
 /// How a recording session ended.
 pub enum Ended {
     /// Recorded until the end, a stop, or an error (noted on the recording).
@@ -339,7 +382,7 @@ pub async fn run(
 impl Session<'_> {
     /// Follows the playlist until the broadcast ends or the session is stopped; the error that
     /// ended it early, if any.
-    async fn follow(&mut self, source: &mut Source, stop: &mut watch::Receiver<bool>) -> Option<String> {
+    async fn follow(&mut self, source: &mut Source, stop: &mut watch::Receiver<bool>) -> Option<RecordError> {
         let login = self.broadcast.login.clone();
         // After a restart, the playlist starts with seconds already recorded.
         let mut last_date: Option<i64> = self.recorded_until;
@@ -426,7 +469,9 @@ impl Session<'_> {
                 if segment.discontinuity {
                     discontinuity = true;
                 }
-                if let Err(error) = self.write(&demuxed, segment.date, discontinuity).await {
+                // The next MPEG-TS segment only needs this one's track settings, not its samples.
+                let settings = demuxed.settings_only();
+                if let Err(error) = self.write(demuxed, segment.date, discontinuity).await {
                     self.app
                         .alerts
                         .raise(Level::Error, format!("write:{login}"), format!("Recording {login} failed: {error}"))
@@ -435,7 +480,7 @@ impl Session<'_> {
                 }
                 discontinuity = false;
                 self.set_state("recording");
-                previous = demuxed;
+                previous = settings;
             }
 
             if playlist.ended {
@@ -518,18 +563,17 @@ impl Session<'_> {
         }
     }
 
-    async fn write(&mut self, segment: &Segment, date: Option<i64>, discontinuity: bool) -> Result<(), String> {
-        if self.part.as_ref().is_some_and(|part| !part.writer.accepts(segment)) {
+    async fn write(&mut self, segment: Segment, date: Option<i64>, discontinuity: bool) -> Result<(), RecordError> {
+        if self.part.as_ref().is_some_and(|part| !part.writer.accepts(&segment)) {
             tracing::info!(login = %self.broadcast.login, "picture format changed: starting a new part");
             self.finish_part(None).await;
         }
-        if self.part.is_none() {
-            self.part = Some(self.start_part(segment, date).await?);
-        }
-        let Some(part) = self.part.as_mut() else { return Err("no part".into()) };
-        let owned = segment.clone();
-        let anchor =
-            tokio::task::block_in_place(|| part.writer.push(owned, discontinuity)).map_err(|e| e.to_string())?;
+        let part = match self.part.take() {
+            Some(part) => part,
+            None => self.start_part(&segment, date).await?,
+        };
+        let part = self.part.insert(part);
+        let anchor = tokio::task::block_in_place(|| part.writer.push(segment, discontinuity))?;
         if let (Some(start), Some(date)) = (anchor, date) {
             part.timeline.anchors.push(((start * 1000.0).round() as i64, date));
             let path = self.path.join(storage::timeline_file(part.number));
@@ -557,7 +601,7 @@ impl Session<'_> {
                         format!("No room left on disk: the recording of {} stopped", self.broadcast.login),
                     )
                     .await;
-                return Err("the disk is full".into());
+                return Err(RecordError::DiskFull);
             }
             let (row, gaps) = (part.row, part.before.gaps + i64::from(part.writer.discontinuities));
             let _ = self
@@ -648,7 +692,7 @@ impl Session<'_> {
         })
     }
 
-    async fn start_part(&mut self, segment: &Segment, date: Option<i64>) -> Result<Part, String> {
+    async fn start_part(&mut self, segment: &Segment, date: Option<i64>) -> Result<Part, RecordError> {
         if let Some(part) = self.resume_part(segment).await {
             if let Ok(mut progress) = self.progress.lock() {
                 let video = segment.video.as_ref().map(|track| &track.config);
@@ -662,7 +706,7 @@ impl Session<'_> {
         let video = segment.video.as_ref().map(|track| &track.config);
         let audio = segment.audio.as_ref().map(|track| &track.config);
         let file = self.path.join(storage::video_file(number));
-        let writer = tokio::task::block_in_place(|| Writer::create(&file, video, audio)).map_err(|e| e.to_string())?;
+        let writer = tokio::task::block_in_place(|| Writer::create(&file, video, audio))?;
         let values = (
             self.broadcast.streamer_id,
             self.broadcast.twitch_stream_id.clone(),
@@ -709,8 +753,7 @@ impl Session<'_> {
                 )?;
                 Ok(row)
             })
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
         if let Ok(mut progress) = self.progress.lock() {
             progress.stream_id = row;
             progress.codec = video.map(|config| config.codec).unwrap_or("audio").to_owned();
@@ -732,7 +775,7 @@ impl Session<'_> {
     }
 
     /// Closes the current part: index, duration, database row.
-    async fn finish_part(&mut self, error: Option<String>) {
+    async fn finish_part(&mut self, error: Option<RecordError>) {
         let Some(part) = self.part.take() else { return };
         let path = self.path.join(storage::timeline_file(part.number));
         let _ = tokio::task::block_in_place(|| part.timeline.save(&path));
@@ -740,7 +783,7 @@ impl Session<'_> {
         let (ads, chat) = part.counts(self.ads_ms, &self.chat_count);
         let finished = tokio::task::block_in_place(|| part.writer.finish());
         let (status, written, error) = match finished {
-            Ok(written) => (if error.is_some() { "failed" } else { "done" }, written, error),
+            Ok(written) => (if error.is_some() { "failed" } else { "done" }, written, error.map(|e| e.to_string())),
             Err(failure) => ("failed", crate::media::fmp4::Progress::default(), Some(failure.to_string())),
         };
         let row = part.row;

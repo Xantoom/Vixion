@@ -152,7 +152,7 @@ async fn merge_dir(app: &AppState, dir: &str) -> Result<(), AppError> {
             Ok(Some((shift, before.duration_ms, progress, gaps)))
         })
         .await
-        .map_err(|error| AppError::internal(error.to_string()))?
+        .map_err(|error| AppError::internal(format!("merge task: {error}")).with_source(error))?
         .map_err(io)?;
         let Some((shift, joined_at, progress, gaps)) = appended else { break };
 
@@ -214,8 +214,9 @@ async fn merge_dir(app: &AppState, dir: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Internal whatever its kind: a missing file during a merge is a failure, not a 404.
 fn io(error: std::io::Error) -> AppError {
-    AppError::internal(error.to_string())
+    AppError::internal(format!("io: {error}")).with_source(error)
 }
 
 /// The first part's timeline, followed by the other's moved by `shift` from where it was kept

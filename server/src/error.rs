@@ -14,11 +14,20 @@ pub struct AppError {
     /// Stable, machine-readable: the interface maps it to a translated sentence.
     pub code: &'static str,
     pub message: Cow<'static, str>,
+    /// What caused it, when it comes from another error: kept for `source()`, never sent.
+    pub source: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 
 impl AppError {
     pub fn new(status: StatusCode, code: &'static str, message: impl Into<Cow<'static, str>>) -> Self {
-        Self { status, code, message: message.into() }
+        Self { status, code, message: message.into(), source: None }
+    }
+
+    /// Keeps the error this one comes from.
+    #[must_use]
+    pub fn with_source(mut self, source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        self.source = Some(Box::new(source));
+        self
     }
 
     pub fn internal(message: impl Into<Cow<'static, str>>) -> Self {
@@ -52,7 +61,11 @@ impl std::fmt::Display for AppError {
     }
 }
 
-impl std::error::Error for AppError {}
+impl std::error::Error for AppError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source.as_deref().map(|source| source as &(dyn std::error::Error + 'static))
+    }
+}
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
@@ -69,13 +82,13 @@ impl IntoResponse for AppError {
 impl From<rusqlite::Error> for AppError {
     fn from(error: rusqlite::Error) -> Self {
         match error {
-            rusqlite::Error::QueryReturnedNoRows => Self::not_found(),
+            rusqlite::Error::QueryReturnedNoRows => Self::not_found().with_source(error),
             rusqlite::Error::SqliteFailure(ref inner, _)
                 if inner.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE =>
             {
-                Self::conflict("exists", "already exists")
+                Self::conflict("exists", "already exists").with_source(error)
             }
-            other => Self::internal(format!("database: {other}")),
+            other => Self::internal(format!("database: {other}")).with_source(other),
         }
     }
 }
@@ -83,22 +96,34 @@ impl From<rusqlite::Error> for AppError {
 impl From<std::io::Error> for AppError {
     fn from(error: std::io::Error) -> Self {
         if error.kind() == std::io::ErrorKind::NotFound {
-            return Self::not_found();
+            return Self::not_found().with_source(error);
         }
-        Self::internal(format!("io: {error}"))
+        Self::internal(format!("io: {error}")).with_source(error)
     }
 }
 
 impl From<reqwest::Error> for AppError {
     fn from(error: reqwest::Error) -> Self {
-        Self::new(StatusCode::BAD_GATEWAY, "upstream", format!("twitch: {error}"))
+        Self::new(StatusCode::BAD_GATEWAY, "upstream", format!("twitch: {error}")).with_source(error)
     }
 }
 
 impl From<serde_json::Error> for AppError {
     fn from(error: serde_json::Error) -> Self {
-        Self::internal(format!("json: {error}"))
+        Self::internal(format!("json: {error}")).with_source(error)
     }
 }
 
 pub type AppResult<T> = Result<T, AppError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keeps_what_caused_it() {
+        let error = AppError::from(std::io::Error::new(std::io::ErrorKind::StorageFull, "disk full"));
+        let source = std::error::Error::source(&error).expect("a source");
+        assert_eq!(source.to_string(), "disk full");
+    }
+}
