@@ -227,8 +227,25 @@ pub async fn run(app: AppState) {
     // and before retention looks at them: deleting a part being appended would lose both.
     merge::run(&app).await;
     tokio::spawn(retention::run(app.clone()));
+    // A panic in a round would end the checks for good, silently: they start again instead.
+    loop {
+        match tokio::spawn(live_checks(app.clone())).await {
+            Err(error) if error.is_panic() => {
+                tracing::error!(%error, "live checks crashed: starting them again");
+                app.alerts.raise(Level::Error, "live_checks", format!("Live checks crashed: {error}")).await;
+                tokio::time::sleep(pace::BASE).await;
+            }
+            _ => return,
+        }
+    }
+}
+
+/// Checks the channels, round after round, at the pace Twitch allows.
+async fn live_checks(app: AppState) {
     let mut failures = 0u32;
-    let mut last = tokio::time::Instant::now() - pace::MIN_GAP;
+    let mut answered = false;
+    // Not `now - gap`: an `Instant` can't go before the machine started.
+    let mut last = tokio::time::Instant::now().checked_sub(pace::MIN_GAP).unwrap_or_else(tokio::time::Instant::now);
     loop {
         // Asked to check now right after a round: wait a little, once for all who asked.
         let since = last.elapsed();
@@ -238,6 +255,10 @@ pub async fn run(app: AppState) {
         last = tokio::time::Instant::now();
         let wait = match check(&app).await {
             Round::Done { batches } => {
+                // Once per start: a crash before this one is behind us.
+                if !std::mem::replace(&mut answered, true) {
+                    app.alerts.resolve("live_checks").await;
+                }
                 if failures >= 3 {
                     app.alerts.resolve("twitch_unreachable").await;
                 }
