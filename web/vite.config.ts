@@ -23,6 +23,8 @@ export default defineConfig({
 		sourcemap: false,
 		reportCompressedSize: false,
 		chunkSizeWarningLimit: 900,
+		// Fonts stay files: the CSP's font-src is 'self', which a data: URL isn't.
+		assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),
 		rollupOptions: {
 			output: {
 				// Long-lived chunks: the libraries change less often than the app.
