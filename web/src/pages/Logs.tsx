@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CircleAlert, CircleCheck, Info, OctagonAlert, Pause, Play, Trash2, X } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '@/i18n';
 import { type Alert, type LogEntry, api } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
@@ -22,13 +22,49 @@ const LEVEL_STYLE: Record<string, string> = {
 	trace: 'text-muted',
 };
 
+// Made once: a formatter costs far more to build than to use, and there are thousands of lines.
+const CLOCK = new Intl.DateTimeFormat(undefined, {
+	hour: '2-digit',
+	minute: '2-digit',
+	second: '2-digit',
+	hour12: false,
+});
+const DAY = new Intl.DateTimeFormat(undefined, { day: '2-digit', month: '2-digit' });
+
 /** The hour, and the day too when it isn't today. */
 function time(at: number): string {
 	const date = new Date(at);
-	const clock = date.toLocaleTimeString(undefined, { hour12: false });
+	const clock = CLOCK.format(date);
 	if (date.toDateString() === new Date().toDateString()) return clock;
-	return `${date.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })} ${clock}`;
+	return `${DAY.format(date)} ${clock}`;
 }
+
+/** What the filter looks in, lowercased once per line rather than on every key typed. */
+const haystacks = new WeakMap<LogEntry, string>();
+function haystack(line: LogEntry): string {
+	let text = haystacks.get(line);
+	if (text === undefined) {
+		text = `${line.message}\n${line.fields}\n${line.target}`.toLowerCase();
+		haystacks.set(line, text);
+	}
+	return text;
+}
+
+/** One line of the console: drawn once, not again for each line that arrives after it. */
+const LogRow = memo(function LogRow({ line }: { line: LogEntry }) {
+	return (
+		<div className="hover:bg-surface flex flex-wrap gap-x-3 rounded-[3px] px-1 whitespace-pre-wrap sm:flex-nowrap">
+			<span className="text-muted flex-none tabular">{time(line.at)}</span>
+			<span className={`w-11 flex-none uppercase ${LEVEL_STYLE[line.level] ?? ''}`}>{line.level}</span>
+			<span className="min-w-0 break-words max-sm:basis-full max-sm:pb-1">
+				<span className="text-ink">{line.message}</span>
+				{line.fields ? <span className="text-muted"> {line.fields}</span> : null}
+				{/* Vixion's own lines don't repeat its name; a library's say which. */}
+				{line.target.startsWith('vixion') ? null : <span className="text-muted/60"> {line.target}</span>}
+			</span>
+		</div>
+	);
+});
 
 export function LogsPage() {
 	const can = useCan('logs.view');
@@ -117,13 +153,25 @@ function Console() {
 	useEffect(() => {
 		let source: EventSource | null = null;
 		let cancelled = false;
-		const push = (entries: LogEntry[]) => {
+		// Lines arriving together (a burst of logs) are added together, once per frame.
+		let queued: LogEntry[] = [];
+		let frame = 0;
+		const flush = () => {
+			frame = 0;
+			const entries = queued;
+			queued = [];
 			if (pausedRef.current) {
-				held.current.push(...entries);
+				held.current = [...held.current, ...entries].slice(-MAX_LINES);
 				setWaiting(held.current.length);
 				return;
 			}
 			setLines((current) => [...current, ...entries].slice(-MAX_LINES));
+		};
+		const push = (entry: LogEntry) => {
+			queued.push(entry);
+			// A hidden tab draws no frames: what waits is kept to what the console would show.
+			if (queued.length > MAX_LINES) queued = queued.slice(-MAX_LINES);
+			if (frame === 0) frame = requestAnimationFrame(flush);
 		};
 		api.get<LogEntry[]>('/logs')
 			.then((recent) => {
@@ -138,7 +186,7 @@ function Console() {
 				};
 				source.onmessage = (event: MessageEvent<string>) => {
 					try {
-						push([JSON.parse(event.data) as LogEntry]);
+						push(JSON.parse(event.data) as LogEntry);
 					} catch {
 						// A line that isn't JSON is skipped.
 					}
@@ -147,6 +195,7 @@ function Console() {
 			.catch(() => undefined);
 		return () => {
 			cancelled = true;
+			cancelAnimationFrame(frame);
 			source?.close();
 		};
 	}, []);
@@ -160,17 +209,17 @@ function Console() {
 		}
 	}, [paused]);
 
-	const shown = useMemo(() => {
-		const needle = filter.trim().toLowerCase();
-		return lines.filter(
-			(line) =>
-				(level === 'all' || line.level === 'error' || (level === 'warn' && line.level === 'warn')) &&
-				(!needle ||
-					line.message.toLowerCase().includes(needle) ||
-					line.fields.toLowerCase().includes(needle) ||
-					line.target.includes(needle)),
-		);
-	}, [lines, level, filter]);
+	// The field answers each key at once; the lines follow when there is time.
+	const needle = useDeferredValue(filter.trim().toLowerCase());
+	const shown = useMemo(
+		() =>
+			lines.filter(
+				(line) =>
+					(level === 'all' || line.level === 'error' || (level === 'warn' && line.level === 'warn')) &&
+					(!needle || haystack(line).includes(needle)),
+			),
+		[lines, level, needle],
+	);
 
 	useLayoutEffect(() => {
 		const element = scroller.current;
@@ -255,25 +304,7 @@ function Console() {
 				{shown.length === 0 ? (
 					<p className="text-muted py-6 text-center font-sans text-sm">{t.logs.empty}</p>
 				) : (
-					shown.map((line) => (
-						<div
-							key={`${line.id}-${line.at}`}
-							className="hover:bg-surface flex flex-wrap gap-x-3 rounded-[3px] px-1 whitespace-pre-wrap sm:flex-nowrap"
-						>
-							<span className="text-muted flex-none tabular">{time(line.at)}</span>
-							<span className={`w-11 flex-none uppercase ${LEVEL_STYLE[line.level] ?? ''}`}>
-								{line.level}
-							</span>
-							<span className="min-w-0 break-words max-sm:basis-full max-sm:pb-1">
-								<span className="text-ink">{line.message}</span>
-								{line.fields ? <span className="text-muted"> {line.fields}</span> : null}
-								{/* Vixion's own lines don't repeat its name; a library's say which. */}
-								{line.target.startsWith('vixion') ? null : (
-									<span className="text-muted/60"> {line.target}</span>
-								)}
-							</span>
-						</div>
-					))
+					shown.map((line) => <LogRow key={`${line.id}-${line.at}`} line={line} />)
 				)}
 			</div>
 		</Card>
