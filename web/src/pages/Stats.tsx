@@ -10,11 +10,14 @@ import { Card } from '@/ui/Card';
 import { PageLoading } from '@/ui/Spinner';
 import { NotFound } from './NotFound';
 
-function Tile({ label, value }: { label: string; value: string }) {
+function Tile({ label, value, detail }: { label: string; value: string; detail?: string | null }) {
 	return (
 		<div className="bg-card ring-line flex flex-col justify-between gap-4 rounded-md p-6 ring-1">
 			<span className="text-small text-muted font-medium">{label}</span>
-			<span className="text-heading tabular font-semibold tracking-tight">{value}</span>
+			<span className="flex flex-col gap-1">
+				<span className="text-heading tabular font-semibold tracking-tight">{value}</span>
+				{detail ? <span className="text-small text-muted tabular">{detail}</span> : null}
+			</span>
 		</div>
 	);
 }
@@ -32,7 +35,9 @@ export function StatsPage() {
 	if (isPending) return <PageLoading />;
 	if (error) return <p className="text-danger p-6">{error.message}</p>;
 
-	const { disk } = data;
+	const { disk, memory } = data;
+	// What `docker stats` shows: the container, its recently used disk cache included.
+	const container = memory.cgroup === null ? null : Math.max(0, memory.cgroup - (memory.cache_inactive ?? 0));
 	const used = disk.total - disk.free;
 	const other = Math.max(0, used - data.bytes);
 	const share = (value: number) => (disk.total > 0 ? (value / disk.total) * 100 : 0);
@@ -99,6 +104,15 @@ export function StatsPage() {
 				<div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
 					<Tile label={t.stats.recordings} value={formatNumber(data.streams)} />
 					<Tile label={t.stats.watchTime} value={formatDuration(data.duration_ms)} />
+					<Tile
+						label={t.stats.memory}
+						value={formatBytes(memory.process)}
+						detail={
+							container === null
+								? null
+								: t.stats.memoryContainer(formatBytes(container), formatBytes(memory.cache_active ?? 0))
+						}
+					/>
 				</div>
 			</div>
 

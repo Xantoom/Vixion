@@ -241,6 +241,14 @@ export interface Stats {
 	/** Only for those who manage the server. */
 	folders: { config: Folder; recordings: Folder } | null;
 	uptime_ms: number;
+	/** Bytes, as the kernel counts them; the cgroup's figures are null outside one. */
+	memory: {
+		process: number;
+		mapped: number;
+		cgroup: number | null;
+		cache_active: number | null;
+		cache_inactive: number | null;
+	};
 	version: string;
 }
 

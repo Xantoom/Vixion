@@ -198,6 +198,8 @@ export const fr: Messages = {
 		free: 'Libre',
 		perStreamer: 'Par streamer',
 		unmapped: 'Non monté : perdu si le conteneur est recréé',
+		memory: 'Mémoire du serveur',
+		memoryContainer: (container, cache) => `Conteneur : ${container}, dont ${cache} de cache disque`,
 	},
 	settings: {
 		server: 'Serveur',

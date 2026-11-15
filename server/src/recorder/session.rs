@@ -813,6 +813,7 @@ impl Session<'_> {
         if let Err(failure) = result {
             tracing::error!(%failure, "can't save the end of a recording");
         }
+        crate::media_server::forget_live_index(row);
         self.parts_done.push(row);
     }
 }

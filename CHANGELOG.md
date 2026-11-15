@@ -9,6 +9,18 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Added
+
+- The statistics show the server's memory, and the container's with how much of it is disk cache.
+
+### Fixed
+
+- Recorded and watched video no longer piles up in the disk cache, which Docker counts as the container's memory: it grew by hundreds of megabytes a day.
+- Connections of viewers whose network vanished are closed after about two minutes instead of staying open until a restart.
+- Emote lists and chat indexes are let go when nobody uses them, and a chat index takes a third less memory.
+- Log lines kept for the console are cut at 2 kB, and the database keeps a smaller cache.
+- The player keeps fewer preview pictures and chat lines in memory.
+
 ## [0.2.1] - 2026-11-15
 
 ### Fixed

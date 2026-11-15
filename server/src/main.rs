@@ -33,6 +33,7 @@ use std::time::{Duration, Instant};
 
 use axum::Router;
 use axum::middleware;
+use axum::serve::ListenerExt as _;
 
 use crate::app::{App, AppState};
 use crate::config::Config;
@@ -337,7 +338,7 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
         .fallback(web::serve)
         .layer(middleware::from_fn_with_state(app.clone(), web::security_headers))
         .with_state(app.clone());
-    let listener = tokio::net::TcpListener::bind(app.config.http_addr).await?;
+    let listener = tokio::net::TcpListener::bind(app.config.http_addr).await?.tap_io(|tcp| system::keep_alive(tcp));
     tracing::info!(address = %app.config.http_addr, "interface listening");
 
     let (shutdown, _) = tokio::sync::broadcast::channel::<()>(1);
@@ -356,7 +357,8 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
     let media_router = media_server::router().with_state(app.clone());
     let media = match &app.config.tls {
         None => {
-            let listener = tokio::net::TcpListener::bind(app.config.media_addr).await?;
+            let listener =
+                tokio::net::TcpListener::bind(app.config.media_addr).await?.tap_io(|tcp| system::keep_alive(tcp));
             tracing::info!(address = %app.config.media_addr, public = ?app.config.media_public_url, "video listening (HTTP)");
             let mut stop = shutdown.subscribe();
             tokio::spawn(async move {

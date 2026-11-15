@@ -2,7 +2,7 @@
 //! and FrankerFaceZ, which Twitch doesn't mark in the message (its own emotes are in the tags).
 //!
 //! Lists are fetched per channel and kept an hour: they change rarely and every viewer of a
-//! recording asks for the same ones. A provider that fails only leaves its emotes out.
+//! recording asks for the same ones. Expired lists are dropped, not just refreshed. A provider that fails only leaves its emotes out.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -35,6 +35,14 @@ pub struct ChatAssetCache {
 }
 
 impl ChatAssetCache {
+    /// Lets expired lists go: otherwise every channel ever recorded keeps its emotes for good.
+    pub fn purge(&self) {
+        if let Ok(mut map) = self.entries.lock() {
+            map.retain(|_, (at, keep, _)| at.elapsed() < *keep);
+            map.shrink_to_fit();
+        }
+    }
+
     pub async fn get(&self, twitch: &TwitchApi, http: &reqwest::Client, channel_id: &str) -> Arc<ChatAssets> {
         let cached = self.entries.lock().ok().and_then(|map| map.get(channel_id).cloned());
         if let Some((at, keep, assets)) = cached
@@ -57,6 +65,7 @@ impl ChatAssetCache {
         let assets = Arc::new(assets);
         let keep = if complete { KEEP } else { KEEP_INCOMPLETE };
         if let Ok(mut map) = self.entries.lock() {
+            map.retain(|_, (at, keep, _)| at.elapsed() < *keep);
             map.insert(channel_id.to_owned(), (Instant::now(), keep, Arc::clone(&assets)));
         }
         assets

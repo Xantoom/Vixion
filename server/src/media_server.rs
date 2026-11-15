@@ -11,8 +11,6 @@ use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use serde::Deserialize;
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
-use tokio_util::io::ReaderStream;
 
 use crate::app::AppState;
 use crate::error::{AppError, AppResult};
@@ -27,6 +25,45 @@ type LiveIndexes = std::sync::Mutex<std::collections::HashMap<i64, std::sync::Ar
 fn live_indexes() -> &'static LiveIndexes {
     static INDEXES: std::sync::OnceLock<LiveIndexes> = std::sync::OnceLock::new();
     INDEXES.get_or_init(Default::default)
+}
+
+/// Lets a recording's seek index go once its part is closed: a finished file carries its own.
+pub fn forget_live_index(id: i64) {
+    if let Ok(mut indexes) = live_indexes().lock() {
+        indexes.remove(&id);
+    }
+}
+
+/// `length` bytes of `file` from `start`, read a chunk at a time. Each chunk leaves the disk cache
+/// once read: a recording is watched once, and kept cached it would count as the server's memory.
+fn file_stream(
+    file: std::fs::File,
+    start: u64,
+    length: u64,
+) -> impl futures_util::Stream<Item = std::io::Result<bytes::Bytes>> + Send {
+    let file = std::sync::Arc::new(file);
+    futures_util::stream::try_unfold((file, start, length), |(file, at, left)| async move {
+        if left == 0 {
+            return Ok(None);
+        }
+        let size = usize::try_from(left.min(CHUNK as u64)).unwrap_or(CHUNK);
+        let reader = std::sync::Arc::clone(&file);
+        let chunk = tokio::task::spawn_blocking(move || -> std::io::Result<bytes::Bytes> {
+            use std::os::unix::fs::FileExt as _;
+            let mut buffer = vec![0u8; size];
+            let read = reader.read_at(&mut buffer, at)?;
+            if read == 0 {
+                return Err(std::io::ErrorKind::UnexpectedEof.into());
+            }
+            buffer.truncate(read);
+            crate::system::drop_cache(&reader, at, read as u64);
+            Ok(bytes::Bytes::from(buffer))
+        })
+        .await
+        .map_err(std::io::Error::other)??;
+        let read = chunk.len() as u64;
+        Ok(Some((chunk, (file, at + read, left - read))))
+    })
 }
 
 /// The recording's whole fragments so far and an index of them: (bytes of the file served, index).
@@ -176,11 +213,11 @@ async fn serve_file(
         .await?;
     let folder = storage::stream_dir(&app.config.streams_dir(), &dir).ok_or_else(AppError::not_found)?;
     let path = folder.join(storage::video_file(part));
-    let mut file = tokio::fs::File::open(&path).await?;
+    let file = tokio::fs::File::open(&path).await?;
     let meta = file.metadata().await?;
     let growing = status == "recording";
-    if !growing && let Ok(mut indexes) = live_indexes().lock() {
-        indexes.remove(&id);
+    if !growing {
+        forget_live_index(id);
     }
     // A recording still being written is served as a whole file: its fragments so far, then an index.
     let (on_disk, tail) = if growing { live_view(id, path.clone()).await? } else { (meta.len(), bytes::Bytes::new()) };
@@ -251,8 +288,7 @@ async fn serve_file(
     if from_disk == 0 {
         return Ok((status, headers, Body::from_stream(tail_stream)).into_response());
     }
-    file.seek(std::io::SeekFrom::Start(start)).await?;
-    let disk = ReaderStream::with_capacity(file.take(from_disk), CHUNK);
+    let disk = file_stream(file.into_std().await, start, from_disk);
     let body = Body::from_stream(futures_util::StreamExt::chain(disk, tail_stream));
     Ok((status, headers, body).into_response())
 }

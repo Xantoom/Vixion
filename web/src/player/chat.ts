@@ -5,8 +5,8 @@ import { type ChatLine, api } from '@/lib/api';
 export const SHOWN = 100;
 /** Chat is fetched five minutes ahead of the playhead as the video plays. */
 const AHEAD_MS = 5 * 60_000;
-/** Lines kept in memory at most: the oldest go first. */
-const KEPT = 30_000;
+/** Lines kept in memory at most: the oldest go first. Older ones come back from the server when scrolled to. */
+const KEPT = 5_000;
 
 interface Loaded {
 	/** Video time the loaded lines start from; everything after it up to `to` is there. */

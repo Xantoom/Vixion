@@ -68,6 +68,9 @@ pub async fn run(app: AppState) {
         if let Err(error) = result {
             tracing::error!(%error, "retention sweep failed");
         }
+        // Caches filled by viewers empty out when nobody watches.
+        app.chat_assets.purge();
+        crate::api::streams::purge_chat_cache();
         minutes = minutes.wrapping_add(1);
         tokio::time::sleep(Duration::from_secs(60)).await;
     }

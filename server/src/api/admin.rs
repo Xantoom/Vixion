@@ -73,6 +73,7 @@ pub async fn stats(State(app): State<AppState>, user: CurrentUser) -> AppResult<
         "recording": app.recorder.live().len(),
         "disk": disk,
         "uptime_ms": now_ms() - app.started_at,
+        "memory": system::memory(),
         // Host paths are for those who manage the server.
         "folders": user.can("settings.manage").then(|| json!({
             "config": system::folder(&app.config.data_dir),

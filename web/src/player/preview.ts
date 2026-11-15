@@ -2,8 +2,8 @@ import { CanvasSink, EncodedPacketSink, Input, MP4, UrlSource } from 'mediabunny
 
 /** Width of a preview picture, in pixels: sharp at twice the size it is shown. */
 const WIDTH = 320;
-/** Pictures kept, by keyframe: moving back over the bar shows them at once. */
-const KEPT = 120;
+/** Pictures kept, by keyframe: moving back over the bar shows them at once. About 230 kB each. */
+const KEPT = 40;
 
 type Picture = HTMLCanvasElement | OffscreenCanvas;
 

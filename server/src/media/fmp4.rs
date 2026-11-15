@@ -62,7 +62,14 @@ pub struct Writer {
     pub discontinuities: u32,
     /// Reopened after a stop: the first segment written is a cut, not the start.
     resumed: bool,
+    /// The file before this offset has left the disk cache; up to `queued`, it is being written out.
+    uncached: u64,
+    queued: u64,
 }
+
+/// Written video stays in the disk cache this long (in bytes) behind the end: enough for someone
+/// watching live, while the rest of a day of video doesn't sit in memory.
+const CACHE_TAIL: u64 = 8 << 20;
 
 fn timescaled(seconds: f64, timescale: u32) -> i64 {
     (seconds * f64::from(timescale)).round() as i64
@@ -101,6 +108,8 @@ impl Writer {
             video_frames: 0,
             discontinuities: 0,
             resumed: false,
+            uncached: 0,
+            queued: 0,
         })
     }
 
@@ -150,6 +159,8 @@ impl Writer {
             video_frames: frames,
             discontinuities: 0,
             resumed: true,
+            uncached: complete,
+            queued: complete,
         })
     }
 
@@ -380,7 +391,25 @@ impl Writer {
         }
         self.position += (moof.len() + header.len() + payload) as u64;
         // Readers following the recording see whole fragments.
-        self.out.flush()
+        self.out.flush()?;
+        self.release_cache();
+        Ok(())
+    }
+
+    /// Lets the disk cache go behind the end of the file. The recording is written once and read
+    /// rarely: kept cached, a day of video would count as the server's memory. What was queued
+    /// for writing one step ago is on disk by now, so the kernel can drop it at once.
+    fn release_cache(&mut self) {
+        if self.position - self.queued < CACHE_TAIL {
+            return;
+        }
+        let file = self.out.get_ref();
+        crate::system::start_writeback(file, self.queued, self.position - self.queued);
+        if self.queued > self.uncached {
+            crate::system::drop_cache(file, self.uncached, self.queued - self.uncached);
+        }
+        self.uncached = self.queued;
+        self.queued = self.position;
     }
 
     fn moof(&self, fragment: &Fragment, moof_size: usize) -> Vec<u8> {
@@ -434,6 +463,8 @@ impl Writer {
         self.out.write_all(&u64::try_from(progress.duration_ms).unwrap_or(0).to_be_bytes())?;
         self.out.flush()?;
         self.out.get_ref().sync_all()?;
+        // On disk now: none of it needs to stay cached.
+        crate::system::drop_cache(self.out.get_ref(), 0, 0);
         Ok(progress)
     }
 }

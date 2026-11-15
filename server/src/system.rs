@@ -1,4 +1,4 @@
-//! What the operating system knows: free disk space, and where a folder really lives.
+//! What the operating system knows: free disk space, memory, and where a folder really lives.
 
 use std::path::{Path, PathBuf};
 
@@ -30,6 +30,91 @@ pub fn disk_space(path: &Path) -> Option<DiskSpace> {
 #[cfg(not(unix))]
 pub fn disk_space(_path: &Path) -> Option<DiskSpace> {
     None
+}
+
+/// Memory as the kernel counts it, in bytes. The container's figure (what `docker stats` and
+/// monitoring tools show) includes the disk cache: recordings written and read stay in it until the
+/// kernel needs the room.
+#[derive(Debug, Clone, Copy, Default, serde::Serialize)]
+pub struct Memory {
+    /// The program's own memory: what it allocated.
+    pub process: u64,
+    /// Files the program has mapped (its own code, mostly).
+    pub mapped: u64,
+    /// The cgroup's total, cache included; None outside a cgroup v2.
+    pub cgroup: Option<u64>,
+    /// The cgroup's disk cache, recently used part (counted by `docker stats`) and the rest.
+    pub cache_active: Option<u64>,
+    pub cache_inactive: Option<u64>,
+}
+
+/// A `key value` line's value, from a `/proc` or cgroup file.
+fn field(text: &str, key: &str) -> Option<u64> {
+    text.lines().find_map(|line| {
+        let rest = line.strip_prefix(key)?;
+        let rest = rest.strip_prefix(':').unwrap_or(rest);
+        rest.split_whitespace().next()?.parse().ok()
+    })
+}
+
+pub fn memory() -> Memory {
+    let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+    let kib = |key| field(&status, key).map_or(0, |value| value * 1024);
+    // cgroup v2: one line, `0::/path`; `/` in a container with its own cgroup namespace.
+    let cgroup = std::fs::read_to_string("/proc/self/cgroup")
+        .ok()
+        .and_then(|text| text.lines().find_map(|line| line.strip_prefix("0::").map(str::to_owned)))
+        .map(|path| Path::new("/sys/fs/cgroup").join(path.trim_start_matches('/')));
+    let stat = cgroup.as_ref().and_then(|dir| std::fs::read_to_string(dir.join("memory.stat")).ok());
+    let current = cgroup
+        .as_ref()
+        .and_then(|dir| std::fs::read_to_string(dir.join("memory.current")).ok())
+        .and_then(|text| text.trim().parse().ok());
+    Memory {
+        process: kib("RssAnon"),
+        mapped: kib("RssFile") + kib("RssShmem"),
+        cgroup: current,
+        cache_active: stat.as_deref().and_then(|stat| field(stat, "active_file")),
+        cache_inactive: stat.as_deref().and_then(|stat| field(stat, "inactive_file")),
+    }
+}
+
+/// Tells the kernel a file's bytes from `offset` (`length` of them, 0 for the rest) won't be read
+/// again soon, so that its cache can go now rather than when memory runs short. Only pages already
+/// on disk go: those still being written stay until written.
+#[cfg(target_os = "linux")]
+pub fn drop_cache(file: &std::fs::File, offset: u64, length: u64) {
+    use std::os::fd::AsRawFd as _;
+    let (Ok(offset), Ok(length)) = (libc::off_t::try_from(offset), libc::off_t::try_from(length)) else { return };
+    // SAFETY: the descriptor is open for as long as `file` lives; the call only advises the kernel.
+    unsafe { libc::posix_fadvise(file.as_raw_fd(), offset, length, libc::POSIX_FADV_DONTNEED) };
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn drop_cache(_file: &std::fs::File, _offset: u64, _length: u64) {}
+
+/// Starts writing a file's range to disk without waiting, so that a later `drop_cache` finds it
+/// clean and can let it go.
+#[cfg(target_os = "linux")]
+pub fn start_writeback(file: &std::fs::File, offset: u64, length: u64) {
+    use std::os::fd::AsRawFd as _;
+    let (Ok(offset), Ok(length)) = (libc::off64_t::try_from(offset), libc::off64_t::try_from(length)) else { return };
+    // SAFETY: as above; SYNC_FILE_RANGE_WRITE only queues the writing.
+    unsafe { libc::sync_file_range(file.as_raw_fd(), offset, length, libc::SYNC_FILE_RANGE_WRITE) };
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn start_writeback(_file: &std::fs::File, _offset: u64, _length: u64) {}
+
+/// Has the kernel probe an idle connection: a viewer whose network vanished (a phone out of
+/// reach) never closes it, and without probes it would hold its memory until the server restarts.
+/// Dead after about two minutes of silence.
+pub fn keep_alive(tcp: &tokio::net::TcpStream) {
+    let probes = socket2::TcpKeepalive::new()
+        .with_time(std::time::Duration::from_secs(60))
+        .with_interval(std::time::Duration::from_secs(10))
+        .with_retries(6);
+    let _ = socket2::SockRef::from(tcp).set_tcp_keepalive(&probes);
 }
 
 /// One of Vixion's folders, as the administration shows it.
@@ -132,5 +217,16 @@ mod tests {
         assert_eq!(spaced.source_of(Path::new("/media")), "/home/me/my videos");
         // Not mounted: it lives in the container's own layer.
         assert_eq!(mount_of(MOUNTINFO, Path::new("/tmp/x")).unwrap().point, Path::new("/"));
+    }
+
+    #[test]
+    fn reads_kernel_fields() {
+        let status = "Name:\tvixion\nRssAnon:\t   12345 kB\nRssFile:\t    678 kB\n";
+        assert_eq!(field(status, "RssAnon"), Some(12345));
+        assert_eq!(field(status, "RssFile"), Some(678));
+        let stat = "anon 100\nfile 900\nactive_file 300\ninactive_file 600\n";
+        assert_eq!(field(stat, "active_file"), Some(300));
+        assert_eq!(field(stat, "file"), Some(900));
+        assert_eq!(field(stat, "missing"), None);
     }
 }

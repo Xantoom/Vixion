@@ -20,7 +20,7 @@ pub struct LogEntry {
     pub id: u64,
     pub at: i64,
     pub level: &'static str,
-    pub target: String,
+    pub target: &'static str,
     pub message: String,
     /// Structured fields, as `key=value` pairs.
     pub fields: String,
@@ -85,6 +85,23 @@ impl Visit for Fields {
     }
 }
 
+/// The most kept of a line's text: an error quoting a whole page would otherwise stay in the
+/// console's buffer, two thousand times over.
+const LONGEST: usize = 2048;
+
+fn clipped(mut text: String) -> String {
+    if text.len() > LONGEST {
+        let mut end = LONGEST;
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        text.truncate(end);
+        text.push('…');
+    }
+    text.shrink_to_fit();
+    text
+}
+
 struct BufferLayer(LogBuffer);
 
 impl<S: Subscriber> Layer<S> for BufferLayer {
@@ -102,9 +119,9 @@ impl<S: Subscriber> Layer<S> for BufferLayer {
                 Level::DEBUG => "debug",
                 Level::TRACE => "trace",
             },
-            target: metadata.target().to_owned(),
-            message: fields.message,
-            fields: fields.rest,
+            target: metadata.target(),
+            message: clipped(fields.message),
+            fields: clipped(fields.rest),
         });
     }
 }

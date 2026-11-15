@@ -97,6 +97,7 @@ pub async fn listen(addr: SocketAddr, slot: Arc<CertSlot>) -> std::io::Result<Tl
                 continue;
             };
             let _ = tcp.set_nodelay(true);
+            crate::system::keep_alive(&tcp);
             let (acceptor, sender) = (acceptor.clone(), sender.clone());
             tokio::spawn(async move {
                 if let Ok(Ok(stream)) = tokio::time::timeout(Duration::from_secs(10), acceptor.accept(tcp)).await {

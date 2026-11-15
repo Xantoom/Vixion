@@ -194,6 +194,8 @@ export const en = {
 		free: 'Free',
 		perStreamer: 'By streamer',
 		unmapped: 'Not mounted: lost if the container is recreated',
+		memory: 'Server memory',
+		memoryContainer: (container: string, cache: string) => `Container: ${container}, ${cache} of it disk cache`,
 	},
 	settings: {
 		server: 'Server',

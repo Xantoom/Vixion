@@ -305,19 +305,30 @@ pub async fn thumbnail(State(app): State<AppState>, user: CurrentUser, Path(id):
 /// Where one chat line sits in `chat.ndjson`, and its time in the video. The lines themselves
 /// stay on disk: a busy recording's index takes a few megabytes where the parsed lines took
 /// hundreds.
+/// 16 bytes: a busy recording has millions of lines.
 #[derive(Debug, Clone, Copy)]
 struct Entry {
-    /// Video time, milliseconds.
-    o: i64,
     offset: u64,
+    /// Video time, milliseconds: up to 24 days.
+    o: i32,
     len: u32,
 }
 
 /// Chat indexes kept in memory, by recording and file size, with when each was last used.
 type ChatCache = Mutex<HashMap<(i64, u64), (Arc<Vec<Entry>>, std::time::Instant)>>;
 
-/// Lines indexed across all cached chats: under a hundred megabytes, whatever their number.
-const CACHED_LINES: usize = 4_000_000;
+/// Lines indexed across all cached chats: about 30 megabytes, whatever their number.
+const CACHED_LINES: usize = 2_000_000;
+/// An index nobody asked for in this long goes: it is rebuilt in a second if needed again.
+const CACHE_IDLE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// Lets go of the chat indexes nobody read lately.
+pub fn purge_chat_cache() {
+    if let Ok(mut cache) = cache().lock() {
+        cache.retain(|_, (_, used)| used.elapsed() < CACHE_IDLE);
+        cache.shrink_to_fit();
+    }
+}
 
 fn cache() -> &'static ChatCache {
     static CACHE: OnceLock<ChatCache> = OnceLock::new();
@@ -351,10 +362,12 @@ fn index_chat(path: &std::path::Path, timeline: &Timeline, keep: impl Fn(i64) ->
         let text = line.trim_ascii_end();
         let Ok(len) = u32::try_from(text.len()) else { continue };
         let Ok(stamp) = serde_json::from_slice::<Stamp>(text) else { continue };
-        if let Some(o) = timeline.video_time(stamp.t).filter(|&o| keep(o)) {
-            entries.push(Entry { o, offset: here, len });
+        if let Some(o) = timeline.video_time(stamp.t).filter(|&o| keep(o)).and_then(|o| i32::try_from(o).ok()) {
+            entries.push(Entry { offset: here, o, len });
         }
     }
+    // Read once to index: no reason to keep the file cached.
+    crate::system::drop_cache(reader.get_ref(), 0, 0);
     entries.sort_by_key(|entry| entry.o);
     entries.shrink_to_fit();
     entries
@@ -374,13 +387,14 @@ fn read_lines(path: &std::path::Path, entries: &[Entry], mut each: impl FnMut(i6
             block.resize(len.max(256 * 1024), 0);
             let Ok(read) = file.read_at(&mut block, entry.offset) else { return };
             block.truncate(read);
+            crate::system::drop_cache(&file, entry.offset, read as u64);
             block_at = entry.offset;
             if read < len {
                 continue;
             }
         }
         let start = (entry.offset - block_at) as usize;
-        if !each(entry.o, &block[start..start + len]) {
+        if !each(i64::from(entry.o), &block[start..start + len]) {
             return;
         }
     }
@@ -408,6 +422,10 @@ async fn timed_chat(id: i64, located: &Located) -> AppResult<Arc<Vec<Entry>>> {
         })
     }) {
         return Ok(found);
+    }
+    // The index of an older size goes before the new one is built, not after: never both at once.
+    if let Ok(mut cache) = cache().lock() {
+        cache.retain(|(cached, _), (_, used)| *cached != id && used.elapsed() < CACHE_IDLE);
     }
     let timeline_path = located.dir.join(storage::timeline_file(located.part));
     let limit = located.duration_ms + 5_000;
@@ -472,14 +490,14 @@ pub async fn chat_window(
     let located = locate(&app, id).await?;
     let lines = timed_chat(id, &located).await?;
     let range = if let Some(before) = window.before {
-        let end = lines.partition_point(|line| line.o < before);
+        let end = lines.partition_point(|line| i64::from(line.o) < before);
         end.saturating_sub(window.limit.unwrap_or(100).min(1000))..end
     } else {
         let from = window.from.unwrap_or(0);
         // Times come from the query string: any number, which must not overflow.
         let to = window.to.unwrap_or(from.saturating_add(5 * 60_000)).min(from.saturating_add(30 * 60_000));
-        let start = lines.partition_point(|line| line.o < from);
-        let end = lines.partition_point(|line| line.o < to);
+        let start = lines.partition_point(|line| i64::from(line.o) < from);
+        let end = lines.partition_point(|line| i64::from(line.o) < to);
         start..end.max(start)
     };
     let chat_path = located.dir.join(storage::CHAT_FILE);
