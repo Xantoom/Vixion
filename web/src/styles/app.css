@@ -41,6 +41,10 @@
 	--focus: light-dark(#2f6bff, #7197ff);
 	--tip-bg: light-dark(#1d1d20, #0b0b0c);
 	--tip-ink: #f3f3f5;
+	/* On what is dark in either theme (the player, tooltips, toasts): the dark theme's values. */
+	--on-dark-accent: #ffb08f;
+	--on-dark-ok: #63dda3;
+	--on-dark-danger: #ff6b57;
 	--shadow-card: light-dark(0 1px 2px rgb(16 16 24 / 0.06), 0 1px 2px rgb(0 0 0 / 0.4));
 	--shadow-lift: light-dark(0 12px 28px -12px rgb(16 16 24 / 0.22), 0 14px 32px -14px rgb(0 0 0 / 0.7));
 	/* 3:1 against every surface it crosses, so how far a page has scrolled can be seen. */
@@ -121,6 +125,9 @@
 	--color-warn-soft: color-mix(in srgb, var(--warn) 12%, transparent);
 	--color-tip: var(--tip-bg);
 	--color-tip-ink: var(--tip-ink);
+	--color-on-dark-accent: var(--on-dark-accent);
+	--color-on-dark-ok: var(--on-dark-ok);
+	--color-on-dark-danger: var(--on-dark-danger);
 	--color-focus: var(--focus);
 }
 

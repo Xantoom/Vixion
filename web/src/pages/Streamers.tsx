@@ -46,9 +46,6 @@ export function StreamersPage() {
 			) : data.length === 0 ? (
 				<div className="panel-in border-line-2 flex flex-col items-center gap-3 rounded-lg border border-dashed px-6 py-20 text-center">
 					<h2 className="text-title font-semibold">{t.streamers.emptyTitle}</h2>
-					<p className="text-body text-muted max-w-md">
-						{canManage ? t.streamers.emptyLead : t.streamers.emptyLeadViewer}
-					</p>
 					{canManage ? (
 						<Button variant="accent" className="mt-3" onClick={focusChannelSearch}>
 							<Search size={17} />
@@ -140,9 +137,12 @@ const StreamerCard = memo(function StreamerCard({ streamer, priority }: { stream
 		<Link
 			to="/$login"
 			params={{ login: streamer.login }}
-			className={`group bg-card ring-line flex h-full flex-col overflow-hidden rounded-md shadow-(--shadow-card) ring-1 transition-[box-shadow,translate] duration-200 hover:-translate-y-0.5 hover:shadow-(--shadow-lift) ${streamer.monitored ? '' : 'opacity-60'}`}
+			className={`group bg-card ring-line flex h-full flex-col overflow-hidden rounded-md shadow-(--shadow-card) ring-1 transition-[box-shadow,translate] duration-200 hover:-translate-y-0.5 hover:shadow-(--shadow-lift)`}
 		>
-			<div className="bg-surface-2 relative aspect-[3/1] overflow-hidden">
+			{/* Not recorded: the pictures fade, the words stay readable and say so. */}
+			<div
+				className={`bg-surface-2 relative aspect-[3/1] overflow-hidden ${streamer.monitored ? '' : 'opacity-50 grayscale'}`}
+			>
 				<Banner
 					streamer={streamer}
 					priority={priority}
@@ -151,7 +151,13 @@ const StreamerCard = memo(function StreamerCard({ streamer, priority }: { stream
 			</div>
 			<div className="flex items-center gap-4 px-5 pt-0 pb-5">
 				<span className="bg-card relative -mt-7 flex-none self-start rounded-full p-1">
-					<Avatar src={streamer.avatar_url} name={streamer.display_name} size={64} live={live} />
+					<Avatar
+						src={streamer.avatar_url}
+						name={streamer.display_name}
+						size={64}
+						live={live}
+						className={streamer.monitored ? '' : 'opacity-50 grayscale'}
+					/>
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col gap-1 pt-3">
 					<span className="flex items-center gap-2">
@@ -161,6 +167,7 @@ const StreamerCard = memo(function StreamerCard({ streamer, priority }: { stream
 						{live ? <LiveDot /> : null}
 					</span>
 					<span className="text-small text-muted truncate">
+						{streamer.monitored ? null : `${t.streamers.paused} · `}
 						{t.streamers.streams(streamer.stream_count)}
 						{lastLive ? (
 							<span data-tip={t.streamers.lastLiveTip}> · {formatRelative(lastLive)}</span>

@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CircleAlert, CircleCheck, Info, OctagonAlert, Pause, Play, Trash2, X } from 'lucide-react';
 import { memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '@/i18n';
+import { alertText } from '@/lib/alerts';
 import { type Alert, type LogEntry, api } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { useCan } from '@/lib/session';
@@ -12,6 +13,7 @@ import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
 
 const MAX_LINES = 2000;
+
 type Level = 'all' | 'warn' | 'error';
 
 const LEVEL_STYLE: Record<string, string> = {
@@ -50,6 +52,17 @@ function haystack(line: LogEntry): string {
 	return text;
 }
 
+function AlertText({ alert }: { alert: Alert }) {
+	const t = useT();
+	const { title, detail: more } = alertText(alert, t);
+	return (
+		<>
+			<p className="text-ui break-words">{title}</p>
+			{more ? <p className="text-small text-ink-2 mt-0.5 font-mono break-words">{more}</p> : null}
+		</>
+	);
+}
+
 /** One line of the console: drawn once, not again for each line that arrives after it. */
 const LogRow = memo(function LogRow({ line }: { line: LogEntry }) {
 	return (
@@ -60,7 +73,7 @@ const LogRow = memo(function LogRow({ line }: { line: LogEntry }) {
 				<span className="text-ink">{line.message}</span>
 				{line.fields ? <span className="text-muted"> {line.fields}</span> : null}
 				{/* Vixion's own lines don't repeat its name; a library's say which. */}
-				{line.target.startsWith('vixion') ? null : <span className="text-muted/60"> {line.target}</span>}
+				{line.target.startsWith('vixion') ? null : <span className="text-muted"> {line.target}</span>}
 			</span>
 		</div>
 	);
@@ -120,7 +133,7 @@ function Alerts() {
 								<Info size={18} className="text-muted mt-0.5 flex-none" />
 							)}
 							<div className="min-w-0 flex-1">
-								<p className="text-ui break-words">{alert.message}</p>
+								<AlertText alert={alert} />
 								<p className="text-caption text-muted mt-0.5">{formatRelative(alert.created_at)}</p>
 							</div>
 							<IconButton size="sm" label={t.logs.dismiss} onClick={() => void dismiss(alert.id)}>

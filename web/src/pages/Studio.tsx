@@ -584,12 +584,13 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						<Spinner size={40} />
 					</div>
 				) : null}
+				{/* On a small player the bar's own button is enough: this one would cover the picture. */}
 				{!opening && !state.playing && !error ? (
 					<button
 						type="button"
 						aria-label={t.player.play}
 						onClick={togglePlay}
-						className="absolute top-1/2 left-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition-transform duration-150 hover:scale-105 @md:size-20"
+						className="absolute top-1/2 left-1/2 grid size-14 -translate-x-1/2 @max-md:hidden -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition-transform duration-150 hover:scale-105 @md:size-20"
 					>
 						<Play fill="currentColor" className="ml-1 size-6 @md:size-[34px]" />
 					</button>
@@ -815,7 +816,7 @@ function PlayerButton({
 			data-tip={label}
 			aria-pressed={pressed}
 			onClick={onClick}
-			className={`touch-target relative grid size-10 flex-none place-items-center rounded-full text-white/90 transition-colors duration-150 hover:bg-white/15 hover:text-white aria-pressed:text-[color:var(--accent-text)] sm:size-11 ${className}`}
+			className={`touch-target relative grid size-10 flex-none place-items-center rounded-full text-white/90 transition-colors duration-150 hover:bg-white/15 hover:text-white aria-pressed:text-on-dark-accent sm:size-11 ${className}`}
 		>
 			{children}
 			{pressed ? <span className="absolute bottom-1 size-1 rounded-full bg-current" /> : null}
@@ -878,7 +879,7 @@ function StreamOverlay({ stream, visible }: { stream: StreamDetail; visible: boo
 						) : null}
 					</div>
 					{stream.error ? (
-						<p className="text-small mt-1 text-red-300">
+						<p className="text-small text-on-dark-danger mt-1">
 							{t.stream.error}: {stream.error}
 						</p>
 					) : null}

@@ -15,6 +15,9 @@ interface Tip {
 
 const DELAY_MS = 300;
 const MARGIN = 8;
+/** What does something when tapped: its tip stays for the mouse and the keyboard. */
+const CONTROL =
+	'a[href], button, input, select, textarea, label, [role=button], [role=switch], [role=slider], [role=tab]';
 
 /**
  * One tooltip for the whole app: any element with `data-tip` shows its text when the mouse rests
@@ -61,22 +64,43 @@ export function Tooltips() {
 					show(element);
 				}, DELAY_MS);
 		};
+		// A finger can't rest on something: a tap on what only explains (an info icon, an emote, a
+		// badge) shows its tip, a second tap or a tap elsewhere hides it.
+		const onDown = (event: PointerEvent) => {
+			const element =
+				event.pointerType === 'mouse'
+					? null
+					: ((event.target as Element | null)?.closest<HTMLElement>('[data-tip]') ?? null);
+			if (!element || element.closest(CONTROL)) {
+				hide();
+				return;
+			}
+			const again = element === current;
+			hide();
+			if (again) return;
+			current = element;
+			show(element);
+		};
+		// Only the focus leaving what shows the tip hides it: a tap moves the focus too.
+		const onBlur = (event: FocusEvent) => {
+			if (!current || current.contains(event.target as Node)) hide();
+		};
 		const onFocus = (event: FocusEvent) => {
 			const element = (event.target as Element | null)?.closest<HTMLElement>('[data-tip]');
 			if (element?.matches(':focus-visible')) show(element);
 		};
 		document.addEventListener('pointerover', onOver);
-		document.addEventListener('pointerdown', hide, true);
+		document.addEventListener('pointerdown', onDown, true);
 		document.addEventListener('focusin', onFocus);
-		document.addEventListener('focusout', hide);
+		document.addEventListener('focusout', onBlur);
 		document.addEventListener('keydown', hide);
 		window.addEventListener('scroll', hide, true);
 		return () => {
 			hide();
 			document.removeEventListener('pointerover', onOver);
-			document.removeEventListener('pointerdown', hide, true);
+			document.removeEventListener('pointerdown', onDown, true);
 			document.removeEventListener('focusin', onFocus);
-			document.removeEventListener('focusout', hide);
+			document.removeEventListener('focusout', onBlur);
 			document.removeEventListener('keydown', hide);
 			window.removeEventListener('scroll', hide, true);
 		};

@@ -9,7 +9,7 @@ import { Field, PasswordInput, TextInput } from '@/ui/Field';
 import { Logo } from '@/ui/Logo';
 import { LocaleMenu, ThemeButton } from './Shell';
 
-function AuthFrame({ title, lead, children }: { title: string; lead: string; children: ReactNode }) {
+function AuthFrame({ title, lead, children }: { title: string; lead?: string; children: ReactNode }) {
 	return (
 		<main className="relative grid min-h-dvh place-items-center px-4 py-16">
 			<div className="absolute top-3 right-3 flex items-center gap-1 sm:top-4 sm:right-4">
@@ -21,7 +21,7 @@ function AuthFrame({ title, lead, children }: { title: string; lead: string; chi
 					<Logo size={44} />
 					<div>
 						<h1 className="text-heading font-semibold tracking-tight">{title}</h1>
-						<p className="text-ui text-ink-2 mt-2">{lead}</p>
+						{lead ? <p className="text-ui text-ink-2 mt-2">{lead}</p> : null}
 					</div>
 				</div>
 				<div className="bg-card ring-line rounded-md p-6 shadow-(--shadow-card) ring-1">{children}</div>
@@ -163,7 +163,7 @@ export function LoginPage() {
 	};
 
 	return (
-		<AuthFrame title={t.auth.loginTitle} lead={t.auth.loginLead}>
+		<AuthFrame title={t.auth.loginTitle}>
 			<form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
 				<Field label={t.auth.username}>
 					{(id) => (

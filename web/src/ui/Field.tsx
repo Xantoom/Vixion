@@ -64,7 +64,7 @@ export function PasswordInput({ className = '', ...props }: Omit<InputHTMLAttrib
 				onClick={() => {
 					setShown((value) => !value);
 				}}
-				className="text-muted hover:text-ink absolute top-1/2 right-1 grid size-9 -translate-y-1/2 place-items-center rounded-xs transition-colors"
+				className="text-muted hover:text-ink touch-target absolute top-1/2 right-1 grid size-9 -translate-y-1/2 place-items-center rounded-xs transition-colors"
 			>
 				{shown ? <EyeOff size={18} /> : <Eye size={18} />}
 			</button>
@@ -191,14 +191,34 @@ export function Segmented<T extends string>({
 	onChange: (value: T) => void;
 	label: string;
 }) {
+	// One stop for Tab, the arrows move the choice, as for radio buttons.
+	const enabled = options.filter((option) => !option.disabled);
+	const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+		const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+		if (step === undefined || enabled.length === 0) return;
+		event.preventDefault();
+		const index = enabled.findIndex((option) => option.value === value);
+		const next = enabled[(index + step + enabled.length) % enabled.length];
+		if (!next) return;
+		onChange(next.value);
+		event.currentTarget.querySelector<HTMLElement>(`[data-value="${CSS.escape(next.value)}"]`)?.focus();
+	};
+	const focusable = enabled.some((option) => option.value === value) ? value : enabled[0]?.value;
 	return (
-		<div role="radiogroup" aria-label={label} className="bg-surface inline-flex flex-wrap gap-0.5 rounded-sm p-0.5">
+		<div
+			role="radiogroup"
+			aria-label={label}
+			onKeyDown={onKeyDown}
+			className="bg-surface inline-flex flex-wrap gap-0.5 rounded-sm p-0.5"
+		>
 			{options.map((option) => (
 				<button
 					key={option.value}
 					type="button"
 					role="radio"
+					data-value={option.value}
 					aria-checked={option.value === value}
+					tabIndex={option.value === focusable ? 0 : -1}
 					disabled={option.disabled}
 					onClick={() => {
 						onChange(option.value);

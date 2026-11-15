@@ -65,7 +65,7 @@ function Section({
 					type="button"
 					onClick={onAdd}
 					aria-label={add}
-					className="text-small text-accent-text touch-target inline-flex items-center gap-1 rounded-xs font-semibold hover:underline"
+					className="text-small text-accent-text touch-target relative -mr-1.5 inline-flex h-8 items-center gap-1 rounded-xs px-1.5 font-semibold hover:underline"
 				>
 					<Plus size={15} strokeWidth={2.4} />
 					{t.common.add}
@@ -508,9 +508,7 @@ function UserDialog({
 							throw caught;
 						}
 					}}
-				>
-					{t.users.deleteLead}
-				</Confirm>
+				/>
 			) : null}
 		</Dialog>
 	);

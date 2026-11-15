@@ -98,9 +98,12 @@ export function Dialog({
 						<X size={18} />
 					</IconButton>
 				</header>
-				<div data-dialog-body className="overflow-y-auto px-6 pt-1 pb-7 sm:px-7">
-					{children}
-				</div>
+				{/* A confirmation can be its title alone. */}
+				{children ? (
+					<div data-dialog-body className="overflow-y-auto px-6 pt-1 pb-7 sm:px-7">
+						{children}
+					</div>
+				) : null}
 				{footer ? (
 					<footer className="border-line bg-surface flex flex-wrap justify-end gap-2 border-t px-6 py-4 sm:px-7">
 						{footer}
@@ -159,7 +162,7 @@ export function Confirm({
 				</>
 			}
 		>
-			<div className="text-ui text-ink-2">{children}</div>
+			{children ? <div className="text-ui text-ink-2">{children}</div> : null}
 		</Dialog>
 	);
 }

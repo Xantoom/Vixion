@@ -150,7 +150,7 @@ export function Timeline({
 			ref={bar}
 			role="slider"
 			tabIndex={0}
-			aria-label={t.player.chapters}
+			aria-label={t.player.seek}
 			aria-valuemin={0}
 			aria-valuemax={Math.round(duration)}
 			aria-valuenow={Math.round(time)}

@@ -14,7 +14,7 @@ export function NotFound({ forbidden = false }: { forbidden?: boolean }) {
 				<h1 className="text-title font-semibold tracking-tight">
 					{forbidden ? t.errors.forbidden : t.errors.notFound}
 				</h1>
-				<p className="text-body text-muted">{forbidden ? t.errors.forbiddenLead : t.errors.notFoundLead}</p>
+				{forbidden ? <p className="text-body text-muted">{t.errors.forbiddenLead}</p> : null}
 			</div>
 			<Link
 				to="/"
@@ -36,7 +36,6 @@ export function PageError({ error }: { error: unknown }) {
 			</span>
 			<div className="flex flex-col gap-3">
 				<h1 className="text-title font-semibold tracking-tight">{t.errors.crashed}</h1>
-				<p className="text-body text-muted">{t.errors.crashedLead}</p>
 				{error instanceof Error && error.message ? (
 					<p className="text-small text-muted font-mono break-words">{error.message}</p>
 				) : null}

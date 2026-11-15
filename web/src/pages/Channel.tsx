@@ -837,9 +837,8 @@ function RemoveDialog({ streamer, open, onClose }: { streamer: Streamer; open: b
 				}
 			}}
 		>
-			<p>{t.streamer.removeLead}</p>
 			{streamer.stream_count > 0 ? (
-				<div className="bg-danger-soft mt-4 flex flex-col gap-1 rounded-sm p-3">
+				<div className="bg-danger-soft flex flex-col gap-1 rounded-sm p-3">
 					<span className="text-danger font-medium">
 						{t.streamer.removeRecordings(streamer.stream_count)}
 					</span>

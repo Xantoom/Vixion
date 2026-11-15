@@ -133,7 +133,7 @@ export function Shell() {
 								{admin ? (
 									<Link
 										to={admin}
-										aria-label={t.nav.admin}
+										aria-label={alerts > 0 ? t.nav.adminAlerts(alerts) : t.nav.admin}
 										data-tip={t.nav.admin}
 										aria-current={inAdmin ? 'page' : undefined}
 										className="text-muted hover:text-ink hover:bg-surface aria-[current=page]:text-ink aria-[current=page]:bg-surface relative grid size-10 place-items-center rounded-sm transition-colors"

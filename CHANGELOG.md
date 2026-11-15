@@ -19,6 +19,18 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 - Subscriber badges say for how long: "Subscriber for 1 year 2 months", with the tier above 1. Chat recorded from now on keeps Twitch's exact months; older recordings use the badge's step.
 - Every badge's hint is in the interface's language (founder, bits, gift subs, predictions…), and others use Twitch's title instead of their internal name.
+- Interface texts are shorter: no welcome lines or explanations of what the screen already shows.
+- Alerts are shown in the interface's language, with the error itself kept as a detail.
+- A channel that isn't recorded says so on its card, and only its pictures fade.
+- On a phone, tapping an info icon, an emote or a badge shows its hint.
+- The player's seek bar is announced as the playback position, and the administration link says how many alerts are open.
+- Segmented choices take one Tab stop and move with the arrow keys.
+
+### Fixed
+
+- The player's active buttons, its error text and the toasts' icons keep readable colours in the light theme.
+- Library names in the logs are readable, and the add buttons of the users page and the show-password button are big enough to tap.
+- On a small player, the large play button no longer covers the picture.
 
 ## [0.2.2] - 2026-11-15
 

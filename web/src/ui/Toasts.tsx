@@ -140,9 +140,9 @@ export function Toasts() {
 						data-up="true"
 					>
 						{item.kind === 'ok' ? (
-							<CircleCheck size={18} className="text-ok flex-none" aria-hidden />
+							<CircleCheck size={18} className="text-on-dark-ok flex-none" aria-hidden />
 						) : (
-							<CircleAlert size={18} className="text-danger flex-none" aria-hidden />
+							<CircleAlert size={18} className="text-on-dark-danger flex-none" aria-hidden />
 						)}
 						{item.text}
 					</button>

@@ -41,7 +41,7 @@ export function InfoTip({ text }: { text: string }) {
 			role="img"
 			aria-label={text}
 			data-tip={text}
-			className="text-muted hover:text-ink inline-grid size-5 flex-none cursor-help place-items-center rounded-full transition-colors"
+			className="text-muted hover:text-ink touch-target relative inline-grid size-5 flex-none cursor-help place-items-center rounded-full transition-colors"
 		>
 			<Info size={15} />
 		</span>
