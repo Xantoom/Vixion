@@ -93,7 +93,6 @@ export function Menu({
 			});
 		};
 		measure();
-		items(menu)[0]?.focus({ preventScroll: true });
 		// The button moves with the page: the panel follows it.
 		const onMove = (event: Event) => {
 			if (event.target !== menu) measure();
@@ -105,6 +104,14 @@ export function Menu({
 			window.removeEventListener('resize', measure);
 		};
 	}, [open, align]);
+
+	// The first item takes the focus once the panel is placed: hidden until then, it can't.
+	const placed = place !== null;
+	useLayoutEffect(() => {
+		const menu = panel.current;
+		if (!open || !placed || !menu || menu.contains(document.activeElement)) return;
+		items(menu)[0]?.focus({ preventScroll: true });
+	}, [open, placed]);
 
 	const onKeyDown = (event: React.KeyboardEvent) => {
 		const list = items(panel.current);

@@ -33,23 +33,39 @@ export function Dialog({
 	const titleId = useId();
 	const t = useT();
 
+	// Still on the page for one render after `open` turns false: close() runs on it first, which
+	// returns the focus to what opened the dialog. Removing an open dialog would drop it instead.
+	const [shown, setShown] = useState(open);
+	if (open && !shown) setShown(true);
+
 	useLayoutEffect(() => {
 		const dialog = ref.current;
-		if (!open || !dialog) return;
-		if (!dialog.open) {
+		if (!dialog) return;
+		if (open && !dialog.open) {
 			dialog.showModal();
 			// showModal() focuses the first control, the close button: a field is where to type, and
 			// a confirmation starts on its safe choice.
 			dialog.querySelector<HTMLElement>(`[data-autofocus], ${FIRST_FIELD}`)?.focus();
-		}
-		// Runs before the element is removed, whether the dialog or a parent goes away: close()
-		// returns the focus to what opened it, which a removal alone doesn't.
-		return () => {
+		} else if (!open) {
 			if (dialog.open) dialog.close();
-		};
-	}, [open]);
+			// oxlint-disable-next-line react/set-state-in-effect -- after close() on the element, not before
+			setShown(false);
+		}
+	}, [open, shown]);
 
-	if (!open) return null;
+	// When a parent removes the dialog while it is open: this runs before the element goes.
+	const last = useRef<HTMLDialogElement | null>(null);
+	useLayoutEffect(() => {
+		last.current = ref.current;
+	});
+	useLayoutEffect(
+		() => () => {
+			if (last.current?.open) last.current.close();
+		},
+		[],
+	);
+
+	if (!open && !shown) return null;
 	return (
 		<dialog
 			ref={ref}
