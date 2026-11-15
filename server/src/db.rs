@@ -63,7 +63,9 @@ impl Db {
     {
         let writer = Arc::clone(&self.writer);
         tokio::task::spawn_blocking(move || {
-            let mut conn = writer.lock().map_err(|_| AppError::internal("database lock poisoned"))?;
+            // A panic in an earlier call poisons the lock, but leaves the connection sound: SQLite
+            // rolled back what that call had open. Refusing it would stop every write until restart.
+            let mut conn = writer.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             f(&mut conn)
         })
         .await
@@ -78,11 +80,15 @@ impl Db {
     {
         let readers = Arc::clone(&self.readers);
         tokio::task::spawn_blocking(move || {
+            // Poisoned or not, as for the writer: a read leaves nothing half done.
             let guard = readers
                 .iter()
-                .find_map(|reader| reader.try_lock().ok())
-                .map_or_else(|| readers[0].lock(), Ok)
-                .map_err(|_| AppError::internal("database lock poisoned"))?;
+                .find_map(|reader| match reader.try_lock() {
+                    Ok(guard) => Some(guard),
+                    Err(std::sync::TryLockError::Poisoned(poisoned)) => Some(poisoned.into_inner()),
+                    Err(std::sync::TryLockError::WouldBlock) => None,
+                })
+                .unwrap_or_else(|| readers[0].lock().unwrap_or_else(std::sync::PoisonError::into_inner));
             f(&guard)
         })
         .await

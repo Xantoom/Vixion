@@ -506,12 +506,14 @@ fn start(app: &AppState, streamer_id: i64, channel: &Channel, twitch_stream_id: 
         game: stream.game.as_ref().map(|game| game.name.clone()),
         progress: Arc::clone(&progress),
     };
-    if let Ok(mut sessions) = app.recorder.sessions.lock() {
-        if sessions.contains_key(&streamer_id) {
-            return;
-        }
-        sessions.insert(streamer_id, handle);
+    // Without the session in the list, nothing could stop it and the next round would start
+    // another: a poisoned list starts nothing.
+    let Ok(mut sessions) = app.recorder.sessions.lock() else { return };
+    if sessions.contains_key(&streamer_id) {
+        return;
     }
+    sessions.insert(streamer_id, handle);
+    drop(sessions);
     let info = session::Broadcast {
         streamer_id,
         login: channel.login.clone(),
