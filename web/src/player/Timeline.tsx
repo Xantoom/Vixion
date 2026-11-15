@@ -1,4 +1,11 @@
-import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
+import {
+	type KeyboardEvent as ReactKeyboardEvent,
+	type PointerEvent as ReactPointerEvent,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from 'react';
 import { useT } from '@/i18n';
 import type { StreamDetail } from '@/lib/api';
 import { formatClock, formatDuration } from '@/lib/format';
@@ -92,6 +99,27 @@ export function Timeline({
 		onScrub(null);
 	};
 
+	// A slider's keys: up and right go forward, as for any slider (not the volume, as elsewhere
+	// on the player), Page keys a minute. Kept from the player's own shortcuts.
+	const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (duration <= 0 || event.ctrlKey || event.metaKey || event.altKey) return;
+		const steps: Record<string, number> = {
+			ArrowRight: time + 5,
+			ArrowUp: time + 5,
+			ArrowLeft: time - 5,
+			ArrowDown: time - 5,
+			PageUp: time + 60,
+			PageDown: time - 60,
+			Home: 0,
+			End: duration - 1,
+		};
+		const target = steps[event.key];
+		if (target === undefined) return;
+		event.preventDefault();
+		event.stopPropagation();
+		onSeek(Math.max(0, Math.min(duration, target)));
+	};
+
 	// The picture under the pointer, drawn when it comes; the last one stays until then.
 	const picture = useRef<HTMLCanvasElement>(null);
 	const [pictured, setPictured] = useState(false);
@@ -127,6 +155,7 @@ export function Timeline({
 			aria-valuemax={Math.round(duration)}
 			aria-valuenow={Math.round(time)}
 			aria-valuetext={formatClock(time)}
+			onKeyDown={onKeyDown}
 			onPointerDown={onPointerDown}
 			onPointerMove={onPointerMove}
 			onPointerUp={onPointerUp}

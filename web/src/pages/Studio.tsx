@@ -102,6 +102,120 @@ function useFullscreen(target: React.RefObject<HTMLElement | null>) {
 	return { active, toggle, native };
 }
 
+/**
+ * The system's media controls (lock screen, notification, keyboard media keys, headset): what is
+ * playing, its position, and play, pause and seeking from there.
+ */
+function useMediaSession({
+	stream,
+	playing,
+	time,
+	duration,
+	togglePlay,
+	seekBy,
+	seekTo,
+}: {
+	stream: StreamDetail;
+	playing: boolean;
+	time: number;
+	duration: number;
+	togglePlay: () => void;
+	seekBy: (delta: number) => void;
+	seekTo: (seconds: number) => void;
+}) {
+	const t = useT();
+	const title = stream.title || t.stream.untitled;
+	useEffect(() => {
+		if (!('mediaSession' in navigator)) return;
+		const artwork = stream.has_thumbnail
+			? [{ src: `/api/streams/${stream.id}/thumbnail`, type: 'image/jpeg' }]
+			: stream.streamer_avatar
+				? [{ src: stream.streamer_avatar }]
+				: [];
+		navigator.mediaSession.metadata = new MediaMetadata({
+			title,
+			artist: stream.streamer_name,
+			album: stream.game ?? undefined,
+			artwork,
+		});
+		return () => {
+			navigator.mediaSession.metadata = null;
+		};
+	}, [stream.id, stream.has_thumbnail, stream.streamer_avatar, stream.streamer_name, stream.game, title]);
+
+	useEffect(() => {
+		if (!('mediaSession' in navigator)) return;
+		const session = navigator.mediaSession;
+		const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
+			[
+				'play',
+				() => {
+					if (!playing) togglePlay();
+				},
+			],
+			[
+				'pause',
+				() => {
+					if (playing) togglePlay();
+				},
+			],
+			[
+				'seekbackward',
+				(details) => {
+					seekBy(-(details.seekOffset ?? 10));
+				},
+			],
+			[
+				'seekforward',
+				(details) => {
+					seekBy(details.seekOffset ?? 10);
+				},
+			],
+			[
+				'seekto',
+				(details) => {
+					if (details.seekTime !== undefined) seekTo(details.seekTime);
+				},
+			],
+		];
+		for (const [action, handler] of handlers) {
+			try {
+				session.setActionHandler(action, handler);
+			} catch {
+				// An action this browser doesn't know.
+			}
+		}
+		return () => {
+			for (const [action] of handlers) {
+				try {
+					session.setActionHandler(action, null);
+				} catch {
+					// Same as above.
+				}
+			}
+		};
+	}, [playing, togglePlay, seekBy, seekTo]);
+
+	useEffect(() => {
+		if ('mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+	}, [playing]);
+
+	// The position, for the system's own bar: once a second is plenty.
+	const second = Math.floor(time);
+	useEffect(() => {
+		if (!('mediaSession' in navigator) || !(duration > 0)) return;
+		try {
+			navigator.mediaSession.setPositionState({
+				duration,
+				position: Math.min(second, duration),
+				playbackRate: 1,
+			});
+		} catch {
+			// A position past the end, while the duration settles.
+		}
+	}, [second, duration]);
+}
+
 export function StudioPage() {
 	const { login, id } = useRouteParams();
 	const navigate = useNavigate();
@@ -391,6 +505,8 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 		};
 	}, [togglePlay, seekBy, seekTo, fullscreen, toggleChat, duration, poke]);
 
+	useMediaSession({ stream, playing: state.playing, time, duration, togglePlay, seekBy, seekTo });
+
 	const shown = scrub ?? time;
 	const downloads = {
 		video: stream.download_url,
@@ -501,7 +617,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 
 				{/* Controls */}
 				<div
-					className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-2 pt-8 pb-1 text-white transition-opacity duration-300 @md:px-3 @md:pt-14 @md:pb-2 @2xl:px-5 @2xl:pb-3 ${overlay ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+					className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-2 pt-8 pb-1 text-white transition-opacity duration-300 @md:px-3 @md:pt-14 @md:pb-2 @2xl:px-5 @2xl:pb-3 ${overlay ? 'opacity-100' : 'pointer-events-none opacity-0 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100'}`}
 				>
 					<Timeline
 						duration={duration}

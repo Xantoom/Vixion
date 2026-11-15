@@ -56,6 +56,26 @@ async function nextFrame() {
 	await new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
+/** How often the clock is read in a hidden tab, where the browser runs no animation frames. */
+const HIDDEN_TICK_MS = 250;
+
+/**
+ * The next frame, or a timer in a hidden tab: sound plays on there, and its end, its stalls and
+ * the position to remember must still be noticed. Returns what cancels it.
+ */
+function schedule(callback: () => void): () => void {
+	if (document.hidden) {
+		const timer = window.setTimeout(callback, HIDDEN_TICK_MS);
+		return () => {
+			window.clearTimeout(timer);
+		};
+	}
+	const frame = requestAnimationFrame(callback);
+	return () => {
+		cancelAnimationFrame(frame);
+	};
+}
+
 /**
  * Plays an MP4 with Mediabunny: the file is read in ranges over HTTP, pictures are decoded with
  * WebCodecs and drawn on a canvas, sound is decoded about a second ahead and scheduled on the Web
@@ -91,7 +111,7 @@ export class MediabunnyEngine implements Engine {
 	private playing = false;
 	private waiting = false;
 	private run = 0;
-	private frame = 0;
+	private cancelTick: () => void = () => {};
 	private stillRequest: number | null = null;
 	private stillBusy = false;
 	private disposed = false;
@@ -113,6 +133,7 @@ export class MediabunnyEngine implements Engine {
 		this.canvas = document.createElement('canvas');
 		this.canvas.className = 'block size-full object-contain';
 		this.ready = this.open(durationHint);
+		document.addEventListener('visibilitychange', this.onVisibility);
 	}
 
 	private async open(durationHint: number): Promise<number> {
@@ -211,8 +232,16 @@ export class MediabunnyEngine implements Engine {
 		void this.ready.then(() => this.output?.setCompressor(enabled)).catch(() => undefined);
 	}
 
+	/** A frame asked for before the tab was hidden never comes: the clock switches to a timer. */
+	private onVisibility = () => {
+		if (!this.playing) return;
+		this.cancelTick();
+		this.cancelTick = schedule(this.tick);
+	};
+
 	dispose() {
 		this.disposed = true;
+		document.removeEventListener('visibilitychange', this.onVisibility);
 		this.stop();
 		void this.context.close();
 		this.input.dispose();
@@ -228,8 +257,8 @@ export class MediabunnyEngine implements Engine {
 
 	private stop() {
 		this.run += 1;
-		cancelAnimationFrame(this.frame);
-		this.frame = 0;
+		this.cancelTick();
+		this.cancelTick = () => {};
 		for (const node of this.nodes) {
 			node.onended = null;
 			try {
@@ -260,7 +289,7 @@ export class MediabunnyEngine implements Engine {
 			this.emit();
 		}
 		void this.pumpPictures(run, from);
-		this.frame = requestAnimationFrame(this.tick);
+		this.cancelTick = schedule(this.tick);
 	}
 
 	/** Every frame: report the time, notice a stall or the end. */
@@ -281,7 +310,7 @@ export class MediabunnyEngine implements Engine {
 			void this.context.suspend();
 			this.emit();
 		}
-		this.frame = requestAnimationFrame(this.tick);
+		this.cancelTick = schedule(this.tick);
 	};
 
 	private async pumpAudio(run: number, from: number) {
@@ -483,12 +512,24 @@ export class ElementEngine implements Engine {
 				{ once: true },
 			);
 		});
+		// Smooth while playing in sight; timeupdate covers a hidden tab and a pause costs nothing.
+		video.addEventListener('timeupdate', () => {
+			this.onTime(video.currentTime);
+		});
 		const tick = () => {
-			if (!video.paused) this.onTime(video.currentTime);
+			this.frame = 0;
+			if (video.paused || document.hidden) return;
+			this.onTime(video.currentTime);
 			this.frame = requestAnimationFrame(tick);
 		};
-		this.frame = requestAnimationFrame(tick);
+		this.loop = () => {
+			if (this.frame === 0) this.frame = requestAnimationFrame(tick);
+		};
+		video.addEventListener('play', this.loop);
+		document.addEventListener('visibilitychange', this.loop);
 	}
+
+	private readonly loop: () => void;
 
 	attach(container: HTMLElement) {
 		container.replaceChildren(this.video);
@@ -545,6 +586,7 @@ export class ElementEngine implements Engine {
 
 	dispose() {
 		cancelAnimationFrame(this.frame);
+		document.removeEventListener('visibilitychange', this.loop);
 		this.video.pause();
 		this.video.removeAttribute('src');
 		this.video.load();
