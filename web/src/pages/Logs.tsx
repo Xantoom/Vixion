@@ -250,7 +250,7 @@ function Console() {
 					const element = event.currentTarget;
 					following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
 				}}
-				className="bg-canvas max-h-[min(65dvh,44rem)] min-h-40 overflow-auto px-5 py-4 font-mono text-[0.8125rem] leading-relaxed"
+				className="bg-canvas max-h-[min(65dvh,44rem)] min-h-40 overflow-auto px-5 py-4 font-mono text-caption leading-relaxed"
 			>
 				{shown.length === 0 ? (
 					<p className="text-muted py-6 text-center font-sans text-sm">{t.logs.empty}</p>

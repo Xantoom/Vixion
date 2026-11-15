@@ -69,6 +69,9 @@ function Meta({ icon, children, className = '' }: { icon: ReactNode; children: R
 	);
 }
 
+/** Cards past the first rows are laid out and painted only near the screen. */
+const OFFSCREEN_FROM = 12;
+
 export function ChannelPage() {
 	const { login } = useRouteParams();
 	const t = useT();
@@ -151,7 +154,11 @@ export function ChannelPage() {
 						) : (
 							<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-6 gap-y-10">
 								{streams.map((stream, index) => (
-									<li key={stream.id} style={{ '--i': index } as React.CSSProperties}>
+									<li
+										key={stream.id}
+										style={{ '--i': index } as React.CSSProperties}
+										className={index >= OFFSCREEN_FROM ? 'render-when-seen' : undefined}
+									>
 										<StreamCard stream={stream} login={login} />
 									</li>
 								))}
@@ -160,7 +167,11 @@ export function ChannelPage() {
 					) : profile && profile.videos.length > 0 ? (
 						<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-6 gap-y-10">
 							{profile.videos.map((video, index) => (
-								<li key={video.id} style={{ '--i': index } as React.CSSProperties}>
+								<li
+									key={video.id}
+									style={{ '--i': index } as React.CSSProperties}
+									className={index >= OFFSCREEN_FROM ? 'render-when-seen' : undefined}
+								>
 									<VideoCard video={video} />
 								</li>
 							))}
@@ -224,7 +235,13 @@ function Hero({ data, name }: { data: Page; name: string }) {
 		<header className="panel-in">
 			<div className="bg-surface-2 relative h-36 overflow-hidden sm:h-52 lg:h-64">
 				{banner ? (
-					<img src={banner} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
+					<img
+						src={banner}
+						alt=""
+						fetchPriority="high"
+						referrerPolicy="no-referrer"
+						className="size-full object-cover"
+					/>
 				) : avatar ? (
 					<img
 						src={avatar}

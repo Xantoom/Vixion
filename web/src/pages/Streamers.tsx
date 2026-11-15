@@ -67,7 +67,10 @@ export function StreamersPage() {
 				<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,19rem),1fr))] gap-6 pb-12 2xl:grid-cols-[repeat(auto-fill,minmax(23rem,1fr))] 2xl:gap-7">
 					{sorted.map((streamer, index) => (
 						<li key={streamer.id} style={{ '--i': index } as React.CSSProperties}>
-							<StreamerCard streamer={streamer} />
+							<StreamerCard
+								streamer={streamer}
+								priority={index < 6 ? (index === 0 ? 'high' : 'auto') : 'lazy'}
+							/>
 						</li>
 					))}
 				</ul>
@@ -93,17 +96,22 @@ export function LiveDot({ size = 10, className = '' }: { size?: number; classNam
 /** A channel's Twitch banner, or its avatar blurred when it has none. */
 export function Banner({
 	streamer,
+	priority = 'lazy',
 	className = '',
 }: {
 	streamer: Pick<Streamer, 'banner_url' | 'avatar_url'>;
+	priority?: Priority;
 	className?: string;
 }) {
+	const loading = priority === 'lazy' ? 'lazy' : 'eager';
+	const fetchPriority = priority === 'high' ? 'high' : undefined;
 	if (streamer.banner_url) {
 		return (
 			<img
 				src={streamer.banner_url}
 				alt=""
-				loading="lazy"
+				loading={loading}
+				fetchPriority={fetchPriority}
 				decoding="async"
 				referrerPolicy="no-referrer"
 				className={`size-full object-cover ${className}`}
@@ -114,7 +122,8 @@ export function Banner({
 		<img
 			src={streamer.avatar_url}
 			alt=""
-			loading="lazy"
+			loading={loading}
+			fetchPriority={fetchPriority}
 			referrerPolicy="no-referrer"
 			className={`size-full scale-125 object-cover opacity-60 blur-2xl saturate-150 ${className}`}
 		/>
@@ -123,7 +132,13 @@ export function Banner({
 	);
 }
 
-function StreamerCard({ streamer }: { streamer: Streamer }) {
+/**
+ * How soon a card's banner loads: the first is likely the largest picture of the page and goes
+ * first, the rest of the first rows come at once, the others as they near the screen.
+ */
+type Priority = 'high' | 'auto' | 'lazy';
+
+function StreamerCard({ streamer, priority }: { streamer: Streamer; priority: Priority }) {
 	const t = useT();
 	const live = streamer.live !== null || streamer.recording !== null;
 	const lastLive = streamer.live?.since ?? streamer.last_stream_at;
@@ -136,6 +151,7 @@ function StreamerCard({ streamer }: { streamer: Streamer }) {
 			<div className="bg-surface-2 relative aspect-[3/1] overflow-hidden">
 				<Banner
 					streamer={streamer}
+					priority={priority}
 					className="transition-transform duration-500 ease-(--ease-out-soft) group-hover:scale-[1.04]"
 				/>
 			</div>

@@ -96,6 +96,12 @@ pub async fn security_headers(State(app): State<AppState>, request: Request, nex
     if let Ok(value) = HeaderValue::from_str(&csp) {
         headers.insert(header::CONTENT_SECURITY_POLICY, value);
     }
+    // Trusted Types, reported in the console for now rather than enforced: the page installs a
+    // `default` policy that lets only its own and blob: script URLs through.
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY_REPORT_ONLY,
+        HeaderValue::from_static("require-trusted-types-for 'script'; trusted-types default"),
+    );
     headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
     headers.insert(header::REFERRER_POLICY, HeaderValue::from_static("no-referrer"));

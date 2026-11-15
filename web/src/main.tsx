@@ -6,8 +6,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { queryClient } from './lib/query';
+import { installTrustedTypes } from './lib/trusted-types';
 import { applyTheme, usePrefs } from './stores/prefs';
 
+installTrustedTypes();
 applyTheme(usePrefs.getState().theme);
 usePrefs.subscribe((state, before) => {
 	if (state.theme !== before.theme) applyTheme(state.theme);

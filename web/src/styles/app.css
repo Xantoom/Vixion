@@ -43,8 +43,9 @@
 	--tip-ink: #f3f3f5;
 	--shadow-card: light-dark(0 1px 2px rgb(16 16 24 / 0.06), 0 1px 2px rgb(0 0 0 / 0.4));
 	--shadow-lift: light-dark(0 12px 28px -12px rgb(16 16 24 / 0.22), 0 14px 32px -14px rgb(0 0 0 / 0.7));
-	--scroll-thumb: light-dark(rgb(17 17 19 / 0.2), rgb(243 243 245 / 0.2));
-	--scroll-thumb-hover: light-dark(rgb(17 17 19 / 0.42), rgb(243 243 245 / 0.42));
+	/* 3:1 against every surface it crosses, so how far a page has scrolled can be seen. */
+	--scroll-thumb: light-dark(rgb(17 17 19 / 0.48), rgb(243 243 245 / 0.4));
+	--scroll-thumb-hover: light-dark(rgb(17 17 19 / 0.62), rgb(243 243 245 / 0.55));
 	/* The logo: Vixeeny's near-black tile, turned light on a dark page. */
 	--logo-tile: light-dark(#131416, #f3f3f5);
 	--logo-mark: light-dark(#ffffff, #131416);
@@ -206,34 +207,35 @@
 		cursor: progress;
 	}
 
-	::-webkit-scrollbar {
-		width: 12px;
-		height: 12px;
+	/* The standard properties; the old WebKit pseudo-elements only where they are missing. */
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: var(--scroll-thumb) transparent;
 	}
 
-	::-webkit-scrollbar-track,
-	::-webkit-scrollbar-corner {
-		background: transparent;
-	}
+	@supports not (scrollbar-color: auto) {
+		::-webkit-scrollbar {
+			width: 12px;
+			height: 12px;
+		}
 
-	::-webkit-scrollbar-thumb {
-		min-width: 40px;
-		min-height: 40px;
-		border: 3.5px solid transparent;
-		border-radius: 99px;
-		background: var(--scroll-thumb) padding-box;
-	}
+		::-webkit-scrollbar-track,
+		::-webkit-scrollbar-corner {
+			background: transparent;
+		}
 
-	::-webkit-scrollbar-thumb:hover,
-	::-webkit-scrollbar-thumb:active {
-		border-width: 2px;
-		background-color: var(--scroll-thumb-hover);
-	}
+		::-webkit-scrollbar-thumb {
+			min-width: 40px;
+			min-height: 40px;
+			border: 3.5px solid transparent;
+			border-radius: 99px;
+			background: var(--scroll-thumb) padding-box;
+		}
 
-	@supports not selector(::-webkit-scrollbar) {
-		* {
-			scrollbar-width: thin;
-			scrollbar-color: var(--scroll-thumb) transparent;
+		::-webkit-scrollbar-thumb:hover,
+		::-webkit-scrollbar-thumb:active {
+			border-width: 2px;
+			background-color: var(--scroll-thumb-hover);
 		}
 	}
 }
@@ -448,4 +450,16 @@ dialog::backdrop {
 /* Chat lines: names keep their colour, readable on either theme. */
 .chat-name {
 	color: light-dark(color-mix(in oklab, var(--name) 70%, black), color-mix(in oklab, var(--name) 75%, white));
+}
+
+/*
+ * A card far down a long list: skipped by layout and paint until it nears the screen. Its last
+ * known size holds its place, so the scrollbar doesn't jump; it stays in the tab order and in
+ * find in page. It clips its paint, so a margin of room keeps focus rings and the kept mark whole.
+ */
+.render-when-seen {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 22rem;
+	margin: -0.5rem;
+	padding: 0.5rem;
 }
