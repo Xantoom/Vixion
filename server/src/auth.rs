@@ -381,6 +381,19 @@ pub fn client_ip(headers: &HeaderMap, peer: Option<std::net::SocketAddr>, trust_
         .unwrap_or_default()
 }
 
+/// What attempts are counted by for an address: itself in IPv4, its /64 in IPv6, since one
+/// machine is handed a whole /64 and could otherwise try from as many addresses as it likes.
+pub fn address_key(ip: &str) -> String {
+    match ip.parse::<std::net::IpAddr>().map(|ip| ip.to_canonical()) {
+        Ok(std::net::IpAddr::V6(v6)) => {
+            let [a, b, c, d, ..] = v6.segments();
+            format!("{a:x}:{b:x}:{c:x}:{d:x}::/64")
+        }
+        Ok(v4) => v4.to_string(),
+        Err(_) => ip.to_owned(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -392,6 +405,14 @@ mod tests {
         let peer = Some(std::net::SocketAddr::from(([192, 168, 1, 5], 40000)));
         assert_eq!(client_ip(&headers, peer, false), "192.168.1.5");
         assert_eq!(client_ip(&headers, peer, true), "203.0.113.9");
+    }
+
+    #[test]
+    fn ipv6_addresses_count_by_their_64() {
+        assert_eq!(address_key("2001:db8:1:2:aaaa::1"), address_key("2001:db8:1:2:bbbb::9"));
+        assert_ne!(address_key("2001:db8:1:2::1"), address_key("2001:db8:1:3::1"));
+        assert_eq!(address_key("::ffff:203.0.113.9"), "203.0.113.9");
+        assert_eq!(address_key("203.0.113.9"), "203.0.113.9");
     }
 
     #[test]

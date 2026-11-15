@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use instant_acme::LetsEncrypt;
 
 /// Where the media listener's certificate comes from.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum TlsSource {
     /// Let's Encrypt through a DNS-01 challenge on Cloudflare: no port 80 or 443 needed.
     AcmeCloudflare {
@@ -23,7 +23,7 @@ pub enum TlsSource {
     Files { cert: PathBuf, key: PathBuf },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Config {
     /// The database, the secret key and certificates (`VIXION_DATA_DIR`).
     pub data_dir: PathBuf,
@@ -55,6 +55,61 @@ pub struct Config {
     /// The `auth-token` cookie of a Twitch account, from `VIXION_TWITCH_TOKEN`,
     /// `VIXION_TWITCH_TOKEN_FILE` or `--twitch-token`. With Turbo or a subscription, no ads.
     pub twitch_token: Option<String>,
+}
+
+/// Shown in place of a secret: a configuration printed for debugging must not give away tokens.
+const REDACTED: &str = "<redacted>";
+
+impl std::fmt::Debug for TlsSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AcmeCloudflare { email, api_token: _, directory } => f
+                .debug_struct("AcmeCloudflare")
+                .field("email", email)
+                .field("api_token", &REDACTED)
+                .field("directory", directory)
+                .finish(),
+            Self::Files { cert, key } => f.debug_struct("Files").field("cert", cert).field("key", key).finish(),
+        }
+    }
+}
+
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Taken apart field by field, so that a new field can't be left out (or printed) unnoticed.
+        let Self {
+            data_dir,
+            recordings_dir,
+            http_addr,
+            media_addr,
+            media_public_url,
+            media_domain,
+            tls,
+            ddns,
+            media_public_port,
+            upnp,
+            log_json,
+            trust_proxy,
+            log_filter,
+            twitch_token,
+        } = self;
+        f.debug_struct("Config")
+            .field("data_dir", data_dir)
+            .field("recordings_dir", recordings_dir)
+            .field("http_addr", http_addr)
+            .field("media_addr", media_addr)
+            .field("media_public_url", media_public_url)
+            .field("media_domain", media_domain)
+            .field("tls", tls)
+            .field("ddns", ddns)
+            .field("media_public_port", media_public_port)
+            .field("upnp", upnp)
+            .field("log_json", log_json)
+            .field("trust_proxy", trust_proxy)
+            .field("log_filter", log_filter)
+            .field("twitch_token", &twitch_token.as_ref().map(|_| REDACTED))
+            .finish()
+    }
 }
 
 /// A Twitch `auth-token` as pasted: an optional `OAuth ` prefix, then letters and digits.
@@ -229,6 +284,19 @@ mod tests {
             log_filter: String::new(),
             twitch_token: None,
         }
+    }
+
+    #[test]
+    fn debug_output_hides_the_tokens() {
+        let mut config = config();
+        config.twitch_token = Some("twitchsecret".into());
+        config.tls = Some(TlsSource::AcmeCloudflare {
+            email: String::new(),
+            api_token: "cloudflaresecret".into(),
+            directory: String::new(),
+        });
+        let printed = format!("{config:?}");
+        assert!(!printed.contains("twitchsecret") && !printed.contains("cloudflaresecret"), "{printed}");
     }
 
     #[test]

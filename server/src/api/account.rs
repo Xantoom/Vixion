@@ -38,7 +38,7 @@ pub async fn setup(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(body): Json<Credentials>,
 ) -> AppResult<Response> {
-    let ip_key = format!("setup:{}", auth::client_ip(&headers, Some(peer), app.config.trust_proxy));
+    let ip_key = format!("setup:{}", auth::address_key(&auth::client_ip(&headers, Some(peer), app.config.trust_proxy)));
     if !app.limiter.allow(&[ip_key]) {
         return Err(AppError::new(StatusCode::TOO_MANY_REQUESTS, "too_many_attempts", "try again in 15 minutes"));
     }
@@ -101,7 +101,7 @@ pub async fn login(
     Json(body): Json<Credentials>,
 ) -> AppResult<Response> {
     let username = body.username.trim().to_owned();
-    let ip_key = format!("ip:{}", auth::client_ip(&headers, Some(peer), app.config.trust_proxy));
+    let ip_key = format!("ip:{}", auth::address_key(&auth::client_ip(&headers, Some(peer), app.config.trust_proxy)));
     let user_key = format!("user:{}", username.to_lowercase());
     if !app.limiter.allow(&[ip_key, user_key.clone()]) {
         tracing::warn!(%username, "sign-in blocked: too many attempts");

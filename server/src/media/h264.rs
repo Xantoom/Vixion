@@ -102,10 +102,11 @@ pub fn parse_sps(nal: &[u8]) -> Option<SpsInfo> {
     // Sizes come from the stream: a damaged one must not overflow.
     let crop = |unit: u32, a: u32, b: u32| a.checked_add(b)?.checked_mul(unit);
     let width = width_mbs.checked_mul(16)?.checked_sub(crop(crop_x, crop_left, crop_right)?)?;
-    let height = (2 - frame_mbs_only)
-        .checked_mul(height_map_units)?
-        .checked_mul(16)?
-        .checked_sub(crop(crop_y, crop_top, crop_bottom)?)?;
+    let height = (2 - frame_mbs_only).checked_mul(height_map_units)?.checked_mul(16)?.checked_sub(crop(
+        crop_y,
+        crop_top,
+        crop_bottom,
+    )?)?;
     Some(SpsInfo { profile, compatibility, level, chroma_format, bit_depth_luma, bit_depth_chroma, width, height })
 }
 
