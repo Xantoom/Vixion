@@ -172,6 +172,7 @@ const Line = memo(function Line({
 	onSeek: (ms: number) => void;
 }) {
 	const t = useT();
+	const [revealed, setRevealed] = useState(false);
 	const stamp = (
 		<button
 			type="button"
@@ -205,14 +206,30 @@ const Line = memo(function Line({
 		);
 	}
 	const action = line.k === 'a';
+	const hidden = deleted && !revealed;
 	return (
-		<li className={`hover:bg-surface text-caption px-3 py-0.5 leading-relaxed ${deleted ? 'opacity-45' : ''}`}>
+		<li className={`hover:bg-surface text-caption px-3 py-0.5 leading-relaxed ${hidden ? 'opacity-45' : ''}`}>
 			{stamp}
 			<Badges line={line} assets={assets} />
 			<Name line={line} />
 			{action ? ' ' : <span className="text-muted">: </span>}
 			{deleted ? (
-				<span className="text-muted italic">&lt;{t.player.deletedMessage}&gt;</span>
+				// Kept by the recording: one click shows what was said, quietly.
+				<button
+					type="button"
+					onClick={() => {
+						setRevealed(!revealed);
+					}}
+					aria-expanded={revealed}
+					data-tip={revealed ? t.player.hideDeleted : t.player.showDeleted}
+					className={`text-muted inline rounded-xs text-left ${revealed ? '' : 'italic hover:text-ink'}`}
+				>
+					{revealed && line.m ? (
+						<Message text={line.m} emotes={line.e} assets={assets} />
+					) : (
+						<>&lt;{t.player.deletedMessage}&gt;</>
+					)}
+				</button>
 			) : (
 				<span className={action ? 'italic' : ''} style={action ? { color: nameColor(line) } : undefined}>
 					<Message text={line.m ?? ''} emotes={line.e} assets={assets} />

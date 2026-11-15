@@ -177,6 +177,8 @@ export const en = {
 		chatEmpty: 'Nothing said here yet',
 		notice: 'Notice',
 		deletedMessage: 'message deleted',
+		showDeleted: 'Show the deleted message',
+		hideDeleted: 'Hide the message',
 		openOnTwitch: (name: string) => `${name} on Twitch`,
 		seekHere: 'Go to this moment',
 		goLive: 'Latest messages',

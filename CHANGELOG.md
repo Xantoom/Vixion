@@ -12,6 +12,7 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 ### Added
 
 - Hovering an emote shows it larger, with where it comes from (Twitch, 7TV, BTTV or FFZ); hovering a badge shows it larger too.
+- A deleted message can be clicked to show what it said, in muted text.
 - A message's time hint also gives the date and hour it was sent, and a name's hint gives the login when the display name differs.
 
 ### Changed
