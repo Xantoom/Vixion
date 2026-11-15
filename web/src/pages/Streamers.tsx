@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, memo, useMemo } from 'react';
 import { useT } from '@/i18n';
 import type { Streamer } from '@/lib/api';
-import { formatRelative } from '@/lib/format';
+import { compareNames, formatRelative } from '@/lib/format';
 import { streamersQuery } from '@/lib/queries';
 import { useCan } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
@@ -25,9 +25,7 @@ export function StreamersPage() {
 	const t = useT();
 	const canManage = useCan('streamers.manage');
 	const { data, isPending, error } = useQuery(streamersQuery);
-	const sorted = (data ?? []).toSorted((a, b) =>
-		a.display_name.localeCompare(b.display_name, undefined, { sensitivity: 'base' }),
-	);
+	const sorted = useMemo(() => (data ?? []).toSorted((a, b) => compareNames(a.display_name, b.display_name)), [data]);
 
 	return (
 		<div className="mx-auto max-w-[120rem] px-4 sm:px-6">
@@ -133,7 +131,8 @@ export function Banner({
  */
 type Priority = 'high' | 'auto' | 'lazy';
 
-function StreamerCard({ streamer, priority }: { streamer: Streamer; priority: Priority }) {
+/** Drawn again only when its streamer changed: a refresh keeps the others as they were. */
+const StreamerCard = memo(function StreamerCard({ streamer, priority }: { streamer: Streamer; priority: Priority }) {
 	const t = useT();
 	const live = streamer.live !== null || streamer.recording !== null;
 	const lastLive = streamer.live?.since ?? streamer.last_stream_at;
@@ -171,4 +170,4 @@ function StreamerCard({ streamer, priority }: { streamer: Streamer; priority: Pr
 			</div>
 		</Link>
 	);
-}
+});

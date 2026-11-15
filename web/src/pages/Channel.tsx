@@ -19,7 +19,7 @@ import {
 	TriangleAlert,
 	Users,
 } from 'lucide-react';
-import { type KeyboardEvent, type ReactNode, useId, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, memo, useId, useState } from 'react';
 import { useT } from '@/i18n';
 import { useAction } from '@/lib/action';
 import {
@@ -71,6 +71,9 @@ export function ChannelPage() {
 	const { data, isPending, error } = useQuery(channelQuery(login));
 	const [tab, setTab] = useState<'recordings' | 'twitch' | null>(null);
 	const tabs = useId();
+	// Asked once here rather than by every card.
+	const canKeep = useCan('streams.keep');
+	const canDelete = useCan('streams.delete');
 
 	if (isPending) return <PageLoading />;
 	if (error) return error instanceof ApiError && error.status === 404 ? <NotFound /> : <NotFound forbidden />;
@@ -152,7 +155,12 @@ export function ChannelPage() {
 										style={{ '--i': index } as React.CSSProperties}
 										className={index >= OFFSCREEN_FROM ? 'render-when-seen' : undefined}
 									>
-										<StreamCard stream={stream} login={login} />
+										<StreamCard
+											stream={stream}
+											login={login}
+											canKeep={canKeep}
+											canDelete={canDelete}
+										/>
 									</li>
 								))}
 							</ul>
@@ -446,11 +454,20 @@ function OverlayButton({
 	);
 }
 
-function StreamCard({ stream, login }: { stream: StreamSummary; login: string }) {
+/** Drawn again only when its recording changed: the page's refresh keeps the others as they were. */
+const StreamCard = memo(function StreamCard({
+	stream,
+	login,
+	canKeep,
+	canDelete,
+}: {
+	stream: StreamSummary;
+	login: string;
+	canKeep: boolean;
+	canDelete: boolean;
+}) {
 	const t = useT();
 	const client = useQueryClient();
-	const canKeep = useCan('streams.keep');
-	const canDelete = useCan('streams.delete');
 	const [deleting, setDeleting] = useState(false);
 	const { busy: keeping, run } = useAction('toast');
 	const recording = stream.status === 'recording';
@@ -590,10 +607,10 @@ function StreamCard({ stream, login }: { stream: StreamSummary; login: string })
 			</Confirm>
 		</article>
 	);
-}
+});
 
 /** A past broadcast still on Twitch: opens there. */
-function VideoCard({ video }: { video: TwitchVideo }) {
+const VideoCard = memo(function VideoCard({ video }: { video: TwitchVideo }) {
 	const t = useT();
 	const href = `https://www.twitch.tv/videos/${video.id}`;
 	return (
@@ -646,7 +663,7 @@ function VideoCard({ video }: { video: TwitchVideo }) {
 			</div>
 		</article>
 	);
-}
+});
 
 /** Whether to record, how long recordings stay, cutting the broadcast on air, and deleting the streamer. */
 function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: () => void }) {

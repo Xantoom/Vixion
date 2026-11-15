@@ -1,5 +1,31 @@
 import { currentLocale } from '@/i18n';
 
+/**
+ * Formatters, built once per language and options: building one costs far more than using it,
+ * and a page of cards formats hundreds of values on every refresh.
+ */
+const formatters = new Map<string, unknown>();
+function cached<T>(kind: string, options: object, build: (locale: string) => T): T {
+	const locale = currentLocale();
+	const key = `${kind}|${locale}|${JSON.stringify(options)}`;
+	let formatter = formatters.get(key) as T | undefined;
+	if (formatter === undefined) {
+		formatter = build(locale);
+		formatters.set(key, formatter);
+	}
+	return formatter;
+}
+
+function numberFormat(options: Intl.NumberFormatOptions) {
+	return cached('number', options, (locale) => new Intl.NumberFormat(locale, options));
+}
+
+/** Compares names as a person would: case and accents aside. */
+export function compareNames(a: string, b: string): number {
+	const base = { sensitivity: 'base' } as const;
+	return cached('collator', base, (locale) => new Intl.Collator(locale, base)).compare(a, b);
+}
+
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
 const UNITS_FR = ['o', 'Ko', 'Mo', 'Go', 'To', 'Po'];
 
@@ -13,7 +39,7 @@ export function formatBytes(bytes: number): string {
 		unit += 1;
 	}
 	const digits = value >= 100 || unit === 0 ? 0 : 1;
-	return `${new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: digits }).format(value)} ${units[unit]}`;
+	return `${numberFormat({ maximumFractionDigits: digits }).format(value)} ${units[unit]}`;
 }
 
 /** 1:02:03 or 2:03, for a player. */
@@ -49,7 +75,8 @@ const DIVISIONS: [number, Intl.RelativeTimeFormatUnit][] = [
 
 /** “3 days ago”, “in 2 hours”. */
 export function formatRelative(at: number, now = Date.now()): string {
-	const format = new Intl.RelativeTimeFormat(currentLocale(), { numeric: 'auto' });
+	const options = { numeric: 'auto' } as const;
+	const format = cached('relative', options, (locale) => new Intl.RelativeTimeFormat(locale, options));
 	let value = (at - now) / 1000;
 	for (const [size, unit] of DIVISIONS) {
 		if (Math.abs(value) < size) return format.format(Math.round(value), unit);
@@ -59,20 +86,19 @@ export function formatRelative(at: number, now = Date.now()): string {
 }
 
 export function formatDate(at: number, withTime = true): string {
-	return new Intl.DateTimeFormat(currentLocale(), {
+	const options: Intl.DateTimeFormatOptions = {
 		weekday: 'short',
 		day: 'numeric',
 		month: 'short',
 		year: new Date(at).getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
 		hour: withTime ? '2-digit' : undefined,
 		minute: withTime ? '2-digit' : undefined,
-	}).format(at);
+	};
+	return cached('date', options, (locale) => new Intl.DateTimeFormat(locale, options)).format(at);
 }
 
 export function formatNumber(value: number): string {
-	return new Intl.NumberFormat(currentLocale(), { notation: value >= 100_000 ? 'compact' : 'standard' }).format(
-		value,
-	);
+	return numberFormat({ notation: value >= 100_000 ? 'compact' : 'standard' }).format(value);
 }
 
 /** 1080p60 HEVC */
