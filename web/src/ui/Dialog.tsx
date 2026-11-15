@@ -1,14 +1,18 @@
 import { X } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useT } from '@/i18n';
 import { Button, IconButton } from './Button';
 
 const FIRST_FIELD =
 	'[data-dialog-body] :is(input:not([type=hidden]):not([readonly]):not([disabled]), select, textarea):not([tabindex="-1"])';
 
+/** Browsers that close a modal on a backdrop click by themselves (`closedby="any"`); Safari doesn't yet. */
+const NATIVE_LIGHT_DISMISS = typeof HTMLDialogElement !== 'undefined' && 'closedBy' in HTMLDialogElement.prototype;
+
 /**
- * A modal over the page, on the native <dialog>: focus is trapped, Escape closes it and the page
- * behind can't be reached. Rendered only while open.
+ * A modal over the page, on the native <dialog>: focus is trapped, Escape and a click on the
+ * backdrop close it and the page behind can't be reached. Rendered only while open; it is closed
+ * with close() before it leaves the page, so the browser puts the focus back where it was.
  */
 export function Dialog({
 	open,
@@ -26,34 +30,54 @@ export function Dialog({
 	wide?: boolean;
 }) {
 	const ref = useRef<HTMLDialogElement>(null);
+	const titleId = useId();
 	const t = useT();
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		const dialog = ref.current;
-		if (!open || !dialog || dialog.open) return;
-		dialog.showModal();
-		// showModal() focuses the first control, the close button: the first field is where to type.
-		dialog.querySelector<HTMLElement>(FIRST_FIELD)?.focus();
+		if (!open || !dialog) return;
+		if (!dialog.open) {
+			dialog.showModal();
+			// showModal() focuses the first control, the close button: a field is where to type, and
+			// a confirmation starts on its safe choice.
+			dialog.querySelector<HTMLElement>(`[data-autofocus], ${FIRST_FIELD}`)?.focus();
+		}
+		// Runs before the element is removed, whether the dialog or a parent goes away: close()
+		// returns the focus to what opened it, which a removal alone doesn't.
+		return () => {
+			if (dialog.open) dialog.close();
+		};
 	}, [open]);
 
 	if (!open) return null;
 	return (
 		<dialog
 			ref={ref}
+			aria-labelledby={titleId}
+			closedby="any"
 			onClose={onClose}
 			onCancel={(event) => {
 				event.preventDefault();
 				onClose();
 			}}
 			onClick={(event) => {
-				// A click on the backdrop (the dialog element itself, outside its box) closes it.
-				if (event.target === ref.current) onClose();
+				if (NATIVE_LIGHT_DISMISS || event.target !== ref.current) return;
+				// Without closedby: a click on the backdrop lands on the dialog element, outside its box.
+				const box = ref.current.getBoundingClientRect();
+				const inside =
+					event.clientX >= box.left &&
+					event.clientX <= box.right &&
+					event.clientY >= box.top &&
+					event.clientY <= box.bottom;
+				if (!inside) onClose();
 			}}
 			className={`bg-bg text-ink m-auto max-h-[min(90dvh,48rem)] w-[calc(100%-2rem)] overflow-hidden rounded-md p-0 shadow-2xl ring-1 ring-line ${wide ? 'max-w-2xl' : 'max-w-lg'}`}
 		>
 			<div className="flex max-h-[inherit] flex-col">
 				<header className="flex items-start justify-between gap-4 px-6 pt-6 pb-5 sm:px-7">
-					<h2 className="text-title font-semibold tracking-tight">{title}</h2>
+					<h2 id={titleId} className="text-title font-semibold tracking-tight">
+						{title}
+					</h2>
 					<IconButton label={t.common.close} size="sm" onClick={onClose} className="-mt-1 -mr-2">
 						<X size={18} />
 					</IconButton>
@@ -98,7 +122,7 @@ export function Confirm({
 			title={title}
 			footer={
 				<>
-					<Button variant="ghost" onClick={onClose}>
+					<Button variant="ghost" onClick={onClose} data-autofocus={danger || undefined}>
 						{t.common.cancel}
 					</Button>
 					<Button

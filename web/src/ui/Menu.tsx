@@ -1,7 +1,15 @@
 import { Check } from 'lucide-react';
 import { type ReactNode, createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 
+/** Closes the menu and puts the focus back on its button, so it isn't lost with the panel. */
 const CloseContext = createContext<() => void>(() => {});
+
+/** What the menu's button must carry, so it is announced as opening a menu, and whether it is open. */
+export interface MenuTriggerProps {
+	'aria-haspopup': 'menu';
+	'aria-expanded': boolean;
+	'aria-controls': string | undefined;
+}
 
 /** The gap kept between a menu and the screen's edges. */
 const EDGE = 8;
@@ -21,8 +29,8 @@ export function Menu({
 	className = '',
 	panelClassName = '',
 }: {
-	/** The button's face; it receives the open state. */
-	trigger: (open: boolean) => ReactNode;
+	/** The button; it receives the open state and the attributes to spread on it. */
+	trigger: (open: boolean, props: MenuTriggerProps) => ReactNode;
 	children: ReactNode;
 	align?: 'start' | 'end';
 	label: string;
@@ -35,6 +43,10 @@ export function Menu({
 	const root = useRef<HTMLDivElement>(null);
 	const panel = useRef<HTMLDivElement>(null);
 	const id = useId();
+	const close = () => {
+		setOpen(false);
+		root.current?.querySelector<HTMLElement>('[aria-haspopup=menu]')?.focus({ preventScroll: true });
+	};
 
 	useEffect(() => {
 		if (!open) return;
@@ -43,9 +55,10 @@ export function Menu({
 		};
 		const onKey = (event: KeyboardEvent) => {
 			if (event.key === 'Escape') {
+				// Captured, so a dialog around the menu stays open.
 				event.stopPropagation();
-				setOpen(false);
-				root.current?.querySelector('button')?.focus();
+				event.preventDefault();
+				close();
 			}
 		};
 		document.addEventListener('pointerdown', onPointer);
@@ -95,11 +108,20 @@ export function Menu({
 
 	const onKeyDown = (event: React.KeyboardEvent) => {
 		const list = items(panel.current);
+		if (list.length === 0) return;
 		const index = list.indexOf(document.activeElement as HTMLElement);
-		const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
-		if (step === 0 || list.length === 0) return;
+		let next: number;
+		if (event.key === 'ArrowDown') next = (index + 1) % list.length;
+		else if (event.key === 'ArrowUp') next = (index - 1 + list.length) % list.length;
+		else if (event.key === 'Home') next = 0;
+		else if (event.key === 'End') next = list.length - 1;
+		else if (event.key === 'Tab') {
+			// Tab leaves the menu, as from its button.
+			setOpen(false);
+			return;
+		} else return;
 		event.preventDefault();
-		list[(index + step + list.length) % list.length]?.focus();
+		list[next]?.focus();
 	};
 
 	return (
@@ -108,12 +130,13 @@ export function Menu({
 				onClick={() => {
 					setOpen((value) => !value);
 				}}
-				aria-haspopup="menu"
-				aria-expanded={open}
-				aria-controls={open ? id : undefined}
 				className="contents"
 			>
-				{trigger(open)}
+				{trigger(open, {
+					'aria-haspopup': 'menu',
+					'aria-expanded': open,
+					'aria-controls': open ? id : undefined,
+				})}
 			</div>
 			{open ? (
 				<div
@@ -132,13 +155,7 @@ export function Menu({
 					}}
 					className={`menu-in bg-bg border-line text-ink fixed m-0 max-w-[calc(100vw-1rem)] min-w-56 overflow-y-auto overscroll-contain rounded-sm border p-1 shadow-xl [inset:auto] ${panelClassName}`}
 				>
-					<CloseContext.Provider
-						value={() => {
-							setOpen(false);
-						}}
-					>
-						{children}
-					</CloseContext.Provider>
+					<CloseContext.Provider value={close}>{children}</CloseContext.Provider>
 				</div>
 			) : null}
 		</div>
@@ -218,6 +235,15 @@ export function MenuItem({
 
 export function MenuLabel({ children }: { children: ReactNode }) {
 	return <div className="text-caption text-muted px-2.5 pt-2 pb-1 font-medium">{children}</div>;
+}
+
+/** Choices of which one is current (menuitemradio): a named group, so the set is announced. */
+export function MenuGroup({ label, children }: { label: string; children: ReactNode }) {
+	return (
+		<div role="group" aria-label={label}>
+			{children}
+		</div>
+	);
 }
 
 export function MenuDivider() {

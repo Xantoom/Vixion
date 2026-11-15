@@ -75,9 +75,11 @@ export function Tooltips() {
 		};
 	}, []);
 
-	// Kept inside the window: a tip by the edge slides in rather than being cut.
+	// In the top layer, shown after whatever is already there: above an open dialog too. Kept
+	// inside the window: a tip by the edge slides in rather than being cut.
 	useLayoutEffect(() => {
 		if (!tip || !box.current) return;
+		if (!box.current.matches(':popover-open')) box.current.showPopover();
 		const width = box.current.offsetWidth;
 		setLeft(Math.max(MARGIN, Math.min(window.innerWidth - width - MARGIN, tip.x - width / 2)));
 	}, [tip]);
@@ -87,7 +89,8 @@ export function Tooltips() {
 		<div
 			ref={box}
 			role="tooltip"
-			className="tooltip-in bg-tip text-tip-ink text-small pointer-events-none fixed z-[200] max-w-72 rounded-xs px-2.5 py-1.5 font-medium shadow-lg"
+			popover="manual"
+			className="tooltip-in bg-tip text-tip-ink text-small pointer-events-none fixed inset-auto m-0 max-w-72 overflow-visible rounded-xs border-0 px-2.5 py-1.5 font-medium shadow-lg"
 			style={{ left, top: tip.y, transform: tip.below ? undefined : 'translateY(-100%)' }}
 		>
 			{tip.text}

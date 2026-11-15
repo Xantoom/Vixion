@@ -357,7 +357,17 @@ dialog[open] {
 	animation: dialog-in 220ms var(--ease-out-soft);
 }
 
+/*
+ * The page behind a modal doesn't scroll: neither a wheel over the backdrop nor a scroll that
+ * reaches the end of the dialog carries through. Both must be scroll containers for that.
+ */
+dialog:modal {
+	overscroll-behavior: contain;
+}
+
 dialog::backdrop {
+	overflow: hidden;
+	overscroll-behavior: contain;
 	background: rgb(0 0 0 / 0.45);
 	animation: fade-in 200ms ease-out;
 }

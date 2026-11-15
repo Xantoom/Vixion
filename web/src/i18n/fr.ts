@@ -18,6 +18,9 @@ export const fr: Messages = {
 		error: 'Une erreur est survenue',
 		offline: 'Le serveur est injoignable. Nouvelle tentative…',
 		unsaved: 'Modifications non enregistrées',
+		notifications: 'Notifications',
+		loading: 'Chargement',
+		skipToContent: 'Aller au contenu',
 	},
 	nav: {
 		streamers: 'Streamers',

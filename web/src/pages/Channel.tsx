@@ -682,9 +682,10 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 						<span className="text-ui text-ink min-w-0">{t.streamer.keepRow}</span>
 						<Menu
 							label={t.streamer.keepRow}
-							trigger={() => (
+							trigger={(_open, props) => (
 								<button
 									type="button"
+									{...props}
 									className="text-ui text-ink-2 hover:text-ink hover:bg-surface-2 inline-flex h-10 flex-none items-center gap-1.5 rounded-sm px-3 font-medium whitespace-nowrap transition-colors"
 								>
 									{retentionLabel(retention ?? fallback)}

@@ -36,7 +36,7 @@ import { Timeline, boxArt } from '@/player/Timeline';
 import { usePrefs } from '@/stores/prefs';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
-import { Menu, MenuDivider, MenuItem } from '@/ui/Menu';
+import { Menu, MenuDivider, MenuItem, type MenuTriggerProps } from '@/ui/Menu';
 import { PageLoading, Spinner } from '@/ui/Spinner';
 import { NotFound } from './NotFound';
 import { LiveDot } from './Streamers';
@@ -594,8 +594,8 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 							<Menu
 								label={t.player.download}
 								panelClassName="text-ink"
-								trigger={() => (
-									<PlayerButton label={t.player.download}>
+								trigger={(_open, props) => (
+									<PlayerButton label={t.player.download} {...props}>
 										<Download size={21} />
 									</PlayerButton>
 								)}
@@ -659,16 +659,18 @@ function PlayerButton({
 	children,
 	pressed,
 	className = '',
+	...props
 }: {
 	label: string;
 	onClick?: () => void;
 	children: ReactNode;
 	pressed?: boolean;
 	className?: string;
-}) {
+} & Partial<MenuTriggerProps>) {
 	return (
 		<button
 			type="button"
+			{...props}
 			aria-label={label}
 			data-tip={label}
 			aria-pressed={pressed}

@@ -13,7 +13,7 @@ import { Dialog } from '@/ui/Dialog';
 import { Field, PasswordInput } from '@/ui/Field';
 import { Flag } from '@/ui/Flag';
 import { Logo } from '@/ui/Logo';
-import { Menu, MenuDivider, MenuItem, MenuLabel } from '@/ui/Menu';
+import { Menu, MenuDivider, MenuGroup, MenuItem, MenuLabel } from '@/ui/Menu';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { type AdminPath, firstAdminPage } from './Admin';
@@ -184,8 +184,8 @@ export function LocaleMenu() {
 	return (
 		<Menu
 			label={t.nav.language}
-			trigger={(open) => (
-				<IconButton label={t.nav.language} aria-expanded={open}>
+			trigger={(_open, props) => (
+				<IconButton label={t.nav.language} {...props}>
 					<Languages size={20} />
 				</IconButton>
 			)}
@@ -233,9 +233,10 @@ function AccountMenu({ admin, alerts }: { admin: AdminPath | null; alerts: numbe
 		<>
 			<Menu
 				label={t.nav.account}
-				trigger={(open) => (
+				trigger={(open, props) => (
 					<button
 						type="button"
+						{...props}
 						aria-label={t.nav.account}
 						data-tip={t.nav.account}
 						className={`hover:bg-surface flex h-10 flex-none items-center gap-2.5 rounded-sm px-1.5 transition-colors lg:pr-3 ${open ? 'bg-surface' : ''}`}
@@ -280,31 +281,35 @@ function AccountMenu({ admin, alerts }: { admin: AdminPath | null; alerts: numbe
 						</>
 					) : null}
 					<MenuLabel>{t.nav.theme}</MenuLabel>
-					{THEMES.map((value) => (
-						<MenuItem
-							key={value}
-							icon={themeIcons[value]}
-							checked={theme === value}
-							onSelect={() => {
-								setPrefs({ theme: value });
-							}}
-						>
-							{themeNames[value]}
-						</MenuItem>
-					))}
+					<MenuGroup label={t.nav.theme}>
+						{THEMES.map((value) => (
+							<MenuItem
+								key={value}
+								icon={themeIcons[value]}
+								checked={theme === value}
+								onSelect={() => {
+									setPrefs({ theme: value });
+								}}
+							>
+								{themeNames[value]}
+							</MenuItem>
+						))}
+					</MenuGroup>
 					<MenuLabel>{t.nav.language}</MenuLabel>
-					{(Object.keys(LOCALES) as Locale[]).map((value) => (
-						<MenuItem
-							key={value}
-							icon={<Flag locale={value} size={16} />}
-							checked={locale === value}
-							onSelect={() => {
-								pickLocale(setPrefs, value);
-							}}
-						>
-							{LOCALES[value]}
-						</MenuItem>
-					))}
+					<MenuGroup label={t.nav.language}>
+						{(Object.keys(LOCALES) as Locale[]).map((value) => (
+							<MenuItem
+								key={value}
+								icon={<Flag locale={value} size={16} />}
+								checked={locale === value}
+								onSelect={() => {
+									pickLocale(setPrefs, value);
+								}}
+							>
+								{LOCALES[value]}
+							</MenuItem>
+						))}
+					</MenuGroup>
 					<MenuDivider />
 				</div>
 				<MenuItem

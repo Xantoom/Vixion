@@ -17,6 +17,9 @@ export const en = {
 		error: 'Something went wrong',
 		offline: 'The server can’t be reached. Retrying…',
 		unsaved: 'Unsaved changes',
+		notifications: 'Notifications',
+		loading: 'Loading',
+		skipToContent: 'Skip to content',
 	},
 	nav: {
 		streamers: 'Streamers',
