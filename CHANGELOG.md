@@ -9,6 +9,21 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Fixed
+
+- Recordings interrupted by a crash are repaired without being read into memory: a long one could get the server killed at every start.
+- A damaged video segment or date from Twitch no longer crashes a recording, stops the live checks or fills memory.
+- The live checks start again by themselves, with an alert, if they ever crash.
+- One failed database call no longer stops every later write until a restart.
+- Parts of a broadcast merged into one file keep the right track numbers.
+
+### Security
+
+- Sign-in attempts are counted per IPv6 /64, so one machine can't guess without limit or lock everyone out.
+- `vixion reset-password` no longer shows the password as it is typed.
+- Answers from Twitch, Cloudflare and the router are read up to a size limit.
+- The Twitch and Cloudflare tokens are left out of the configuration when it is printed.
+
 ## [0.2.0] - 2026-11-14
 
 ### Added
