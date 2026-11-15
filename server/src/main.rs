@@ -5,6 +5,7 @@ mod api;
 mod app;
 mod audit;
 mod auth;
+mod body;
 mod config;
 mod crypto;
 mod db;
@@ -125,11 +126,8 @@ fn main() -> ExitCode {
         // Read from the terminal, not the command line, which other users and the shell history see.
         Some("reset-password") if args.len() == 2 => {
             eprint!("New password for {}: ", args[1]);
-            let mut password = String::new();
-            if std::io::stdin().read_line(&mut password).is_err() {
-                return ExitCode::FAILURE;
-            }
-            return reset_password(&config, &args[1], password.trim_end_matches(['\r', '\n']));
+            let Ok(password) = read_password() else { return ExitCode::FAILURE };
+            return reset_password(&config, &args[1], &password);
         }
         _ => {
             eprintln!("{USAGE}");
@@ -150,6 +148,59 @@ fn main() -> ExitCode {
         Err(error) => {
             eprintln!("can't start: {error}");
             ExitCode::FAILURE
+        }
+    }
+}
+
+/// Reads a line from the terminal without showing it: someone behind the screen shouldn't see it.
+fn read_password() -> std::io::Result<String> {
+    let mut password = String::new();
+    {
+        let _hidden = HiddenInput::start();
+        std::io::stdin().read_line(&mut password)?;
+    }
+    // The newline typed wasn't shown either.
+    eprintln!();
+    Ok(password.trim_end_matches(['\r', '\n']).to_owned())
+}
+
+/// Turns the terminal's echo off while it lives. Does nothing when the input isn't a terminal
+/// (a password piped in).
+struct HiddenInput {
+    #[cfg(unix)]
+    saved: Option<libc::termios>,
+}
+
+impl HiddenInput {
+    #[cfg(unix)]
+    fn start() -> Self {
+        let mut saved = std::mem::MaybeUninit::<libc::termios>::zeroed();
+        // SAFETY: `saved` is writable memory of the right type, which tcgetattr fills when it
+        // returns 0; standard input stays open for the whole process.
+        if unsafe { libc::tcgetattr(libc::STDIN_FILENO, saved.as_mut_ptr()) } != 0 {
+            return Self { saved: None };
+        }
+        // SAFETY: tcgetattr returned 0, so it filled the structure.
+        let saved = unsafe { saved.assume_init() };
+        let mut hidden = saved;
+        hidden.c_lflag &= !libc::ECHO;
+        // SAFETY: `hidden` is a valid termios, copied from the terminal's own.
+        unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &raw const hidden) };
+        Self { saved: Some(saved) }
+    }
+
+    #[cfg(not(unix))]
+    fn start() -> Self {
+        Self {}
+    }
+}
+
+impl Drop for HiddenInput {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        if let Some(saved) = &self.saved {
+            // SAFETY: `saved` is the terminal's settings as tcgetattr gave them.
+            unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, saved) };
         }
     }
 }
@@ -240,7 +291,6 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
                 .into());
         }
     }
-    api_retention(&settings).await;
     let http = reqwest::Client::builder()
         .user_agent(twitch::api::USER_AGENT)
         .connect_timeout(Duration::from_secs(10))
@@ -356,10 +406,6 @@ async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std:
     }
     tracing::info!("stopped");
     Ok(())
-}
-
-async fn api_retention(settings: &settings::SettingsStore) {
-    api::set_global_retention(settings.get().await.retention_days);
 }
 
 async fn wait_for_signal() {

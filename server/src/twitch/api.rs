@@ -48,11 +48,27 @@ impl std::fmt::Display for TwitchError {
     }
 }
 
-impl std::error::Error for TwitchError {}
+impl std::error::Error for TwitchError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Http(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 impl From<reqwest::Error> for TwitchError {
     fn from(error: reqwest::Error) -> Self {
         Self::Http(error)
+    }
+}
+
+impl From<crate::body::BodyError> for TwitchError {
+    fn from(error: crate::body::BodyError) -> Self {
+        match error {
+            crate::body::BodyError::Http(error) => Self::Http(error),
+            too_large @ crate::body::BodyError::TooLarge(_) => Self::Unexpected(too_large.to_string()),
+        }
     }
 }
 
@@ -135,7 +151,9 @@ impl TwitchApi {
         if !status.is_success() {
             return Err(TwitchError::Status(status.as_u16()));
         }
-        let value: Value = response.json().await?;
+        let bytes = crate::body::read(response, crate::body::JSON).await?;
+        let value: Value =
+            serde_json::from_slice(&bytes).map_err(|error| TwitchError::Unexpected(format!("not JSON: {error}")))?;
         if let Some(errors) = value.get("errors").and_then(Value::as_array) {
             let text = errors.iter().filter_map(|e| e.get("message")?.as_str()).collect::<Vec<_>>().join("; ");
             if text.contains("integrity") {
@@ -228,7 +246,7 @@ impl TwitchApi {
             .send()
             .await?;
         match response.status().as_u16() {
-            200 => Ok(hls::parse_multivariant(&response.text().await?)),
+            200 => Ok(hls::parse_multivariant(&crate::body::text(response, crate::body::TEXT).await?)),
             // Offline or not yet playable.
             404 => Ok(Vec::new()),
             403 => Err(TwitchError::BadToken),
@@ -241,7 +259,7 @@ impl TwitchApi {
         if !response.status().is_success() {
             return Err(TwitchError::Status(response.status().as_u16()));
         }
-        Ok(response.text().await?)
+        Ok(crate::body::text(response, crate::body::TEXT).await?)
     }
 
     pub async fn get_bytes(&self, url: &str, timeout: Duration) -> Result<bytes::Bytes, TwitchError> {
@@ -249,7 +267,7 @@ impl TwitchApi {
         if !response.status().is_success() {
             return Err(TwitchError::Status(response.status().as_u16()));
         }
-        Ok(response.bytes().await?)
+        Ok(crate::body::read(response, crate::body::MEDIA).await?)
     }
 }
 

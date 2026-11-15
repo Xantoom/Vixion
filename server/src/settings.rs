@@ -123,6 +123,19 @@ pub struct SettingsStore {
 }
 
 const KEY: &str = "app";
+
+/// The retention saved last, for code that maps database rows and has no store at hand. Only
+/// the store sets it, when it loads and saves the settings.
+static RETENTION_DAYS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// How many days recordings are kept by default, as saved last; 0 keeps them forever.
+pub fn retention_days() -> u32 {
+    RETENTION_DAYS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn remember_retention(settings: &Settings) {
+    RETENTION_DAYS.store(settings.retention_days, std::sync::atomic::Ordering::Relaxed);
+}
 const TOKEN_KEY: &str = "twitch_token";
 
 impl SettingsStore {
@@ -153,6 +166,7 @@ impl SettingsStore {
         } else {
             None
         };
+        remember_retention(&settings);
         Ok(Self { db, keys, current: Arc::new(RwLock::new(settings)), config_token })
     }
 
@@ -173,6 +187,7 @@ impl SettingsStore {
                 Ok(())
             })
             .await?;
+        remember_retention(&settings);
         *self.current.write().await = settings.clone();
         Ok(settings)
     }

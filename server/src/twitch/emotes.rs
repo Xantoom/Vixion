@@ -72,7 +72,8 @@ async fn fetch(http: &reqwest::Client, url: &str) -> Option<Option<Value>> {
     if !response.status().is_success() {
         return None;
     }
-    response.json().await.ok().map(Some)
+    let bytes = crate::body::read(response, crate::body::JSON).await.ok()?;
+    serde_json::from_slice(&bytes).ok().map(Some)
 }
 
 fn str_at<'a>(value: &'a Value, key: &str) -> Option<&'a str> {

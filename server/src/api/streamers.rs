@@ -66,7 +66,7 @@ fn streamer_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Streamer> {
         cover_stream_id: row.get(17)?,
         monitored: row.get::<_, i64>(5)? != 0,
         retention_days: row.get(6)?,
-        default_retention_days: super::streams::global_retention(),
+        default_retention_days: i64::from(crate::settings::retention_days()),
         live: live_since.map(|since| LiveInfo {
             title: row.get(7).ok().flatten(),
             game: row.get(8).ok().flatten(),

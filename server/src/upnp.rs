@@ -92,7 +92,9 @@ async fn discover(http: &reqwest::Client) -> Result<Gateway, String> {
     let location = header(&answer, "location").ok_or("the router gave no description")?;
     let base = reqwest::Url::parse(location).map_err(|e| e.to_string())?;
     let description =
-        http.get(base.clone()).send().await.map_err(|e| e.to_string())?.text().await.map_err(|e| e.to_string())?;
+        crate::body::text(http.get(base.clone()).send().await.map_err(|e| e.to_string())?, crate::body::TEXT)
+            .await
+            .map_err(|e| e.to_string())?;
     let (service, control) = SERVICES
         .iter()
         .find_map(|service| control_url(&description, service).map(|control| (*service, control)))
@@ -152,7 +154,7 @@ async fn soap(http: &reqwest::Client, gateway: &Gateway, action: &str, args: &st
         .await
         .map_err(|e| e.to_string())?;
     let ok = response.status().is_success();
-    let text = response.text().await.map_err(|e| e.to_string())?;
+    let text = crate::body::text(response, crate::body::TEXT).await.map_err(|e| e.to_string())?;
     if ok {
         return Ok(text);
     }

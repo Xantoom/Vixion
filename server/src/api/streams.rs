@@ -55,7 +55,7 @@ pub fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StreamSumma
     let keep_forever = row.get::<_, i64>(16)? != 0;
     let started_at: i64 = row.get(6)?;
     let own_retention: i64 = row.get(18)?;
-    let retention = if own_retention >= 0 { own_retention } else { global_retention() };
+    let retention = if own_retention >= 0 { own_retention } else { i64::from(crate::settings::retention_days()) };
     Ok(StreamSummary {
         id: row.get(0)?,
         streamer_id: row.get(1)?,
@@ -77,17 +77,6 @@ pub fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StreamSumma
         has_thumbnail: row.get::<_, i64>(17)? != 0,
         expires_at: (!keep_forever && retention > 0).then_some(started_at + retention * 86_400_000),
     })
-}
-
-/// The global retention, cached for row mapping (refreshed by every settings read in the API).
-static GLOBAL_RETENTION: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(14);
-
-pub(super) fn global_retention() -> i64 {
-    GLOBAL_RETENTION.load(std::sync::atomic::Ordering::Relaxed)
-}
-
-pub fn set_global_retention(days: u32) {
-    GLOBAL_RETENTION.store(i64::from(days), std::sync::atomic::Ordering::Relaxed);
 }
 
 #[derive(Serialize)]
@@ -203,7 +192,6 @@ pub async fn detail(
 ) -> AppResult<Json<StreamDetail>> {
     user.require("streams.view")?;
     let origin = crate::web::media_origin(&app, &headers);
-    set_global_retention(app.settings.get().await.retention_days);
     let (summary, login, name, avatar, audio_codec, gaps, error, chapters, parts, dir) = app
         .db
         .read(move |conn| {
@@ -286,10 +274,13 @@ pub async fn update(
             )?)
         })
         .await?;
+    if changed == 0 {
+        return Err(AppError::not_found());
+    }
     tracing::info!(id, keep = body.keep_forever, by = %user.username, "retention changed");
     crate::audit::record(&app, &user, if body.keep_forever { "stream.keep" } else { "stream.unkeep" }, id.to_string())
         .await;
-    if changed == 0 { Err(AppError::not_found()) } else { Ok(StatusCode::NO_CONTENT) }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn remove(State(app): State<AppState>, user: CurrentUser, Path(id): Path<i64>) -> AppResult<StatusCode> {
@@ -337,7 +328,7 @@ fn cache() -> &'static ChatCache {
 #[derive(Deserialize)]
 struct Stamp {
     t: i64,
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "never read: only required, so that a torn line is skipped")]
     k: serde::de::IgnoredAny,
 }
 

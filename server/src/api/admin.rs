@@ -95,7 +95,6 @@ pub async fn put_settings(
 ) -> AppResult<Json<Settings>> {
     user.require("settings.manage")?;
     let saved = app.settings.update(body).await?;
-    super::streams::set_global_retention(saved.retention_days);
     tracing::info!(by = %user.username, "settings changed");
     crate::audit::record(&app, &user, "settings.update", "").await;
     app.recorder.check_now();

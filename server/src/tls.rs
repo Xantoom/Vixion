@@ -382,7 +382,9 @@ impl Cloudflare {
         if let Some(body) = body {
             request = request.json(&body);
         }
-        let value: Value = request.send().await.map_err(|e| e.to_string())?.json().await.map_err(|e| e.to_string())?;
+        let response = request.send().await.map_err(|e| e.to_string())?;
+        let bytes = crate::body::read(response, crate::body::JSON).await.map_err(|e| e.to_string())?;
+        let value: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
         if value.get("success").and_then(Value::as_bool) != Some(true) {
             let errors = value.get("errors").map(Value::to_string).unwrap_or_default();
             return Err(format!("Cloudflare refused: {errors}"));
@@ -445,7 +447,8 @@ pub async fn dynamic_dns(app: AppState) {
     let cloudflare = Cloudflare::new(app.http.clone(), &api_token);
     loop {
         let address = async {
-            let text = app.http.clone().get("https://1.1.1.1/cdn-cgi/trace").send().await.ok()?.text().await.ok()?;
+            let text = app.http.clone().get("https://1.1.1.1/cdn-cgi/trace").send().await.ok()?;
+            let text = crate::body::text(text, crate::body::TEXT).await.ok()?;
             text.lines().find_map(|line| line.strip_prefix("ip=")).map(str::to_owned)
         }
         .await;

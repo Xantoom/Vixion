@@ -98,20 +98,23 @@ async fn merge_dir(app: &AppState, dir: &str) -> Result<(), AppError> {
 
     // An earlier merge stopped halfway: the first part goes back to how it was before it.
     if let Some(marker) =
-        std::fs::read(&marker_path).ok().and_then(|bytes| serde_json::from_slice::<Marker>(&bytes).ok())
+        tokio::fs::read(&marker_path).await.ok().and_then(|bytes| serde_json::from_slice::<Marker>(&bytes).ok())
     {
         if rest.iter().any(|row| row.part == marker.part) {
-            let file = std::fs::OpenOptions::new().write(true).open(&base_video).map_err(io)?;
-            file.set_len(marker.length).map_err(io)?;
-            restore_timeline(&folder, first.part, marker.duration_ms);
+            let file = tokio::fs::OpenOptions::new().write(true).open(&base_video).await.map_err(io)?;
+            file.set_len(marker.length).await.map_err(io)?;
+            let (folder, part) = (folder.clone(), first.part);
+            tokio::task::spawn_blocking(move || restore_timeline(&folder, part, marker.duration_ms))
+                .await
+                .map_err(|error| AppError::internal(format!("merge task: {error}")).with_source(error))?;
         }
-        let _ = std::fs::remove_file(&marker_path);
+        let _ = tokio::fs::remove_file(&marker_path).await;
     }
 
     let mut merged = first.clone();
     for other in rest {
         let other_video = folder.join(storage::video_file(other.part));
-        if !other_video.is_file() {
+        if !tokio::fs::metadata(&other_video).await.is_ok_and(|meta| meta.is_file()) {
             break;
         }
         tracing::info!(dir, part = other.part, "merging a part of a broadcast");
@@ -206,9 +209,9 @@ async fn merge_dir(app: &AppState, dir: &str) -> Result<(), AppError> {
                 Ok(())
             })
             .await?;
-        let _ = std::fs::remove_file(&marker_path);
-        let _ = std::fs::remove_file(&other_video);
-        let _ = std::fs::remove_file(folder.join(storage::timeline_file(other.part)));
+        let _ = tokio::fs::remove_file(&marker_path).await;
+        let _ = tokio::fs::remove_file(&other_video).await;
+        let _ = tokio::fs::remove_file(folder.join(storage::timeline_file(other.part))).await;
         tracing::info!(dir, part = other.part, into = first.id, "part merged");
     }
     Ok(())
