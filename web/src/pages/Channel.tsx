@@ -19,7 +19,7 @@ import {
 	TriangleAlert,
 	Users,
 } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useId, useState } from 'react';
 import { useT } from '@/i18n';
 import { useAction } from '@/lib/action';
 import {
@@ -74,12 +74,33 @@ export function ChannelPage() {
 	const t = useT();
 	const { data, isPending, error } = useQuery(channelQuery(login));
 	const [tab, setTab] = useState<'recordings' | 'twitch' | null>(null);
+	const tabs = useId();
 
 	if (isPending) return <PageLoading />;
 	if (error) return error instanceof ApiError && error.status === 404 ? <NotFound /> : <NotFound forbidden />;
 	const { profile, streamer, streams } = data;
 	const name = streamer?.display_name ?? profile?.display_name ?? login;
 	const shown = tab ?? (streamer && (streams.length > 0 || !profile?.videos.length) ? 'recordings' : 'twitch');
+	// One stop for the Tab key; the arrows go from tab to tab and open the one they reach.
+	const onTabKey = (event: KeyboardEvent<HTMLDivElement>) => {
+		const list = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=tab]')];
+		const index = list.indexOf(document.activeElement as HTMLButtonElement);
+		if (index < 0) return;
+		const target =
+			event.key === 'ArrowRight'
+				? list[(index + 1) % list.length]
+				: event.key === 'ArrowLeft'
+					? list[(index - 1 + list.length) % list.length]
+					: event.key === 'Home'
+						? list[0]
+						: event.key === 'End'
+							? list.at(-1)
+							: undefined;
+		if (!target) return;
+		event.preventDefault();
+		target.focus();
+		target.click();
+	};
 
 	return (
 		<div className="pb-14">
@@ -92,8 +113,14 @@ export function ChannelPage() {
 					</p>
 				) : null}
 				<LiveNow data={data} />
-				<div role="tablist" aria-label={name} className="border-line mt-10 mb-8 flex gap-1 border-b">
+				<div
+					role="tablist"
+					aria-label={name}
+					onKeyDown={onTabKey}
+					className="border-line mt-10 mb-8 flex gap-1 border-b"
+				>
 					<Tab
+						id={`${tabs}-recordings`}
 						selected={shown === 'recordings'}
 						onSelect={() => {
 							setTab('recordings');
@@ -104,6 +131,7 @@ export function ChannelPage() {
 					</Tab>
 					{profile ? (
 						<Tab
+							id={`${tabs}-twitch`}
 							selected={shown === 'twitch'}
 							onSelect={() => {
 								setTab('twitch');
@@ -114,31 +142,33 @@ export function ChannelPage() {
 						</Tab>
 					) : null}
 				</div>
-				{shown === 'recordings' ? (
-					!streamer ? (
-						<Empty>{t.channel.notWatched}</Empty>
-					) : streams.length === 0 ? (
-						<Empty>{streamer.monitored ? t.streamer.empty : t.streamer.emptyPaused}</Empty>
-					) : (
+				<div role="tabpanel" aria-labelledby={`${tabs}-${shown}`}>
+					{shown === 'recordings' ? (
+						!streamer ? (
+							<Empty>{t.channel.notWatched}</Empty>
+						) : streams.length === 0 ? (
+							<Empty>{streamer.monitored ? t.streamer.empty : t.streamer.emptyPaused}</Empty>
+						) : (
+							<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-6 gap-y-10">
+								{streams.map((stream, index) => (
+									<li key={stream.id} style={{ '--i': index } as React.CSSProperties}>
+										<StreamCard stream={stream} login={login} />
+									</li>
+								))}
+							</ul>
+						)
+					) : profile && profile.videos.length > 0 ? (
 						<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-6 gap-y-10">
-							{streams.map((stream, index) => (
-								<li key={stream.id} style={{ '--i': index } as React.CSSProperties}>
-									<StreamCard stream={stream} login={login} />
+							{profile.videos.map((video, index) => (
+								<li key={video.id} style={{ '--i': index } as React.CSSProperties}>
+									<VideoCard video={video} />
 								</li>
 							))}
 						</ul>
-					)
-				) : profile && profile.videos.length > 0 ? (
-					<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-6 gap-y-10">
-						{profile.videos.map((video, index) => (
-							<li key={video.id} style={{ '--i': index } as React.CSSProperties}>
-								<VideoCard video={video} />
-							</li>
-						))}
-					</ul>
-				) : (
-					<Empty>{t.channel.noVideos}</Empty>
-				)}
+					) : (
+						<Empty>{t.channel.noVideos}</Empty>
+					)}
+				</div>
 			</div>
 		</div>
 	);
@@ -153,11 +183,13 @@ function Empty({ children }: { children: ReactNode }) {
 }
 
 function Tab({
+	id,
 	selected,
 	onSelect,
 	count,
 	children,
 }: {
+	id: string;
 	selected: boolean;
 	onSelect: () => void;
 	count: number;
@@ -166,8 +198,10 @@ function Tab({
 	return (
 		<button
 			type="button"
+			id={id}
 			role="tab"
 			aria-selected={selected}
+			tabIndex={selected ? 0 : -1}
 			onClick={onSelect}
 			className="text-ui text-muted hover:text-ink aria-selected:text-ink relative -mb-px flex h-12 items-center gap-2 px-3 font-semibold transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-transparent aria-selected:after:bg-accent-fill"
 		>

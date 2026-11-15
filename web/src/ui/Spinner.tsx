@@ -1,3 +1,5 @@
+import { useT } from '@/i18n';
+
 export function Spinner({ className = '', size = 16 }: { className?: string; size?: number }) {
 	return (
 		<svg
@@ -16,9 +18,11 @@ export function Spinner({ className = '', size = 16 }: { className?: string; siz
 
 /** Fills a page while it loads, after a beat: quick answers never flash it. */
 export function PageLoading() {
+	const t = useT();
 	return (
-		<div className="fade-in text-muted grid min-h-[40vh] place-items-center [animation-delay:250ms]">
+		<div role="status" className="fade-in text-muted grid min-h-[40vh] place-items-center [animation-delay:250ms]">
 			<Spinner size={22} />
+			<span className="sr-only">{t.common.loading}</span>
 		</div>
 	);
 }

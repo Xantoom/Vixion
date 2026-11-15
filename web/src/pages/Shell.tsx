@@ -60,6 +60,17 @@ export function Shell() {
 
 	return (
 		<div className="flex min-h-dvh flex-col">
+			<a
+				href="#main"
+				onClick={(event) => {
+					// Moves the focus without touching the address, which the router reads.
+					event.preventDefault();
+					document.getElementById('main')?.focus();
+				}}
+				className="bg-accent-fill text-accent-ink text-ui sr-only z-[70] rounded-sm px-4 py-2 font-semibold focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+			>
+				{t.common.skipToContent}
+			</a>
 			{hidden ? (
 				<div
 					aria-hidden
@@ -141,7 +152,7 @@ export function Shell() {
 					)}
 				</div>
 			</header>
-			<main className="flex-1">
+			<main id="main" tabIndex={-1} className="flex-1 outline-none">
 				<Suspense fallback={<PageLoading />}>
 					<Outlet />
 				</Suspense>

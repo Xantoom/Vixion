@@ -35,7 +35,7 @@ import { createPreview } from '@/player/preview';
 import { Timeline, boxArt } from '@/player/Timeline';
 import { usePrefs } from '@/stores/prefs';
 import { Avatar } from '@/ui/Avatar';
-import { Button } from '@/ui/Button';
+import { Button, buttonClass } from '@/ui/Button';
 import { Menu, MenuDivider, MenuItem, type MenuTriggerProps } from '@/ui/Menu';
 import { PageLoading, Spinner } from '@/ui/Spinner';
 import { NotFound } from './NotFound';
@@ -483,11 +483,9 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 										: t.player.cantOpen}
 							</p>
 							{error === 'decode' && downloads.video ? (
-								<a href={downloads.video}>
-									<Button variant="accent" tabIndex={-1}>
-										<Download size={16} />
-										{t.player.downloadVideo}
-									</Button>
+								<a href={downloads.video} className={buttonClass('accent')}>
+									<Download size={16} />
+									{t.player.downloadVideo}
 								</a>
 							) : (
 								<Button variant="accent" onClick={() => void refresh()}>
@@ -880,13 +878,16 @@ function StillRecording({ stream }: { stream: StreamDetail }) {
 				<h1 className="text-title font-semibold tracking-tight">{stream.title || t.stream.untitled}</h1>
 				<p className="text-body text-muted">{t.stream.recordingLead}</p>
 				<div className="mt-2 flex flex-wrap justify-center gap-2">
-					<a href={`https://www.twitch.tv/${login}`} target="_blank" rel="noreferrer">
-						<Button variant="accent" tabIndex={-1}>
-							{t.channel.watchOnTwitch}
-						</Button>
+					<a
+						href={`https://www.twitch.tv/${login}`}
+						target="_blank"
+						rel="noreferrer"
+						className={buttonClass('accent')}
+					>
+						{t.channel.watchOnTwitch}
 					</a>
-					<Link to="/$login" params={{ login }}>
-						<Button tabIndex={-1}>{stream.streamer_name}</Button>
+					<Link to="/$login" params={{ login }} className={buttonClass()}>
+						{stream.streamer_name}
 					</Link>
 				</div>
 			</div>

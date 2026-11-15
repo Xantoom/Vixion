@@ -13,6 +13,15 @@ const VARIANTS: Record<Variant, string> = {
 	'danger-ghost': 'text-danger font-medium hover:bg-danger-soft disabled:opacity-45',
 };
 
+/**
+ * The look of a button, for a link that goes somewhere: a link can't hold a button, so it wears
+ * the classes itself.
+ */
+export function buttonClass(variant: Variant = 'secondary', size: 'sm' | 'md' = 'md'): string {
+	const height = size === 'sm' ? 'h-8 px-3 text-small rounded-xs' : 'h-10 px-4.5 text-ui rounded-sm';
+	return `relative inline-flex items-center justify-center gap-2 whitespace-nowrap transition-[filter,background-color,opacity] duration-150 active:scale-[0.98] ${height} ${VARIANTS[variant]}`;
+}
+
 export function Button({
 	variant = 'secondary',
 	className = '',
@@ -28,17 +37,18 @@ export function Button({
 	busy?: boolean;
 	size?: 'sm' | 'md';
 }) {
-	const height = size === 'sm' ? 'h-8 px-3 text-small rounded-xs' : 'h-10 px-4.5 text-ui rounded-sm';
 	return (
 		<button
 			type={type}
 			aria-disabled={busy || undefined}
+			aria-busy={busy || undefined}
 			onClick={busy ? undefined : onClick}
-			className={`relative inline-flex items-center justify-center gap-2 whitespace-nowrap transition-[filter,background-color,opacity] duration-150 active:scale-[0.98] ${height} ${VARIANTS[variant]} ${className}`}
+			className={`${buttonClass(variant, size)} ${className}`}
 			{...props}
 		>
 			{busy ? <Spinner className="absolute" /> : null}
-			<span className={`inline-flex items-center gap-2 ${busy ? 'invisible' : ''}`}>{children}</span>
+			{/* Transparent rather than invisible: the label stays the button's name while it works. */}
+			<span className={`inline-flex items-center gap-2 ${busy ? 'opacity-0' : ''}`}>{children}</span>
 		</button>
 	);
 }
