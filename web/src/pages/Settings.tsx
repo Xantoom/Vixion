@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TriangleAlert } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useT } from '@/i18n';
 import { useAction } from '@/lib/action';
 import { type Folder, type Settings, type SettingsResponse, type Stats, api } from '@/lib/api';
@@ -22,25 +22,24 @@ export function SettingsPage() {
 		queryFn: async () => api.get<SettingsResponse>('/settings'),
 		enabled: can,
 	});
-	const [draft, setDraft] = useState<Settings | null>(null);
+	// What was changed here and not saved yet; until then the page shows the server's settings.
+	const [edits, setEdits] = useState<Settings | null>(null);
+	const draft = edits ?? data?.settings ?? null;
 	const { busy, run } = useAction('toast');
-
-	useEffect(() => {
-		if (data) setDraft(data.settings);
-	}, [data]);
 
 	if (!can) return <NotFound forbidden />;
 	if (isPending || !draft) return error ? <p className="text-danger p-6">{error.message}</p> : <PageLoading />;
 
 	const set = (changes: Partial<Settings>) => {
-		setDraft({ ...draft, ...changes });
+		setEdits({ ...draft, ...changes });
 	};
-	const dirty = JSON.stringify(draft) !== JSON.stringify(data?.settings);
+	const dirty = edits !== null && JSON.stringify(edits) !== JSON.stringify(data?.settings);
 
 	const save = async () => {
 		await run(async () => {
 			const saved = await api.put<Settings>('/settings', draft);
 			client.setQueryData<SettingsResponse>(['settings'], (old) => (old ? { ...old, settings: saved } : old));
+			setEdits(null);
 			toast.ok(t.common.saved);
 		});
 	};
@@ -162,7 +161,7 @@ export function SettingsPage() {
 							variant="ghost"
 							className="!text-tip-ink hover:!bg-white/10"
 							onClick={() => {
-								setDraft(data?.settings ?? draft);
+								setEdits(null);
 							}}
 						>
 							{t.common.cancel}

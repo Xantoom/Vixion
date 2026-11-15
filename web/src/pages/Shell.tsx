@@ -34,13 +34,14 @@ function useOpenAlerts(): number {
 export function Shell() {
 	const t = useT();
 	const me = useMe();
-	const path = useRouterState({ select: (state) => state.location.pathname });
+	// Only what the bar needs from the address: it doesn't draw again on every page change.
+	const studio = useRouterState({ select: (state) => /^\/[^/]+\/\d+$/.test(state.location.pathname) });
+	const inAdmin = useRouterState({ select: (state) => state.location.pathname.startsWith('/admin') });
 	const alerts = useOpenAlerts();
 	const [searching, setSearching] = useState(false);
 	const [revealed, setRevealed] = useState(false);
 	const admin = firstAdminPage(me);
 	// On a recording the picture takes the whole window: the bar slides over it from the top edge.
-	const studio = /^\/[^/]+\/\d+$/.test(path);
 	const hidden = studio && !revealed;
 	const header = useRef<HTMLElement>(null);
 
@@ -134,7 +135,7 @@ export function Shell() {
 										to={admin}
 										aria-label={t.nav.admin}
 										data-tip={t.nav.admin}
-										aria-current={path.startsWith('/admin') ? 'page' : undefined}
+										aria-current={inAdmin ? 'page' : undefined}
 										className="text-muted hover:text-ink hover:bg-surface aria-[current=page]:text-ink aria-[current=page]:bg-surface relative grid size-10 place-items-center rounded-sm transition-colors"
 									>
 										<ShieldCheck size={20} />
