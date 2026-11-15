@@ -34,6 +34,10 @@ pub struct ChatLine {
     /// Badges, as Twitch sends them: `subscriber/12,premium/1`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub b: String,
+    /// What the badges stand for, when Twitch says: `subscriber/14` (exact months), `founder/3`,
+    /// `predictions/Team A`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub bi: String,
     /// Twitch emotes and where they are: `25:0-4,12-16/1902:6-10`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub e: String,
@@ -91,6 +95,7 @@ pub fn parse_irc(line: &str) -> Option<ChatLine> {
         n: tag("display-name"),
         c: tag("color"),
         b: tag("badges"),
+        bi: tag("badge-info"),
         e: tag("emotes"),
         m: String::new(),
         i: tag("id"),
@@ -207,11 +212,12 @@ mod tests {
 
     #[test]
     fn parses_messages() {
-        let line = "@badges=subscriber/12;color=#FF4500;display-name=Some\\sOne;emotes=25:0-4;id=abc;tmi-sent-ts=1700000000000 \
+        let line = "@badge-info=subscriber/14;badges=subscriber/12;color=#FF4500;display-name=Some\\sOne;emotes=25:0-4;id=abc;tmi-sent-ts=1700000000000 \
             :someone!someone@someone.tmi.twitch.tv PRIVMSG #chan :Kappa hello";
         let chat = parse_irc(line).expect("message");
         assert_eq!((chat.k.as_str(), chat.u.as_str(), chat.n.as_str()), ("m", "someone", "Some One"));
         assert_eq!((chat.m.as_str(), chat.e.as_str(), chat.t), ("Kappa hello", "25:0-4", 1_700_000_000_000));
+        assert_eq!((chat.b.as_str(), chat.bi.as_str()), ("subscriber/12", "subscriber/14"));
         let action = parse_irc(":a!a@a PRIVMSG #chan :\u{1}ACTION waves\u{1}").expect("action");
         assert_eq!((action.k.as_str(), action.m.as_str()), ("a", "waves"));
     }

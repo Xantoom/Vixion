@@ -418,8 +418,9 @@ impl TwitchApi {
     }
 
     /// Chat badge images, `set/version` to URL: the global ones, overridden by the channel's own.
-    pub async fn badges(&self, channel_id: &str) -> Result<HashMap<String, String>, TwitchError> {
-        const FIELDS: &str = "setID version imageURL(size: DOUBLE)";
+    /// Badge pictures and titles ("1-Year Subscriber"), by `set/version`: global ones, then the channel's.
+    pub async fn badges(&self, channel_id: &str) -> Result<HashMap<String, [String; 2]>, TwitchError> {
+        const FIELDS: &str = "setID version title imageURL(size: DOUBLE)";
         let body = json!({
             "query": format!("query($id: ID!) {{ badges {{ {FIELDS} }} user(id: $id) {{ broadcastBadges {{ {FIELDS} }} }} }}"),
             "variables": { "id": channel_id },
@@ -431,7 +432,8 @@ impl TwitchApi {
                 if let (Some(set), Some(version), Some(url)) =
                     (text(badge, "/setID"), text(badge, "/version"), text(badge, "/imageURL"))
                 {
-                    out.insert(format!("{set}/{version}"), url);
+                    let title = text(badge, "/title").unwrap_or_default();
+                    out.insert(format!("{set}/{version}"), [url, title]);
                 }
             }
         }

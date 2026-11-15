@@ -180,6 +180,33 @@ export const en = {
 		openOnTwitch: (name: string) => `${name} on Twitch`,
 		seekHere: 'Go to this moment',
 		goLive: 'Latest messages',
+		badges: {
+			broadcaster: 'Broadcaster',
+			moderator: 'Moderator',
+			vip: 'VIP',
+			verified: 'Verified',
+			staff: 'Twitch staff',
+			artist: 'Artist',
+			noAudio: 'Watching without audio',
+			noVideo: 'Listening without video',
+			/** 14 → “1 year 2 months”. */
+			duration: (months: number) => {
+				const years = Math.floor(months / 12);
+				const rest = months % 12;
+				const parts: string[] = [];
+				if (years > 0) parts.push(years === 1 ? '1 year' : `${years} years`);
+				if (rest > 0) parts.push(rest === 1 ? '1 month' : `${rest} months`);
+				return parts.join(' ');
+			},
+			subscriber: (duration: string, tier: number) =>
+				`${duration ? `Subscriber for ${duration}` : 'Subscriber'}${tier > 1 ? ` · tier ${tier}` : ''}`,
+			founder: (duration: string) => (duration ? `Founder, subscribed for ${duration}` : 'Founder'),
+			bits: (amount: string) => `${amount} bits cheered`,
+			gifter: (count: number, amount: string) => (count === 1 ? 'Gifted a sub' : `${amount} subs gifted`),
+			bitsLeader: (rank: string) => `Bits leader #${rank}`,
+			giftLeader: (rank: string) => `Gift leader #${rank}`,
+			prediction: (outcome: string) => `Predicted: ${outcome}`,
+		},
 		cut: (missing: string) => `Cut: ${missing} missing`,
 	},
 	stats: {

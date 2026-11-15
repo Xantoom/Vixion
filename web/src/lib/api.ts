@@ -162,8 +162,10 @@ export interface ChannelPage {
 
 /** Badge pictures by `set/version`, and third-party emotes by word, at 1x and 2x. */
 export interface ChatAssets {
-	badges: Record<string, string>;
-	emotes: Record<string, [string, string]>;
+	/** `set/version` to picture and Twitch's title. */
+	badges: Record<string, [string, string]>;
+	/** Word to picture at 1x and 2x, and where it comes from (7TV, BTTV, FFZ). */
+	emotes: Record<string, [string, string, string]>;
 }
 
 export type StreamStatus = 'recording' | 'done' | 'failed';
@@ -216,6 +218,8 @@ export interface ChatLine {
 	n?: string;
 	c?: string;
 	b?: string;
+	/** What the badges stand for: `subscriber/14` (exact months), `predictions/Team A`. */
+	bi?: string;
 	e?: string;
 	m?: string;
 	i?: string;

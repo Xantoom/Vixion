@@ -3,55 +3,57 @@ import { ArrowDown, Gem, Megaphone, Star, Sword, Video } from 'lucide-react';
 import { type ReactNode, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '@/i18n';
 import { type ChatAssets, type ChatLine, api } from '@/lib/api';
-import { formatClock } from '@/lib/format';
+import { formatClock, formatDate } from '@/lib/format';
 import { Spinner } from '@/ui/Spinner';
+import { badgeInfo, badgeLabel } from './badges';
 import { fragments, nameColor, useChat } from './chat';
 
-const BADGES: Record<string, { icon: ReactNode; className: string; label: string }> = {
-	broadcaster: { icon: <Video size={12} strokeWidth={2.6} />, className: 'bg-live text-white', label: 'Broadcaster' },
-	moderator: {
-		icon: <Sword size={12} strokeWidth={2.6} />,
-		className: 'bg-[#00ad03] text-white',
-		label: 'Moderator',
-	},
-	vip: { icon: <Gem size={12} strokeWidth={2.6} />, className: 'bg-[#e005b9] text-white', label: 'VIP' },
-	subscriber: {
-		icon: <Star size={12} strokeWidth={2.6} />,
-		className: 'bg-accent text-accent-ink',
-		label: 'Subscriber',
-	},
+/** Drawn while the channel's badge pictures load, or when Twitch has none. */
+const FALLBACK: Record<string, { icon: ReactNode; className: string }> = {
+	broadcaster: { icon: <Video size={12} strokeWidth={2.6} />, className: 'bg-live text-white' },
+	moderator: { icon: <Sword size={12} strokeWidth={2.6} />, className: 'bg-[#00ad03] text-white' },
+	vip: { icon: <Gem size={12} strokeWidth={2.6} />, className: 'bg-[#e005b9] text-white' },
+	subscriber: { icon: <Star size={12} strokeWidth={2.6} />, className: 'bg-accent text-accent-ink' },
 };
 
 type Assets = ChatAssets | undefined;
 
-function Badges({ badges, assets }: { badges: string | undefined; assets: Assets }) {
-	if (!badges) return null;
+function Badges({ line, assets }: { line: ChatLine; assets: Assets }) {
+	const t = useT();
+	if (!line.b) return null;
+	const info = badgeInfo(line.bi);
 	return (
 		<>
-			{badges.split(',').map((entry) => {
-				const url = assets?.badges[entry];
-				const name = entry.split('/')[0] ?? '';
+			{line.b.split(',').map((entry) => {
+				const slash = entry.indexOf('/');
+				const set = slash > 0 ? entry.slice(0, slash) : entry;
+				const version = slash > 0 ? entry.slice(slash + 1) : '';
+				const [url, title] = assets?.badges[entry] ?? [];
+				const label = badgeLabel(set, version, info, title, t.player.badges);
 				if (url) {
 					return (
 						<img
 							key={entry}
 							src={url}
-							alt=""
-							data-tip={name}
+							alt={label}
+							data-tip={label}
+							data-tip-img={url}
 							loading="lazy"
 							referrerPolicy="no-referrer"
 							className="mr-1 inline-block size-[1.125rem] -translate-y-px align-middle"
 						/>
 					);
 				}
-				const badge = BADGES[name];
-				return badge ? (
+				const fallback = FALLBACK[set];
+				return fallback ? (
 					<span
 						key={entry}
-						data-tip={badge.label}
-						className={`mr-1 inline-grid size-[1.125rem] -translate-y-px place-items-center rounded-xs align-middle ${badge.className}`}
+						role="img"
+						aria-label={label}
+						data-tip={label}
+						className={`mr-1 inline-grid size-[1.125rem] -translate-y-px place-items-center rounded-xs align-middle ${fallback.className}`}
 					>
-						{badge.icon}
+						{fallback.icon}
 					</span>
 				) : null;
 			})}
@@ -59,19 +61,35 @@ function Badges({ badges, assets }: { badges: string | undefined; assets: Assets
 	);
 }
 
-function Emote({ name, src, srcSet }: { name: string; src: string; srcSet: string }) {
+function Emote({
+	name,
+	src,
+	srcSet,
+	big,
+	from,
+}: {
+	name: string;
+	src: string;
+	srcSet: string;
+	big: string;
+	from: string;
+}) {
 	return (
 		<img
 			src={src}
 			srcSet={srcSet}
 			alt={name}
 			data-tip={name}
+			data-tip-sub={from}
+			data-tip-img={big}
 			loading="lazy"
 			referrerPolicy="no-referrer"
 			className="-my-1.5 inline-block h-8 w-auto max-w-full align-middle"
 		/>
 	);
 }
+
+const TWITCH_EMOTES = 'https://static-cdn.jtvnw.net/emoticons/v2';
 
 /** Text with Twitch's emotes (from the message's tags) and the channel's 7TV, BTTV and FFZ ones (by word). */
 function Message({ text, emotes, assets }: { text: string; emotes: string | undefined; assets: Assets }) {
@@ -84,8 +102,10 @@ function Message({ text, emotes, assets }: { text: string; emotes: string | unde
 						// oxlint-disable-next-line no-array-index-key
 						key={index}
 						name={part.name}
-						src={`https://static-cdn.jtvnw.net/emoticons/v2/${part.emote}/default/dark/1.0`}
-						srcSet={`https://static-cdn.jtvnw.net/emoticons/v2/${part.emote}/default/dark/2.0 2x`}
+						src={`${TWITCH_EMOTES}/${part.emote}/default/dark/1.0`}
+						srcSet={`${TWITCH_EMOTES}/${part.emote}/default/dark/2.0 2x`}
+						big={`${TWITCH_EMOTES}/${part.emote}/default/dark/3.0`}
+						from="Twitch"
 					/>
 				) : words ? (
 					// oxlint-disable-next-line no-array-index-key
@@ -93,8 +113,15 @@ function Message({ text, emotes, assets }: { text: string; emotes: string | unde
 						{part.text.split(/(\s+)/).map((word, at) => {
 							const emote = words[word];
 							return emote ? (
-								// oxlint-disable-next-line no-array-index-key
-								<Emote key={at} name={word} src={emote[0]} srcSet={`${emote[1]} 2x`} />
+								<Emote
+									// oxlint-disable-next-line no-array-index-key
+									key={at}
+									name={word}
+									src={emote[0]}
+									srcSet={`${emote[1]} 2x`}
+									big={emote[1]}
+									from={emote[2]}
+								/>
 							) : (
 								word
 							);
@@ -112,13 +139,15 @@ function Message({ text, emotes, assets }: { text: string; emotes: string | unde
 function Name({ line }: { line: ChatLine }) {
 	const t = useT();
 	const name = line.n || line.u || '';
+	// Names in another script (日本語) or spelled differently: the login is what Twitch's URL uses.
+	const shown = line.n && line.u && line.n.toLowerCase() !== line.u ? `${line.n} (${line.u})` : name;
 	const style = { '--name': nameColor(line) } as React.CSSProperties;
 	return line.u ? (
 		<a
 			href={`https://www.twitch.tv/${line.u}`}
 			target="_blank"
 			rel="noreferrer"
-			data-tip={t.player.openOnTwitch(name)}
+			data-tip={t.player.openOnTwitch(shown)}
 			className="chat-name font-bold"
 			style={style}
 		>
@@ -151,6 +180,7 @@ const Line = memo(function Line({
 				onSeek(line.o);
 			}}
 			data-tip={t.player.seekHere}
+			data-tip-sub={formatDate(line.t)}
 			className="text-caption text-muted hover:text-accent-text tabular mr-2 rounded-xs align-baseline transition-colors pointer-coarse:-mx-1 pointer-coarse:px-1 pointer-coarse:py-1.5"
 		>
 			{formatClock(line.o / 1000)}
@@ -178,7 +208,7 @@ const Line = memo(function Line({
 	return (
 		<li className={`hover:bg-surface text-caption px-3 py-0.5 leading-relaxed ${deleted ? 'opacity-45' : ''}`}>
 			{stamp}
-			<Badges badges={line.b} assets={assets} />
+			<Badges line={line} assets={assets} />
 			<Name line={line} />
 			{action ? ' ' : <span className="text-muted">: </span>}
 			{deleted ? (

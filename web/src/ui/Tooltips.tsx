@@ -3,6 +3,10 @@ import { createPortal } from 'react-dom';
 
 interface Tip {
 	text: string;
+	/** A second, quieter line (`data-tip-sub`). */
+	sub: string | undefined;
+	/** A larger picture of what is hovered (`data-tip-img`): an emote, a badge. */
+	img: string | undefined;
 	x: number;
 	y: number;
 	below: boolean;
@@ -15,7 +19,8 @@ const MARGIN = 8;
 /**
  * One tooltip for the whole app: any element with `data-tip` shows its text when the mouse rests
  * on it or the keyboard focuses it. It is drawn inside the full-screen element when there is one,
- * so the player's buttons keep theirs in full screen.
+ * so the player's buttons keep theirs in full screen. `data-tip-sub` adds a quieter second line and
+ * `data-tip-img` a picture above the text.
  */
 export function Tooltips() {
 	const [tip, setTip] = useState<Tip | null>(null);
@@ -32,6 +37,8 @@ export function Tooltips() {
 			const below = rect.top < 56;
 			setTip({
 				text,
+				sub: element.dataset.tipSub,
+				img: element.dataset.tipImg,
 				x: rect.left + rect.width / 2,
 				y: below ? rect.bottom + MARGIN : rect.top - MARGIN,
 				below,
@@ -77,11 +84,15 @@ export function Tooltips() {
 
 	// In the top layer, shown after whatever is already there: above an open dialog too. Kept
 	// inside the window: a tip by the edge slides in rather than being cut.
+	const place = (x: number) => {
+		if (!box.current) return;
+		const width = box.current.offsetWidth;
+		setLeft(Math.max(MARGIN, Math.min(window.innerWidth - width - MARGIN, x - width / 2)));
+	};
 	useLayoutEffect(() => {
 		if (!tip || !box.current) return;
 		if (!box.current.matches(':popover-open')) box.current.showPopover();
-		const width = box.current.offsetWidth;
-		setLeft(Math.max(MARGIN, Math.min(window.innerWidth - width - MARGIN, tip.x - width / 2)));
+		place(tip.x);
 	}, [tip]);
 
 	if (!tip) return null;
@@ -93,7 +104,22 @@ export function Tooltips() {
 			className="tooltip-in bg-tip text-tip-ink text-small pointer-events-none fixed inset-auto m-0 max-w-72 overflow-visible rounded-xs border-0 px-2.5 py-1.5 font-medium shadow-lg"
 			style={{ left, top: tip.y, transform: tip.below ? undefined : 'translateY(-100%)' }}
 		>
-			{tip.text}
+			{tip.img ? (
+				<img
+					src={tip.img}
+					alt=""
+					referrerPolicy="no-referrer"
+					// The picture can make the box wider: centred again once it has its size.
+					onLoad={() => {
+						place(tip.x);
+					}}
+					className="mx-auto mb-1 block h-14 w-auto max-w-full object-contain"
+				/>
+			) : null}
+			<div className={tip.img ? 'text-center' : undefined}>{tip.text}</div>
+			{tip.sub ? (
+				<div className={`text-caption font-normal opacity-70 ${tip.img ? 'text-center' : ''}`}>{tip.sub}</div>
+			) : null}
 		</div>,
 		tip.host,
 	);

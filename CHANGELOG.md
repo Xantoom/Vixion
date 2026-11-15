@@ -9,6 +9,16 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Added
+
+- Hovering an emote shows it larger, with where it comes from (Twitch, 7TV, BTTV or FFZ); hovering a badge shows it larger too.
+- A message's time hint also gives the date and hour it was sent, and a name's hint gives the login when the display name differs.
+
+### Changed
+
+- Subscriber badges say for how long: "Subscriber for 1 year 2 months", with the tier above 1. Chat recorded from now on keeps Twitch's exact months; older recordings use the badge's step.
+- Every badge's hint is in the interface's language (founder, bits, gift subs, predictions…), and others use Twitch's title instead of their internal name.
+
 ## [0.2.2] - 2026-11-15
 
 ### Added

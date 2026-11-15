@@ -20,10 +20,10 @@ const TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Debug, Default, Serialize)]
 pub struct ChatAssets {
-    /// `set/version` to picture.
-    pub badges: HashMap<String, String>,
-    /// Word to picture, at 1x and 2x.
-    pub emotes: HashMap<String, [String; 2]>,
+    /// `set/version` to picture and title.
+    pub badges: HashMap<String, [String; 2]>,
+    /// Word to picture at 1x and 2x, and where it comes from (7TV, BTTV, FFZ).
+    pub emotes: HashMap<String, [String; 3]>,
 }
 
 /// When it was fetched, how long it stays, and the assets.
@@ -89,7 +89,7 @@ fn str_at<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key).and_then(Value::as_str)
 }
 
-async fn seventv(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String, [String; 2])>> {
+async fn seventv(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String, [String; 3])>> {
     let user = format!("https://7tv.io/v3/users/twitch/{channel_id}");
     let (global, channel) = tokio::join!(fetch(http, "https://7tv.io/v3/emote-sets/global"), fetch(http, &user));
     let (global, channel) = (global?, channel?);
@@ -102,13 +102,13 @@ async fn seventv(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String
             let name = str_at(emote, "name")?;
             let id = emote.pointer("/data/id").and_then(Value::as_str).or_else(|| str_at(emote, "id"))?;
             let url = |size: u8| format!("https://cdn.7tv.app/emote/{id}/{size}x.webp");
-            Some((name.to_owned(), [url(1), url(2)]))
+            Some((name.to_owned(), [url(1), url(2), "7TV".to_owned()]))
         })
         .collect::<Vec<_>>()
         .into()
 }
 
-async fn bttv(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String, [String; 2])>> {
+async fn bttv(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String, [String; 3])>> {
     let user = format!("https://api.betterttv.net/3/cached/users/twitch/{channel_id}");
     let (global, channel) =
         tokio::join!(fetch(http, "https://api.betterttv.net/3/cached/emotes/global"), fetch(http, &user));
@@ -126,13 +126,13 @@ async fn bttv(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String, [
         .filter_map(|emote| {
             let (name, id) = (str_at(emote, "code")?, str_at(emote, "id")?);
             let url = |size: u8| format!("https://cdn.betterttv.net/emote/{id}/{size}x");
-            Some((name.to_owned(), [url(1), url(2)]))
+            Some((name.to_owned(), [url(1), url(2), "BTTV".to_owned()]))
         })
         .collect::<Vec<_>>()
         .into()
 }
 
-async fn ffz(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String, [String; 2])>> {
+async fn ffz(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String, [String; 3])>> {
     let url = format!("https://api.betterttv.net/3/cached/frankerfacez/users/twitch/{channel_id}");
     let Some(list) = fetch(http, &url).await? else { return Some(Vec::new()) };
     list.as_array()
@@ -143,7 +143,7 @@ async fn ffz(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String, [S
             let images = emote.get("images")?;
             let small = str_at(images, "1x")?.to_owned();
             let large = str_at(images, "2x").map_or_else(|| small.clone(), str::to_owned);
-            Some((name.to_owned(), [small, large]))
+            Some((name.to_owned(), [small, large, "FFZ".to_owned()]))
         })
         .collect::<Vec<_>>()
         .into()

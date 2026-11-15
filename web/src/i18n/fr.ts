@@ -184,6 +184,32 @@ export const fr: Messages = {
 		openOnTwitch: (name) => `${name} sur Twitch`,
 		seekHere: 'Aller à ce moment',
 		goLive: 'Derniers messages',
+		badges: {
+			broadcaster: 'Diffuseur',
+			moderator: 'Modérateur',
+			vip: 'VIP',
+			verified: 'Vérifié',
+			staff: 'Équipe Twitch',
+			artist: 'Artiste',
+			noAudio: 'Regarde sans le son',
+			noVideo: 'Écoute sans la vidéo',
+			duration: (months) => {
+				const years = Math.floor(months / 12);
+				const rest = months % 12;
+				const parts: string[] = [];
+				if (years > 0) parts.push(years === 1 ? '1 an' : `${years} ans`);
+				if (rest > 0) parts.push(`${rest} mois`);
+				return parts.join(' ');
+			},
+			subscriber: (duration, tier) =>
+				`${duration ? `Abonnement ${duration}` : 'Abonnement'}${tier > 1 ? ` · niveau ${tier}` : ''}`,
+			founder: (duration) => (duration ? `Fondateur, abonnement ${duration}` : 'Fondateur'),
+			bits: (amount) => `${amount} bits offerts`,
+			gifter: (count, amount) => (count === 1 ? '1 abonnement offert' : `${amount} abonnements offerts`),
+			bitsLeader: (rank) => `N° ${rank} des bits`,
+			giftLeader: (rank) => `N° ${rank} des abonnements offerts`,
+			prediction: (outcome) => `Pronostic : ${outcome}`,
+		},
 		cut: (missing) => `Coupure : ${missing} manquant`,
 	},
 	stats: {
