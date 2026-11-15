@@ -118,10 +118,10 @@ pub fn parse_init(data: &[u8]) -> Result<Init, MediaError> {
 
 fn parse_trak(trak: &[u8]) -> Option<InitTrack> {
     let tkhd = child(trak, b"tkhd")?;
-    let id = if tkhd[0] == 1 { be_u32(tkhd, 20)? } else { be_u32(tkhd, 12)? };
+    let id = if tkhd.first() == Some(&1) { be_u32(tkhd, 20)? } else { be_u32(tkhd, 12)? };
     let mdia = child(trak, b"mdia")?;
     let mdhd = child(mdia, b"mdhd")?;
-    let timescale = if mdhd[0] == 1 { be_u32(mdhd, 20)? } else { be_u32(mdhd, 12)? };
+    let timescale = if mdhd.first() == Some(&1) { be_u32(mdhd, 20)? } else { be_u32(mdhd, 12)? };
     let handler = child(mdia, b"hdlr")?.get(8..12)?;
     let kind = match handler {
         b"vide" => TrackKind::Video,
@@ -242,7 +242,7 @@ fn read_traf(
     }
 
     let mut dts = child(traf, b"tfdt")
-        .and_then(|tfdt| if tfdt[0] == 1 { be_u64(tfdt, 4) } else { be_u32(tfdt, 4).map(u64::from) })
+        .and_then(|tfdt| if tfdt.first() == Some(&1) { be_u64(tfdt, 4) } else { be_u32(tfdt, 4).map(u64::from) })
         .map_or(0, |time| i64::try_from(time).unwrap_or(0));
 
     let target = match track.config.kind {
@@ -255,9 +255,14 @@ fn read_traf(
         if &kind != b"trun" {
             continue;
         }
-        let version = trun[0];
+        let Some(&version) = trun.first() else { continue };
         let run_flags = be_u32(trun, 0).unwrap_or(0) & 0x00FF_FFFF;
         let count = be_u32(trun, 4).unwrap_or(0);
+        // Each sample takes at least a byte of the segment: a larger count is a damaged table,
+        // which would otherwise fill memory with empty samples.
+        if usize::try_from(count).map_or(true, |count| count > data.len()) {
+            return err("trun sample count larger than the segment");
+        }
         let mut at = 8;
         let mut offset = base;
         if run_flags & 0x1 != 0 {
@@ -295,8 +300,8 @@ fn read_traf(
                 keyframe: track.config.kind == TrackKind::Audio || sample_flags & SAMPLE_NON_SYNC == 0,
                 data: Bytes::copy_from_slice(bytes),
             });
-            dts += i64::from(duration);
-            offset += u64::from(size);
+            dts = dts.saturating_add(i64::from(duration));
+            offset = offset.saturating_add(u64::from(size));
         }
     }
     Ok(())
@@ -304,14 +309,49 @@ fn read_traf(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
     fn malformed_boxes_end_the_walk_without_panicking() {
         // A 64-bit size smaller than its own header.
         let data = [0, 0, 0, 1, b'm', b'o', b'o', b'f', 0, 0, 0, 0, 0, 0, 0, 9, 0];
-        assert_eq!(super::boxes(&data).count(), 0);
+        assert_eq!(boxes(&data).count(), 0);
     }
-    use super::*;
+
+    #[test]
+    fn empty_boxes_are_refused_without_panicking() {
+        // A trak whose tkhd has no body at all.
+        let trak = crate::media::mp4_box(b"trak", &crate::media::mp4_box(b"tkhd", &[]));
+        assert!(parse_trak(&trak[8..]).is_none());
+        // A traf with an empty tfdt and an empty trun.
+        let mut traf = crate::media::full_box(b"tfhd", 0, 0, &1u32.to_be_bytes());
+        traf.extend_from_slice(&crate::media::mp4_box(b"tfdt", &[]));
+        traf.extend_from_slice(&crate::media::mp4_box(b"trun", &[]));
+        let moof = crate::media::mp4_box(b"moof", &crate::media::mp4_box(b"traf", &traf));
+        assert!(demux(&moof, &init_with_track(1)).is_ok());
+    }
+
+    #[test]
+    fn a_huge_sample_count_is_refused() {
+        let mut traf = crate::media::full_box(b"tfhd", 0, 0, &1u32.to_be_bytes());
+        traf.extend_from_slice(&crate::media::full_box(b"trun", 0, 0, &u32::MAX.to_be_bytes()));
+        let moof = crate::media::mp4_box(b"moof", &crate::media::mp4_box(b"traf", &traf));
+        assert!(demux(&moof, &init_with_track(1)).is_err());
+    }
+
+    fn init_with_track(id: u32) -> Init {
+        let config = TrackConfig {
+            kind: TrackKind::Video,
+            timescale: 90_000,
+            sample_entry: Vec::new(),
+            codec: "test",
+            width: 0,
+            height: 0,
+            sample_rate: 0,
+            channels: 0,
+        };
+        Init { tracks: vec![InitTrack { id, config, default_duration: 0, default_size: 0, default_flags: 0 }] }
+    }
 
     fn hev1_entry(nal_types: &[u8]) -> Vec<u8> {
         let mut hvcc = vec![0u8; 22];

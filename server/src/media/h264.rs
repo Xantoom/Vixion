@@ -49,8 +49,8 @@ pub fn parse_sps(nal: &[u8]) -> Option<SpsInfo> {
         if chroma_format == 3 {
             reader.bit()?; // separate_colour_plane_flag
         }
-        bit_depth_luma = reader.ue()? + 8;
-        bit_depth_chroma = reader.ue()? + 8;
+        bit_depth_luma = reader.ue()?.checked_add(8)?;
+        bit_depth_chroma = reader.ue()?.checked_add(8)?;
         reader.bit()?; // qpprime_y_zero_transform_bypass_flag
         if reader.bit()? == 1 {
             let lists = if chroma_format == 3 { 12 } else { 8 };
@@ -78,8 +78,8 @@ pub fn parse_sps(nal: &[u8]) -> Option<SpsInfo> {
     }
     reader.ue()?; // max_num_ref_frames
     reader.bit()?; // gaps_in_frame_num_value_allowed_flag
-    let width_mbs = reader.ue()? + 1;
-    let height_map_units = reader.ue()? + 1;
+    let width_mbs = reader.ue()?.checked_add(1)?;
+    let height_map_units = reader.ue()?.checked_add(1)?;
     let frame_mbs_only = reader.bit()?;
     if frame_mbs_only == 0 {
         reader.bit()?; // mb_adaptive_frame_field_flag
@@ -99,8 +99,13 @@ pub fn parse_sps(nal: &[u8]) -> Option<SpsInfo> {
     };
     let (crop_x, crop_y) =
         if chroma_format == 0 { (1, 2 - frame_mbs_only) } else { (sub_width, sub_height * (2 - frame_mbs_only)) };
-    let width = (width_mbs * 16).checked_sub(crop_x * (crop_left + crop_right))?;
-    let height = ((2 - frame_mbs_only) * height_map_units * 16).checked_sub(crop_y * (crop_top + crop_bottom))?;
+    // Sizes come from the stream: a damaged one must not overflow.
+    let crop = |unit: u32, a: u32, b: u32| a.checked_add(b)?.checked_mul(unit);
+    let width = width_mbs.checked_mul(16)?.checked_sub(crop(crop_x, crop_left, crop_right)?)?;
+    let height = (2 - frame_mbs_only)
+        .checked_mul(height_map_units)?
+        .checked_mul(16)?
+        .checked_sub(crop(crop_y, crop_top, crop_bottom)?)?;
     Some(SpsInfo { profile, compatibility, level, chroma_format, bit_depth_luma, bit_depth_chroma, width, height })
 }
 

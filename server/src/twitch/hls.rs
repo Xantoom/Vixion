@@ -218,8 +218,13 @@ pub fn parse_iso8601(text: &str) -> Option<i64> {
     } else if let Some(at) = time.rfind(['+', '-']) {
         let (clock, zone) = time.split_at(at);
         let sign = if zone.starts_with('-') { -1 } else { 1 };
-        let (hours, minutes) = zone[1..].split_once(':').unwrap_or((&zone[1..3.min(zone.len())], "0"));
+        // `get`, not indexing: a byte count may fall inside a character of a malformed date.
+        let zone = zone.get(1..)?;
+        let (hours, minutes) = zone.split_once(':').unwrap_or((zone.get(..2).unwrap_or(zone), "0"));
         let minutes: i64 = hours.parse::<i64>().ok()? * 60 + minutes.parse::<i64>().unwrap_or(0);
+        if !(0..=18 * 60).contains(&minutes) {
+            return None;
+        }
         (clock, sign * minutes * 60_000)
     } else {
         (time, 0)
@@ -228,6 +233,16 @@ pub fn parse_iso8601(text: &str) -> Option<i64> {
     let hour: i64 = clock_parts.next()?.parse().ok()?;
     let minute: i64 = clock_parts.next()?.parse().ok()?;
     let seconds: f64 = clock_parts.next().unwrap_or("0").parse().ok()?;
+    // Out of range fields are a malformed date, and would overflow the arithmetic below.
+    let valid = (1..=9999).contains(&year)
+        && (1..=12).contains(&month)
+        && (1..=31).contains(&day)
+        && (0..=23).contains(&hour)
+        && (0..=59).contains(&minute)
+        && (0.0..61.0).contains(&seconds);
+    if !valid {
+        return None;
+    }
     // Days from the civil date, after Howard Hinnant's algorithm.
     let y = if month <= 2 { year - 1 } else { year };
     let era = y.div_euclid(400);
@@ -267,6 +282,10 @@ mod tests {
         assert_eq!(parse_iso8601("1970-01-01T00:00:00Z"), Some(0));
         assert_eq!(parse_iso8601("2026-11-12T14:43:11.142Z"), Some(1_794_494_591_142));
         assert_eq!(parse_iso8601("2026-11-12T15:43:11.142+01:00"), Some(1_794_494_591_142));
+        // Malformed: refused, never a panic or an overflow.
+        assert_eq!(parse_iso8601("2026-11-12T14:43:11+1é"), None);
+        assert_eq!(parse_iso8601("99999999999999-11-12T14:43:11Z"), None);
+        assert_eq!(parse_iso8601("2026-13-12T14:43:11Z"), None);
     }
 
     #[test]

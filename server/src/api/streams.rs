@@ -485,7 +485,8 @@ pub async fn chat_window(
         end.saturating_sub(window.limit.unwrap_or(100).min(1000))..end
     } else {
         let from = window.from.unwrap_or(0);
-        let to = window.to.unwrap_or(from + 5 * 60_000).min(from + 30 * 60_000);
+        // Times come from the query string: any number, which must not overflow.
+        let to = window.to.unwrap_or(from.saturating_add(5 * 60_000)).min(from.saturating_add(30 * 60_000));
         let start = lines.partition_point(|line| line.o < from);
         let end = lines.partition_point(|line| line.o < to);
         start..end.max(start)
