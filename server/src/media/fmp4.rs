@@ -175,7 +175,11 @@ impl Writer {
             };
             ids.push((theirs.id, mine));
         }
-        if ids.len() != self.tracks.len() {
+        // Each of ours once: two of theirs on one track would mix them up.
+        let mut taken: Vec<usize> = ids.iter().map(|(_, mine)| *mine).collect();
+        taken.sort_unstable();
+        taken.dedup();
+        if ids.len() != self.tracks.len() || taken.len() != ids.len() {
             return Err(invalid("the recordings' tracks differ"));
         }
         let written_end = self
@@ -215,7 +219,9 @@ impl Writer {
             for (number, traf) in infos.iter().enumerate() {
                 let Some(index) = mine(traf.id) else { continue };
                 let track = &mut self.tracks[index];
-                track.id = traf.id;
+                // Their fragments name their track ids: renamed to ours, which the init describes.
+                let Some(id_slot) = fragment.moof.get_mut(traf.id_at..traf.id_at + 4) else { continue };
+                id_slot.copy_from_slice(&track.id.to_be_bytes());
                 let base = (traf.base + timescaled(shift, track.config.timescale)).max(0);
                 let Some(slot) = fragment.moof.get_mut(traf.time_at..traf.time_at + 8) else { continue };
                 slot.copy_from_slice(&u64::try_from(base).unwrap_or(0).to_be_bytes());
@@ -434,69 +440,29 @@ impl Writer {
 
 /// Makes a recording interrupted by a crash or power cut seekable: drops a torn last fragment,
 /// then appends the index and duration a clean finish would have written.
+///
+/// Like [`Writer::resume`], it reads only box headers and `moof`s, never the media: a recording
+/// of many hours is repaired without sitting in memory.
 pub fn repair(path: &Path) -> std::io::Result<Progress> {
-    use super::mp4read;
+    let length = std::fs::metadata(path)?.len();
+    if has_index(&File::open(path)?, length)? {
+        return Ok(Progress { bytes: length, ..Progress::default() });
+    }
+    Writer::resume(path)?.finish()
+}
 
-    let invalid = |message: &str| std::io::Error::new(std::io::ErrorKind::InvalidData, message.to_owned());
-    let data = std::fs::read(path)?;
-    if mp4read::boxes(&data).any(|(kind, _, _)| &kind == b"mfra") {
-        return Ok(Progress { bytes: data.len() as u64, ..Progress::default() });
-    }
-    let init = mp4read::parse_init(&data).map_err(|e| invalid(&e.0))?;
-    let duration_at = mehd_duration_offset(&data).ok_or_else(|| invalid("no mehd box"))?;
-    let mut tracks: Vec<Track> = init
-        .tracks
-        .iter()
-        .map(|t| Track { id: t.id, config: t.config.clone(), offset: 0, end: 0, index: Vec::new() })
-        .collect();
-    // Whole boxes only: a fragment cut in its middle ends the file.
-    let mut valid = 0usize;
-    let mut moof_at = None;
-    let mut frames = 0u64;
-    for (kind, body, offset) in mp4read::boxes(&data) {
-        let end = offset + (body.as_ptr() as usize - data[offset..].as_ptr() as usize) + body.len();
-        if &kind == b"moof" {
-            moof_at = Some(offset);
-            continue;
-        }
-        if &kind == b"mdat"
-            && let Some(moof_offset) = moof_at.take()
-            && let Ok(segment) = mp4read::demux(&data[moof_offset..end], &init)
-        {
-            let mut traf = 0u8;
-            for samples in [segment.video, segment.audio].into_iter().flatten() {
-                traf += 1;
-                let Some(track) = tracks.iter_mut().find(|t| t.config.kind == samples.config.kind) else { continue };
-                let (Some(first), Some(last)) = (samples.samples.first(), samples.samples.last()) else { continue };
-                if samples.config.kind == TrackKind::Audio || first.keyframe {
-                    track.index.push((first.dts, moof_offset as u64, traf));
-                }
-                track.end = last.dts + i64::from(last.duration);
-                if samples.config.kind == TrackKind::Video {
-                    frames += samples.samples.len() as u64;
-                }
-            }
-        }
-        valid = end;
-    }
-    let file = std::fs::OpenOptions::new().write(true).open(path)?;
-    file.set_len(valid as u64)?;
-    let mut out = BufWriter::new(file);
-    out.seek(SeekFrom::Start(valid as u64))?;
-    let writer = Writer {
-        out,
-        position: valid as u64,
-        tracks,
-        sequence: 0,
-        duration_at,
-        pending: None,
-        expected: None,
-        shift: 0.0,
-        video_frames: frames,
-        discontinuities: 0,
-        resumed: false,
-    };
-    writer.finish()
+/// Whether the file ends with an `mfra`, which its last box, `mfro`, gives the size of.
+fn has_index(file: &File, length: u64) -> std::io::Result<bool> {
+    use std::os::unix::fs::FileExt;
+
+    let Some(size_at) = length.checked_sub(4) else { return Ok(false) };
+    let mut size = [0u8; 4];
+    file.read_exact_at(&mut size, size_at)?;
+    let size = u64::from(u32::from_be_bytes(size));
+    let Some(start) = length.checked_sub(size).filter(|_| size >= 16) else { return Ok(false) };
+    let mut header = [0u8; 8];
+    file.read_exact_at(&mut header, start)?;
+    Ok(&header[4..] == b"mfra")
 }
 
 /// Whether samples of one track can go in a file made for the other: the same decoder setup.
@@ -514,7 +480,7 @@ fn box_at(file: &File, position: u64, length: u64) -> std::io::Result<Option<([u
     use std::os::unix::fs::FileExt;
 
     let mut header = [0u8; 16];
-    if position + 8 > length {
+    if position.saturating_add(8) > length {
         return Ok(None);
     }
     file.read_exact_at(&mut header[..8], position)?;
@@ -522,14 +488,16 @@ fn box_at(file: &File, position: u64, length: u64) -> std::io::Result<Option<([u
     let kind = [header[4], header[5], header[6], header[7]];
     let mut header_len = 8;
     if size == 1 {
-        if position + 16 > length {
+        if position.saturating_add(16) > length {
             return Ok(None);
         }
         file.read_exact_at(&mut header[8..16], position + 8)?;
         size = u64::from_be_bytes(header[8..16].try_into().unwrap_or_default());
         header_len = 16;
     }
-    Ok((size >= header_len && position + size <= length).then_some((kind, size, header_len)))
+    // A size read from a damaged file may be anything: the sum must not wrap.
+    let whole = position.checked_add(size).is_some_and(|end| end <= length);
+    Ok((size >= header_len && whole).then_some((kind, size, header_len)))
 }
 
 /// The boxes before the first fragment (the init: `ftyp`, `moov`), and where the fragments start.
@@ -596,6 +564,8 @@ fn walk(
 /// What a fragment holds of one track, read from its `traf`.
 struct TrafInfo {
     id: u32,
+    /// Where the track id is written in the `moof` body (the `tfhd`), to give it another.
+    id_at: usize,
     /// Decode time of its first sample.
     base: i64,
     /// Where that time is written in the `moof` body (a version 1 `tfdt`), to move it.
@@ -614,10 +584,15 @@ fn trafs(moof: &[u8]) -> Vec<TrafInfo> {
         if &kind != b"traf" {
             continue;
         }
-        let (mut id, mut base, mut time_at, mut duration, mut count, mut first_sync) = (None, None, 0, 0i64, 0, true);
+        let (mut id, mut id_at, mut base, mut time_at) = (None, 0, None, 0);
+        let (mut duration, mut count, mut first_sync) = (0i64, 0, true);
         for (kind, body, at) in boxes(traf) {
             match &kind {
-                b"tfhd" => id = body.get(4..8).map(|b| u32::from_be_bytes(b.try_into().unwrap_or_default())),
+                b"tfhd" => {
+                    id = body.get(4..8).map(|b| u32::from_be_bytes(b.try_into().unwrap_or_default()));
+                    // Box header, traf header, tfhd header, version and flags.
+                    id_at = traf_at + 8 + at + 8 + 4;
+                }
                 b"tfdt" if body.first() == Some(&1) => {
                     base = body.get(4..12).map(|b| u64::from_be_bytes(b.try_into().unwrap_or_default()));
                     time_at = traf_at + 8 + at + 8 + 4;
@@ -641,7 +616,15 @@ fn trafs(moof: &[u8]) -> Vec<TrafInfo> {
             }
         }
         if let (Some(id), Some(base)) = (id, base) {
-            found.push(TrafInfo { id, base: i64::try_from(base).unwrap_or(0), time_at, duration, count, first_sync });
+            found.push(TrafInfo {
+                id,
+                id_at,
+                base: i64::try_from(base).unwrap_or(0),
+                time_at,
+                duration,
+                count,
+                first_sync,
+            });
         }
     }
     found
@@ -967,6 +950,10 @@ mod tests {
         std::fs::write(&path, &file[..without_index - 100]).expect("truncate");
         let repaired = repair(&path).expect("repair");
         assert!((1_900..2_100).contains(&repaired.duration_ms), "{}", repaired.duration_ms);
+        // A file with its index is left as it is.
+        let length = std::fs::metadata(&path).expect("metadata").len();
+        assert_eq!(repair(&path).expect("again").bytes, length);
+        assert_eq!(std::fs::metadata(&path).expect("metadata").len(), length);
         std::fs::remove_dir_all(&dir).ok();
     }
 
