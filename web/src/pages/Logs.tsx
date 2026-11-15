@@ -306,8 +306,13 @@ function Console() {
 					className="h-9 min-w-40 flex-[1_1_12rem] sm:ml-auto sm:max-w-xs"
 				/>
 			</div>
+			{/* Focusable, so the arrow keys scroll it: long lines go past the edge on a phone. A region,
+			    not a log: new lines arriving every second would keep a screen reader talking. */}
 			<div
 				ref={scroller}
+				tabIndex={0}
+				role="region"
+				aria-label={t.logs.console}
 				onScroll={(event) => {
 					const element = event.currentTarget;
 					following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 40;

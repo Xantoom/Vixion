@@ -283,7 +283,7 @@ function AccountMenu({ admin, alerts }: { admin: AdminPath | null; alerts: numbe
 								<span className="flex items-center gap-2">
 									{t.nav.admin}
 									{alerts > 0 ? (
-										<span className="bg-danger text-caption grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-semibold text-white">
+										<span className="bg-danger-fill text-caption grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-semibold text-white">
 											{alerts}
 										</span>
 									) : null}

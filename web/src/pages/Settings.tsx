@@ -9,6 +9,7 @@ import { useCan } from '@/lib/session';
 import { Button } from '@/ui/Button';
 import { Card, Facts, SettingRow, Toggle } from '@/ui/Card';
 import { NumberInput, Select, TextInput } from '@/ui/Field';
+import { RetentionMenu } from '@/ui/Retention';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
@@ -69,14 +70,13 @@ export function SettingsPage() {
 
 			<Card title={t.settings.retention} flush>
 				<SettingRow label={t.settings.retentionDays} tip={t.settings.retentionHint}>
-					<NumberInput
-						aria-label={t.settings.retentionDays}
+					{/* The same lengths as a streamer's own, picked the same way. */}
+					<RetentionMenu
+						label={t.settings.retentionDays}
 						value={draft.retention_days}
-						min={0}
-						max={3650}
-						unit={t.common.days(draft.retention_days).replace(/^\d+\s*/, '')}
+						framed
 						onChange={(retention_days) => {
-							set({ retention_days });
+							set({ retention_days: retention_days ?? 0 });
 						}}
 					/>
 				</SettingRow>

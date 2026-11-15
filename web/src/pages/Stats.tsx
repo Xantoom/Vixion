@@ -12,7 +12,7 @@ import { NotFound } from './NotFound';
 
 function Tile({ label, value, detail }: { label: string; value: string; detail?: string | null }) {
 	return (
-		<div className="bg-card ring-line flex flex-col justify-between gap-4 rounded-md p-6 ring-1">
+		<div className="bg-card ring-line flex flex-col gap-4 rounded-md p-6 ring-1">
 			<span className="text-small text-muted font-medium">{label}</span>
 			<span className="flex flex-col gap-1">
 				<span className="text-heading tabular font-semibold tracking-tight">{value}</span>
@@ -50,9 +50,10 @@ export function StatsPage() {
 
 	return (
 		<div className="panel-in flex flex-col gap-8">
-			<div className="grid gap-4 lg:grid-cols-3">
-				{/* The disk first: how much the recordings take, and how much room is left. */}
-				<section className="bg-card ring-line flex flex-col justify-between gap-6 rounded-md p-6 ring-1 lg:col-span-2">
+			<div className="flex flex-col gap-4">
+				{/* The disk first: how much the recordings take, and how much room is left. Full width, so
+				    it is as tall as what it holds, not stretched to a column of tiles beside it. */}
+				<section className="bg-card ring-line flex flex-col gap-6 rounded-md p-6 ring-1">
 					<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
 						<div className="flex flex-col gap-2">
 							<h2 className="text-small text-muted font-medium">{t.stats.space}</h2>
@@ -101,7 +102,8 @@ export function StatsPage() {
 						</div>
 					) : null}
 				</section>
-				<div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
+				{/* Under it, the counts side by side; on a phone, the memory and its detail take a whole line. */}
+				<div className="grid grid-cols-2 gap-4 sm:grid-cols-3 max-sm:[&>:last-child]:col-span-2">
 					<Tile label={t.stats.recordings} value={formatNumber(data.streams)} />
 					<Tile label={t.stats.watchTime} value={formatDuration(data.duration_ms)} />
 					<Tile

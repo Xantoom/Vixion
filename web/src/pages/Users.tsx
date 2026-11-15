@@ -8,6 +8,7 @@ import { formatRelative } from '@/lib/format';
 import { useCan, useMe } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
+import { Card } from '@/ui/Card';
 import { Confirm, Dialog } from '@/ui/Dialog';
 import { Field, PasswordInput, Select, TextInput } from '@/ui/Field';
 import { Group, SwitchRow } from '@/ui/Group';
@@ -44,41 +45,41 @@ function useRoleName() {
 		role ? (role.builtin ? (t.users.roleNames[role.builtin] ?? role.name) : role.name) : '';
 }
 
-/** A titled list: the name above in small capitals, an add link beside it, the rows in a box. */
+/** A titled list, in the card every administration page uses: an add button in its header. */
 function Section({
 	title,
+	count,
 	add,
 	onAdd,
 	children,
 }: {
 	title: string;
+	count: number;
 	add: string;
 	onAdd: () => void;
 	children: ReactNode;
 }) {
 	const t = useT();
 	return (
-		<section className="flex flex-col gap-3">
-			<div className="flex min-h-8 items-center justify-between gap-3 px-1">
-				<h2 className="text-caption text-ink-2 font-semibold tracking-wider uppercase">{title}</h2>
-				<button
-					type="button"
-					onClick={onAdd}
-					aria-label={add}
-					className="text-small text-accent-text touch-target relative -mr-1.5 inline-flex h-8 items-center gap-1 rounded-xs px-1.5 font-semibold hover:underline"
-				>
-					<Plus size={15} strokeWidth={2.4} />
+		<Card
+			title={title}
+			count={count}
+			flush
+			actions={
+				<Button size="sm" aria-label={add} onClick={onAdd}>
+					<Plus size={15} />
 					{t.common.add}
-				</button>
-			</div>
-			<ul className="bg-card ring-line divide-line divide-y overflow-hidden rounded-md ring-1">{children}</ul>
-		</section>
+				</Button>
+			}
+		>
+			<ul className="divide-line divide-y">{children}</ul>
+		</Card>
 	);
 }
 
 /** A list row: what it is on the left, one short fact on the right, and the whole row opens it. */
 function Row({ onClick, children, aside }: { onClick?: () => void; children: ReactNode; aside: ReactNode }) {
-	const inner = 'flex min-h-16 w-full items-center gap-3.5 px-5 py-3 text-left';
+	const inner = 'flex min-h-16 w-full items-center gap-3.5 px-6 py-3 text-left';
 	const content = (
 		<>
 			{children}
@@ -130,6 +131,7 @@ export function UsersPage() {
 		<div className="panel-in flex flex-col gap-8">
 			<Section
 				title={t.users.accounts}
+				count={users.data.length}
 				add={t.users.add}
 				onAdd={() => {
 					setEditing('new');
@@ -158,6 +160,7 @@ export function UsersPage() {
 
 			<Section
 				title={t.users.roles}
+				count={roles.data.roles.length}
 				add={t.users.addRole}
 				onAdd={() => {
 					setRoleEditing('new');

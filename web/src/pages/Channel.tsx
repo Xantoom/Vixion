@@ -5,7 +5,6 @@ import {
 	Bookmark,
 	CalendarDays,
 	CirclePause,
-	ChevronDown,
 	CircleStop,
 	ExternalLink,
 	Eye,
@@ -47,7 +46,7 @@ import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { Confirm, Dialog } from '@/ui/Dialog';
 import { ActionRow, Group, SwitchRow } from '@/ui/Group';
-import { Menu, MenuDivider, MenuItem } from '@/ui/Menu';
+import { RetentionMenu } from '@/ui/Retention';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
@@ -253,11 +252,13 @@ function Hero({ data, name }: { data: Page; name: string }) {
 				) : null}
 				<div className="from-bg via-bg/25 absolute inset-0 bg-gradient-to-t from-0% via-35% to-transparent to-70%" />
 			</div>
-			<div className="mx-auto flex max-w-[120rem] flex-wrap items-end gap-x-6 gap-y-4 px-4 sm:px-6">
+			{/* Side by side once there is room for all three; before that, one under the other, so the
+			    picture doesn't float halfway down a long description with the actions stranded below it. */}
+			<div className="mx-auto flex max-w-[120rem] flex-col items-start gap-x-6 gap-y-4 px-4 sm:px-6 md:flex-row md:items-end">
 				<span className="bg-bg relative -mt-14 flex-none rounded-full p-1.5 sm:-mt-20">
 					<Avatar src={avatar} name={name} size={128} live={live} className="max-sm:!size-24" />
 				</span>
-				<div className="flex min-w-0 flex-1 basis-72 flex-col gap-2 pb-1">
+				<div className="flex w-full min-w-0 flex-col gap-2 pb-1 md:flex-1">
 					<h1 className="text-heading sm:text-display flex items-center gap-3 font-bold tracking-tight">
 						<a
 							href={`https://www.twitch.tv/${login}`}
@@ -447,7 +448,7 @@ function OverlayButton({
 			aria-pressed={pressed}
 			disabled={disabled}
 			onClick={onClick}
-			className={`grid size-8 place-items-center pointer-coarse:size-10 rounded-sm bg-black/70 text-white backdrop-blur-sm transition-colors disabled:opacity-50 aria-pressed:bg-[var(--accent)] aria-pressed:text-[var(--accent-ink)] ${danger ? 'hover:bg-[var(--danger)]' : 'hover:bg-[var(--accent)] hover:text-[var(--accent-ink)]'}`}
+			className={`grid size-8 place-items-center pointer-coarse:size-10 rounded-sm bg-black/70 text-white backdrop-blur-sm transition-colors disabled:opacity-50 aria-pressed:bg-[var(--accent)] aria-pressed:text-[var(--accent-ink)] ${danger ? 'hover:bg-danger-fill' : 'hover:bg-[var(--accent)] hover:text-[var(--accent-ink)]'}`}
 		>
 			{children}
 		</button>
@@ -501,7 +502,12 @@ const StreamCard = memo(function StreamCard({
 						decoding="async"
 						className={`size-full object-cover transition-transform duration-500 ease-(--ease-out-soft) ${recording ? 'opacity-50' : 'group-hover:scale-[1.03]'}`}
 					/>
-				) : null}
+				) : recording ? null : (
+					// No picture yet (or none could be taken): a quiet mark rather than an empty box.
+					<span className="text-muted/60 absolute inset-0 grid place-items-center" aria-hidden>
+						<Film size={36} strokeWidth={1.5} />
+					</span>
+				)}
 				{recording ? (
 					<span className="text-small absolute inset-0 grid place-items-center font-semibold text-white">
 						<span className="flex items-center gap-2 rounded-sm bg-black/70 px-3 py-1.5">
@@ -520,7 +526,7 @@ const StreamCard = memo(function StreamCard({
 				)}
 				<span className="pointer-events-none absolute top-2.5 left-2.5 flex gap-1.5">
 					{stream.status === 'failed' ? (
-						<Pill className="bg-danger text-white">{t.stream.failed}</Pill>
+						<Pill className="bg-danger-fill text-white">{t.stream.failed}</Pill>
 					) : null}
 				</span>
 				{!recording && (canKeep || canDelete) ? (
@@ -677,17 +683,6 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 	const [stopping, setStopping] = useState(false);
 	const fallback = streamer.default_retention_days;
 
-	const retentionLabel = (days: number | null): string =>
-		days === null
-			? t.streamer.keepGeneral(retentionLabel(fallback))
-			: days === 0
-				? t.streamer.retentionForever
-				: (t.streamer.keepPresets[days] ?? t.common.days(days));
-	// The usual lengths, and the streamer's own when it is none of them.
-	const choices = [7, 30, 90, 365];
-	if (retention && !choices.includes(retention)) choices.push(retention);
-	choices.sort((a, b) => a - b);
-
 	const save = async () => {
 		await run(async () => {
 			await api.patch(`/streamers/${streamer.id}`, { monitored, retention_days: retention });
@@ -741,49 +736,12 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 				<Group title={t.streamer.keepSection}>
 					<li className="flex min-h-14 items-center justify-between gap-4 py-2 pr-2 pl-5">
 						<span className="text-ui text-ink min-w-0">{t.streamer.keepRow}</span>
-						<Menu
+						<RetentionMenu
 							label={t.streamer.keepRow}
-							trigger={(_open, props) => (
-								<button
-									type="button"
-									{...props}
-									className="text-ui text-ink-2 hover:text-ink hover:bg-surface-2 inline-flex h-10 flex-none items-center gap-1.5 rounded-sm px-3 font-medium whitespace-nowrap transition-colors"
-								>
-									{retentionLabel(retention ?? fallback)}
-									<ChevronDown size={16} className="text-muted" />
-								</button>
-							)}
-						>
-							<MenuItem
-								checked={retention === null}
-								onSelect={() => {
-									setRetention(null);
-								}}
-							>
-								{t.streamer.keepGeneral(retentionLabel(fallback))}
-							</MenuItem>
-							<MenuDivider />
-							{choices.map((days) => (
-								<MenuItem
-									key={days}
-									checked={retention === days}
-									onSelect={() => {
-										setRetention(days);
-									}}
-								>
-									{retentionLabel(days)}
-								</MenuItem>
-							))}
-							<MenuDivider />
-							<MenuItem
-								checked={retention === 0}
-								onSelect={() => {
-									setRetention(0);
-								}}
-							>
-								{t.streamer.retentionForever}
-							</MenuItem>
-						</Menu>
+							value={retention}
+							fallback={fallback}
+							onChange={setRetention}
+						/>
 					</li>
 				</Group>
 				<Group>

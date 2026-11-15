@@ -596,9 +596,10 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 					</button>
 				) : null}
 				{error ? (
-					<div className="absolute inset-0 grid place-items-center bg-black/80 p-6 text-center text-white">
-						<div className="flex max-w-md flex-col items-center gap-4">
-							<p className="text-body">
+					// On a small player it shrinks, so it stays clear of the title above and the controls below.
+					<div className="absolute inset-0 grid place-items-center bg-black/80 px-4 pt-6 pb-12 text-center text-white @md:p-6">
+						<div className="flex max-w-md flex-col items-center gap-2.5 @md:gap-4">
+							<p className="text-small @md:text-body">
 								{error === 'decode'
 									? t.player.cantDecode
 									: error === 'expired'
@@ -606,12 +607,19 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 										: t.player.cantOpen}
 							</p>
 							{error === 'decode' && downloads.video ? (
-								<a href={downloads.video} className={buttonClass('accent')}>
+								<a
+									href={downloads.video}
+									className={`${buttonClass('accent')} @max-md:text-small @max-md:h-8 @max-md:px-3`}
+								>
 									<Download size={16} />
 									{t.player.downloadVideo}
 								</a>
 							) : (
-								<Button variant="accent" onClick={() => void refresh()}>
+								<Button
+									variant="accent"
+									className="@max-md:text-small @max-md:h-8 @max-md:px-3"
+									onClick={() => void refresh()}
+								>
 									<RefreshCw size={16} />
 									{t.player.reload}
 								</Button>

@@ -2,8 +2,9 @@ import type { Messages } from './en';
 
 export const fr: Messages = {
 	common: {
-		save: 'Enregistrer',
-		saved: 'Enregistré',
+		// Not « Enregistrer »: here that word means recording a live.
+		save: 'Valider',
+		saved: 'Modifications appliquées',
 		cancel: 'Annuler',
 		delete: 'Supprimer',
 		close: 'Fermer',
@@ -236,8 +237,8 @@ export const fr: Messages = {
 		h264OnlyHint: 'Même quand le streamer diffuse en HEVC ou AV1. Fichiers plus gros, lisibles partout',
 		recordChat: 'Enregistrer le chat',
 		retention: 'Conservation',
-		retentionDays: 'Supprimer les enregistrements après',
-		retentionHint: 'Jamais pour ceux conservés. 0 garde tout',
+		retentionDays: 'Conserver les enregistrements',
+		retentionHint: 'Ceux marqués à garder restent toujours. Chaque streamer peut avoir sa propre durée',
 		diskWarning: 'Alerter sous un espace libre de',
 		diskReserve: 'Espace à toujours garder libre',
 		diskReserveHint: 'En dessous, aucun enregistrement ne démarre et les plus anciens non conservés sont supprimés',

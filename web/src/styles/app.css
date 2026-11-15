@@ -35,9 +35,11 @@
 	--accent-ink: #2a1508;
 	--accent-text: light-dark(#a8461c, #ffb08f);
 	--live: light-dark(#e5262f, #ff4d55);
-	--warn: light-dark(#a45d00, #ffb547);
+	--warn: light-dark(#935300, #ffb547);
 	--ok: light-dark(#0b7a4c, #63dda3);
 	--danger: light-dark(#c4321f, #ff6b57);
+	/* Under white words (a delete button, a failed mark): the light red is too pale for them in the dark. */
+	--danger-fill: light-dark(#c4321f, #d0392a);
 	--focus: light-dark(#2f6bff, #7197ff);
 	--tip-bg: light-dark(#1d1d20, #0b0b0c);
 	--tip-ink: #f3f3f5;
@@ -121,6 +123,7 @@
 	--color-warn: var(--warn);
 	--color-ok: var(--ok);
 	--color-danger: var(--danger);
+	--color-danger-fill: var(--danger-fill);
 	--color-danger-soft: color-mix(in srgb, var(--danger) 12%, transparent);
 	--color-warn-soft: color-mix(in srgb, var(--warn) 12%, transparent);
 	--color-tip: var(--tip-bg);

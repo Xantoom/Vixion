@@ -166,11 +166,20 @@ const StreamerCard = memo(function StreamerCard({ streamer, priority }: { stream
 						</span>
 						{live ? <LiveDot /> : null}
 					</span>
-					<span className="text-small text-muted truncate">
-						{streamer.monitored ? null : `${t.streamers.paused} · `}
-						{t.streamers.streams(streamer.stream_count)}
+					{/* Not recorded on a line of its own; then each fact whole: on a narrow card the last one
+					    goes to the next line rather than being cut, the dot staying at the end of its line. */}
+					<span className="text-small text-muted flex flex-wrap gap-x-1.5">
+						{streamer.monitored ? null : (
+							<span className="text-ink-2 basis-full font-medium">{t.streamers.paused}</span>
+						)}
+						<span className="whitespace-nowrap">
+							{t.streamers.streams(streamer.stream_count)}
+							{lastLive ? ' ·' : null}
+						</span>
 						{lastLive ? (
-							<span data-tip={t.streamers.lastLiveTip}> · {formatRelative(lastLive)}</span>
+							<span className="whitespace-nowrap" data-tip={t.streamers.lastLiveTip}>
+								{formatRelative(lastLive)}
+							</span>
 						) : null}
 					</span>
 				</div>
