@@ -25,12 +25,20 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - On a phone, tapping an info icon, an emote or a badge shows its hint.
 - The player's seek bar is announced as the playback position, and the administration link says how many alerts are open.
 - Segmented choices take one Tab stop and move with the arrow keys.
+- In French, saving says "Valider": "Enregistrer" already means recording a live.
+- How long recordings are kept is picked from the same lengths for the whole server and for one streamer (1 week, 1 month, 3 months, 1 year, forever); a length set before stays listed.
+- The statistics show the disk across the page, the counts in a row under it.
+- The users page uses the same cards as the other administration pages.
+- A recording without a thumbnail shows a film mark rather than an empty box.
 
 ### Fixed
 
 - The player's active buttons, its error text and the toasts' icons keep readable colours in the light theme.
 - Library names in the logs are readable, and the add buttons of the users page and the show-password button are big enough to tap.
 - On a small player, the large play button no longer covers the picture.
+- Delete buttons, the failed mark and the alert count are readable in the dark theme, and warnings in the light console.
+- Streamer cards no longer cut their facts short, and a channel's header no longer floats at medium widths.
+- On a small player, an error and its button stay clear of the title and the controls; the console scrolls with the keyboard.
 
 ## [0.2.2] - 2026-11-15
 
