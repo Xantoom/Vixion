@@ -81,16 +81,49 @@ pub fn media_origin(app: &AppState, headers: &HeaderMap) -> String {
     app.config.media_origin(host.split(',').next().unwrap_or(host).trim())
 }
 
+/// The inline scripts of the page (the theme, set before anything is drawn), allowed by their
+/// hash: `'sha256-…'` sources for `script-src`, worked out once from the embedded page.
+fn inline_scripts() -> &'static str {
+    static SOURCES: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    SOURCES.get_or_init(|| {
+        Assets::get("index.html")
+            .map(|file| inline_script_hashes(&String::from_utf8_lossy(&file.data)))
+            .unwrap_or_default()
+    })
+}
+
+fn inline_script_hashes(html: &str) -> String {
+    use base64::Engine as _;
+    let mut sources = String::new();
+    let mut rest = html;
+    while let Some(start) = rest.find("<script") {
+        rest = &rest[start..];
+        let Some(open_end) = rest.find('>') else { break };
+        let tag = &rest[..open_end];
+        let body = &rest[open_end + 1..];
+        let Some(close) = body.find("</script>") else { break };
+        if !tag.contains("src=") && !body[..close].trim().is_empty() {
+            let digest = crate::crypto::sha256(&body.as_bytes()[..close]);
+            sources.push_str(" 'sha256-");
+            sources.push_str(&base64::engine::general_purpose::STANDARD.encode(digest));
+            sources.push('\'');
+        }
+        rest = &body[close..];
+    }
+    sources
+}
+
 /// Headers that keep pages from being framed, sniffed or made to load foreign code.
 pub async fn security_headers(State(app): State<AppState>, request: Request, next: Next) -> Response {
     let media = media_origin(&app, request.headers());
     let mut response = next.run(request).await;
     let csp = format!(
-        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; \
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'{inline}; style-src 'self' 'unsafe-inline'; \
          img-src 'self' data: blob: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net \
          https://cdn.frankerfacez.com; font-src 'self'; \
          connect-src 'self' {media}; media-src 'self' blob: {media}; worker-src 'self' blob:; \
-         object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+         object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+        inline = inline_scripts(),
     );
     let headers = response.headers_mut();
     if let Ok(value) = HeaderValue::from_str(&csp) {
@@ -111,4 +144,17 @@ pub async fn security_headers(State(app): State<AppState>, request: Request, nex
     );
     headers.insert("cross-origin-opener-policy", HeaderValue::from_static("same-origin"));
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inline_script_hashes;
+
+    #[test]
+    fn hashes_inline_scripts_only() {
+        let html = r#"<head><script>a()</script><script type="module" src="/x.js"></script></head>"#;
+        // sha256("a()"), base64.
+        assert_eq!(inline_script_hashes(html), " 'sha256-qVpDBgj7bpq5hMAcGp3AOc79J3Y1Z4HvySTwKrWDoy4='");
+        assert_eq!(inline_script_hashes("<p>no script</p>"), "");
+    }
 }

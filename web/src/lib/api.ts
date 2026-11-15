@@ -33,7 +33,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 	} catch {
 		throw new ApiError(0, 'network', t().serverErrors.network ?? 'The server can’t be reached');
 	}
-	if (response.status === 401 && path !== '/auth/login') onUnauthorized();
+	// Asking who is signed in may be refused: that is an answer (nobody), not a session that ended.
+	const asksWho = method === 'GET' && path === '/me';
+	if (response.status === 401 && path !== '/auth/login' && !asksWho) onUnauthorized();
 	if (!response.ok) {
 		const error = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
 		const code = error?.error ?? 'error';

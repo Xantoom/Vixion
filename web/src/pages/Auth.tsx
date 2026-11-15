@@ -49,9 +49,9 @@ export function SetupPage() {
 		setCodeError(null);
 		await run(
 			async () => {
-				await api.post('/setup', { code, username, password, locale: currentLocale() });
+				const me = await api.post<Me>('/setup', { code, username, password, locale: currentLocale() });
+				client.setQueryData(meQuery.queryKey, me);
 				client.setQueryData(['setup'], { needed: false });
-				await client.invalidateQueries({ queryKey: meQuery.queryKey });
 			},
 			(caught) => {
 				const code = caught instanceof ApiError ? caught.code : '';
@@ -147,8 +147,8 @@ export function LoginPage() {
 		event.preventDefault();
 		await run(
 			async () => {
-				await api.post('/auth/login', { username, password });
-				client.setQueryData(meQuery.queryKey, await api.get<Me>('/me'));
+				// The answer is who signed in, as `/me` would tell.
+				client.setQueryData(meQuery.queryKey, await api.post<Me>('/auth/login', { username, password }));
 			},
 			(caught) => {
 				setPassword('');

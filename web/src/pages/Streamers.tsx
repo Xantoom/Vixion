@@ -3,19 +3,14 @@ import { Link } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '@/i18n';
-import { type Streamer, api } from '@/lib/api';
+import type { Streamer } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
+import { streamersQuery } from '@/lib/queries';
 import { useCan } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { PageLoading } from '@/ui/Spinner';
 import { focusChannelSearch } from './ChannelSearch';
-
-export const streamersQuery = {
-	queryKey: ['streamers'],
-	queryFn: async () => api.get<Streamer[]>('/streamers'),
-	refetchInterval: 15_000,
-};
 
 export function PageHeader({ title, children }: { title: ReactNode; children?: ReactNode }) {
 	return (

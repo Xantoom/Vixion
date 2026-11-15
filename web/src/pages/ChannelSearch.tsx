@@ -5,9 +5,9 @@ import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'r
 import { useT } from '@/i18n';
 import { type SearchHit, api } from '@/lib/api';
 import { formatNumber } from '@/lib/format';
+import { streamersQuery } from '@/lib/queries';
 import { Avatar } from '@/ui/Avatar';
 import { Spinner } from '@/ui/Spinner';
-import { streamersQuery } from './Streamers';
 
 interface Suggestion {
 	login: string;

@@ -89,7 +89,9 @@ async fn signed_in(app: &AppState, user_id: i64, headers: &HeaderMap) -> AppResu
     let agent = headers.get(header::USER_AGENT).and_then(|v| v.to_str().ok()).map(|v| v.chars().take(200).collect());
     let token = auth::create_session(&app.db, user_id, agent).await?;
     let user = app.db.read(move |conn| auth::load_user(conn, user_id)).await?.ok_or_else(AppError::unauthorized)?;
-    Ok(([(header::SET_COOKIE, auth::session_cookie(&token, headers))], Json(user)).into_response())
+    // Who signed in, as `/me` tells it: the page has nothing more to ask before showing the app.
+    let me = Me { user, version: env!("CARGO_PKG_VERSION") };
+    Ok(([(header::SET_COOKIE, auth::session_cookie(&token, headers))], Json(me)).into_response())
 }
 
 pub async fn login(

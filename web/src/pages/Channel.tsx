@@ -41,6 +41,7 @@ import {
 } from '@/lib/format';
 import { useNow } from '@/lib/now';
 import { watched } from '@/lib/progress';
+import { channelQuery, streamersQuery } from '@/lib/queries';
 import { useCan, useRouteParams } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
@@ -50,15 +51,7 @@ import { Menu, MenuDivider, MenuItem } from '@/ui/Menu';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
-import { LiveDot, streamersQuery } from './Streamers';
-
-function channelQuery(login: string) {
-	return {
-		queryKey: ['channel', login],
-		queryFn: async () => api.get<Page>(`/channels/${login}`),
-		refetchInterval: 20_000,
-	};
-}
+import { LiveDot } from './Streamers';
 
 function Meta({ icon, children, className = '' }: { icon: ReactNode; children: ReactNode; className?: string }) {
 	return (

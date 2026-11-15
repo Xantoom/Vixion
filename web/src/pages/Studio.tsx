@@ -25,9 +25,10 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '@/i18n';
-import { ApiError, type StreamDetail, api } from '@/lib/api';
+import { ApiError, type StreamDetail } from '@/lib/api';
 import { formatClock, formatDate, formatDuration, formatQuality } from '@/lib/format';
 import { resumeAt, saveProgress } from '@/lib/progress';
+import { streamQuery } from '@/lib/queries';
 import { useCan, useRouteParams } from '@/lib/session';
 import { ChatPanel } from '@/player/ChatPanel';
 import { type Engine, type EngineError, type PlaybackState, createEngine } from '@/player/engine';
@@ -219,11 +220,8 @@ function useMediaSession({
 export function StudioPage() {
 	const { login, id } = useRouteParams();
 	const navigate = useNavigate();
-	// The media link changes on every answer: the page keeps the one it opened with.
 	const detail = useQuery({
-		queryKey: ['stream', id],
-		queryFn: async () => api.get<StreamDetail>(`/streams/${id}`),
-		staleTime: Number.POSITIVE_INFINITY,
+		...streamQuery(id),
 		refetchOnWindowFocus: false,
 		// A broadcast still being recorded opens once it ends.
 		refetchInterval: (query) => (query.state.data?.status === 'recording' ? 15_000 : false),

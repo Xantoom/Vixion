@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { browserLocale, useT } from './i18n';
-import { ApiError, api, setUnauthorizedHandler } from './lib/api';
+import { api, setUnauthorizedHandler } from './lib/api';
 import { setProgressOwner } from './lib/progress';
 import { meQuery } from './lib/session';
 import { LoginPage, SetupPage } from './pages/Auth';
@@ -25,7 +25,8 @@ export function App() {
 		queryFn: async () => api.get<{ needed: boolean }>('/setup'),
 		staleTime: Number.POSITIVE_INFINITY,
 	});
-	const me = useQuery({ ...meQuery, enabled: setup.data?.needed === false, retry: false });
+	// Asked together: who is signed in doesn't wait on whether the server is set up.
+	const me = useQuery({ ...meQuery, retry: false });
 	// Before any page reads them: watch positions belong to the signed-in account.
 	if (me.data) setProgressOwner(me.data.id);
 
@@ -68,7 +69,7 @@ export function App() {
 		);
 	} else if (setup.data?.needed) {
 		page = <SetupPage />;
-	} else if (!me.data || (me.error instanceof ApiError && me.error.status === 401)) {
+	} else if (!me.data) {
 		page = <LoginPage />;
 	} else {
 		page = <RouterProvider router={router} />;
