@@ -9,6 +9,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-15
+
 ### Added
 
 - The statistics show the server's memory, and the container's with how much of it is disk cache.
@@ -141,7 +143,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - The release workflow's write access is limited to its last step, and actions are pinned by commit.
 - The compose file runs the container read-only, without capabilities or privilege escalation.
 
-[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/Xantoom/Vixion/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Xantoom/Vixion/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Xantoom/Vixion/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Xantoom/Vixion/releases/tag/v0.1.0
