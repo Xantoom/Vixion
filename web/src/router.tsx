@@ -1,11 +1,11 @@
 import { createRootRoute, createRoute, createRouter, lazyRouteComponent } from '@tanstack/react-router';
+import { channelQuery, streamQuery } from './lib/queries';
+import { queryClient } from './lib/query';
+import { routeParams } from './lib/session';
 import { AdminIndex, AdminLayout } from './pages/Admin';
 import { NotFound, PageError } from './pages/NotFound';
 import { Shell } from './pages/Shell';
 import { StreamersPage } from './pages/Streamers';
-import { channelQuery, streamQuery } from './lib/queries';
-import { queryClient } from './lib/query';
-import { routeParams } from './lib/session';
 
 // The player, the channel pages and the administration load apart from the rest; each is
 // fetched ahead of time (see below) so opening one doesn't wait on the network.

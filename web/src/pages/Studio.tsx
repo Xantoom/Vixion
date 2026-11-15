@@ -23,7 +23,7 @@ import {
 	Volume2,
 	VolumeX,
 } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useT } from '@/i18n';
 import { ApiError, type StreamDetail } from '@/lib/api';
 import { formatClock, formatDate, formatDuration, formatQuality } from '@/lib/format';
@@ -31,6 +31,7 @@ import { resumeAt, saveProgress } from '@/lib/progress';
 import { streamQuery } from '@/lib/queries';
 import { useCan, useRouteParams } from '@/lib/session';
 import { ChatPanel } from '@/player/ChatPanel';
+import { type Clock, createClock, useClock } from '@/player/clock';
 import { type Engine, type EngineError, type PlaybackState, createEngine } from '@/player/engine';
 import { createPreview } from '@/player/preview';
 import { Timeline, boxArt } from '@/player/Timeline';
@@ -110,7 +111,7 @@ function useFullscreen(target: React.RefObject<HTMLElement | null>) {
 function useMediaSession({
 	stream,
 	playing,
-	time,
+	clock,
 	duration,
 	togglePlay,
 	seekBy,
@@ -118,7 +119,7 @@ function useMediaSession({
 }: {
 	stream: StreamDetail;
 	playing: boolean;
-	time: number;
+	clock: Clock;
 	duration: number;
 	togglePlay: () => void;
 	seekBy: (delta: number) => void;
@@ -144,50 +145,29 @@ function useMediaSession({
 		};
 	}, [stream.id, stream.has_thumbnail, stream.streamer_avatar, stream.streamer_name, stream.game, title]);
 
+	// Set once: each action reads the player as it is when it comes.
+	const onAction = useEffectEvent((action: MediaSessionAction, details: MediaSessionActionDetails) => {
+		if (action === 'play' && !playing) togglePlay();
+		else if (action === 'pause' && playing) togglePlay();
+		else if (action === 'seekbackward') seekBy(-(details.seekOffset ?? 10));
+		else if (action === 'seekforward') seekBy(details.seekOffset ?? 10);
+		else if (action === 'seekto' && details.seekTime !== undefined) seekTo(details.seekTime);
+	});
 	useEffect(() => {
 		if (!('mediaSession' in navigator)) return;
 		const session = navigator.mediaSession;
-		const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
-			[
-				'play',
-				() => {
-					if (!playing) togglePlay();
-				},
-			],
-			[
-				'pause',
-				() => {
-					if (playing) togglePlay();
-				},
-			],
-			[
-				'seekbackward',
-				(details) => {
-					seekBy(-(details.seekOffset ?? 10));
-				},
-			],
-			[
-				'seekforward',
-				(details) => {
-					seekBy(details.seekOffset ?? 10);
-				},
-			],
-			[
-				'seekto',
-				(details) => {
-					if (details.seekTime !== undefined) seekTo(details.seekTime);
-				},
-			],
-		];
-		for (const [action, handler] of handlers) {
+		const actions: MediaSessionAction[] = ['play', 'pause', 'seekbackward', 'seekforward', 'seekto'];
+		for (const action of actions) {
 			try {
-				session.setActionHandler(action, handler);
+				session.setActionHandler(action, (details) => {
+					onAction(action, details);
+				});
 			} catch {
 				// An action this browser doesn't know.
 			}
 		}
 		return () => {
-			for (const [action] of handlers) {
+			for (const action of actions) {
 				try {
 					session.setActionHandler(action, null);
 				} catch {
@@ -195,26 +175,34 @@ function useMediaSession({
 				}
 			}
 		};
-	}, [playing, togglePlay, seekBy, seekTo]);
+	}, []);
 
 	useEffect(() => {
 		if ('mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
 	}, [playing]);
 
-	// The position, for the system's own bar: once a second is plenty.
-	const second = Math.floor(time);
+	// The position, for the system's own bar: once a second is plenty, read from the clock without
+	// drawing anything again.
 	useEffect(() => {
 		if (!('mediaSession' in navigator) || !(duration > 0)) return;
-		try {
-			navigator.mediaSession.setPositionState({
-				duration,
-				position: Math.min(second, duration),
-				playbackRate: 1,
-			});
-		} catch {
-			// A position past the end, while the duration settles.
-		}
-	}, [second, duration]);
+		let last = -1;
+		const update = () => {
+			const second = Math.floor(clock.get());
+			if (second === last) return;
+			last = second;
+			try {
+				navigator.mediaSession.setPositionState({
+					duration,
+					position: Math.min(second, duration),
+					playbackRate: 1,
+				});
+			} catch {
+				// A position past the end, while the duration settles.
+			}
+		};
+		update();
+		return clock.subscribe(update);
+	}, [clock, duration]);
 }
 
 export function StudioPage() {
@@ -253,14 +241,18 @@ let playNext: number | null = null;
 function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () => Promise<StreamDetail | null> }) {
 	const t = useT();
 	const canDownload = useCan('streams.download');
-	const prefs = usePrefs();
+	// Only what the player uses: the theme or the language changing don't draw it again.
+	const volume = usePrefs((state) => state.volume);
+	const muted = usePrefs((state) => state.muted);
+	const compressor = usePrefs((state) => state.compressor);
+	const setPrefs = usePrefs((state) => state.set);
 	const [stream, setStream] = useState(initial);
 	const root = useRef<HTMLDivElement>(null);
 	const stage = useRef<HTMLDivElement>(null);
 	const surface = useRef<HTMLDivElement>(null);
 	const engine = useRef<Engine | null>(null);
 	const [duration, setDuration] = useState(initial.duration_ms / 1000);
-	const [time, setTime] = useState(0);
+	const [clock] = useState(createClock);
 	const [state, setState] = useState<PlaybackState>({ playing: false, waiting: false, ended: false });
 	const [opening, setOpening] = useState(true);
 	const [error, setError] = useState<EngineError | null>(null);
@@ -297,7 +289,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 				const now = performance.now();
 				if (now - last > 100) {
 					last = now;
-					setTime(value);
+					clock.set(value);
 				}
 			};
 			let playing = false;
@@ -330,7 +322,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 				})
 				.catch(() => undefined);
 		},
-		[],
+		[clock],
 	);
 
 	useEffect(() => {
@@ -348,12 +340,12 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	}, [initial, open]);
 
 	useEffect(() => {
-		engine.current?.setVolume(prefs.volume, prefs.muted);
-	}, [prefs.volume, prefs.muted]);
+		engine.current?.setVolume(volume, muted);
+	}, [volume, muted]);
 
 	useEffect(() => {
-		engine.current?.setCompressor(prefs.compressor);
-	}, [prefs.compressor]);
+		engine.current?.setCompressor(compressor);
+	}, [compressor]);
 
 	// Pictures for the timeline, from the same file, opened the first time the bar is hovered.
 	const preview = useMemo(() => createPreview(stream.video_url), [stream.video_url]);
@@ -392,31 +384,46 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	);
 
 	// The position is remembered every few seconds and on leaving, to start there next time.
-	const saved = useRef(0);
-	const position = useRef({ time: 0, duration: 0 });
 	useEffect(() => {
-		position.current = { time, duration };
-		if (Math.abs(time - saved.current) < 5) return;
-		saved.current = time;
-		saveProgress(initial.id, time, duration);
-	}, [time, duration, initial.id]);
+		let saved = clock.get();
+		return clock.subscribe(() => {
+			const time = clock.get();
+			if (Math.abs(time - saved) < 5) return;
+			saved = time;
+			saveProgress(initial.id, time, duration);
+		});
+	}, [clock, duration, initial.id]);
+	const durationNow = useRef(duration);
+	useEffect(() => {
+		durationNow.current = duration;
+	}, [duration]);
 	useEffect(() => {
 		const save = () => {
-			const { time: at, duration: of } = position.current;
-			if (at > 0) saveProgress(initial.id, at, of);
+			const at = clock.get();
+			if (at > 0) saveProgress(initial.id, at, durationNow.current);
 		};
 		window.addEventListener('pagehide', save);
 		return () => {
 			window.removeEventListener('pagehide', save);
 			save();
 		};
-	}, [initial.id]);
+	}, [clock, initial.id]);
 
-	const seekTo = useCallback((seconds: number) => {
-		engine.current?.seek(seconds);
-		// The bar moves at once, without waiting for the engine's next report.
-		setTime(seconds);
-	}, []);
+	const seekTo = useCallback(
+		(seconds: number) => {
+			engine.current?.seek(seconds);
+			// The bar moves at once, without waiting for the engine's next report.
+			clock.set(seconds);
+		},
+		[clock],
+	);
+	// For the chat's time stamps: the same function on every draw, so its lines don't draw again.
+	const seekToMs = useCallback(
+		(ms: number) => {
+			seekTo(ms / 1000);
+		},
+		[seekTo],
+	);
 
 	const refresh = async () => {
 		const fresh = await reload();
@@ -444,74 +451,75 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 		}
 	}, [state.playing, poke]);
 
-	// Keyboard: the shortcuts of most players.
+	// Keyboard: the shortcuts of most players. Listened to once; each key reads the player as it is.
+	const onKey = useEffectEvent((event: KeyboardEvent) => {
+		const target = event.target as HTMLElement | null;
+		if (target?.closest('input, textarea, select, [contenteditable], [role=menu], [role=dialog], dialog')) return;
+		if (event.ctrlKey || event.metaKey || event.altKey) return;
+		const set = usePrefs.getState().set;
+		const { volume, muted } = usePrefs.getState();
+		let handled = true;
+		switch (event.key) {
+			case ' ':
+			case 'k':
+				if (target?.tagName === 'BUTTON' && event.key === ' ') return;
+				togglePlay();
+				break;
+			case 'ArrowLeft':
+			case 'j':
+				seekBy(event.key === 'j' ? -10 : -5);
+				break;
+			case 'ArrowRight':
+			case 'l':
+				seekBy(event.key === 'l' ? 10 : 5);
+				break;
+			case 'ArrowUp':
+				set({ volume: Math.min(1, volume + 0.05), muted: false });
+				break;
+			case 'ArrowDown':
+				set({ volume: Math.max(0, volume - 0.05) });
+				break;
+			case 'm':
+				set({ muted: !muted });
+				break;
+			case 'f':
+				fullscreen.toggle();
+				break;
+			case 'c':
+				toggleChat();
+				break;
+			case 'Home':
+				seekTo(0);
+				break;
+			case 'End':
+				seekTo(Math.max(0, duration - 1));
+				break;
+			default:
+				handled = false;
+		}
+		if (handled) {
+			event.preventDefault();
+			poke();
+		}
+	});
 	useEffect(() => {
-		const onKey = (event: KeyboardEvent) => {
-			const target = event.target as HTMLElement | null;
-			if (target?.closest('input, textarea, select, [contenteditable], [role=menu], [role=dialog], dialog'))
-				return;
-			if (event.ctrlKey || event.metaKey || event.altKey) return;
-			const set = usePrefs.getState().set;
-			const { volume, muted } = usePrefs.getState();
-			let handled = true;
-			switch (event.key) {
-				case ' ':
-				case 'k':
-					if (target?.tagName === 'BUTTON' && event.key === ' ') return;
-					togglePlay();
-					break;
-				case 'ArrowLeft':
-				case 'j':
-					seekBy(event.key === 'j' ? -10 : -5);
-					break;
-				case 'ArrowRight':
-				case 'l':
-					seekBy(event.key === 'l' ? 10 : 5);
-					break;
-				case 'ArrowUp':
-					set({ volume: Math.min(1, volume + 0.05), muted: false });
-					break;
-				case 'ArrowDown':
-					set({ volume: Math.max(0, volume - 0.05) });
-					break;
-				case 'm':
-					set({ muted: !muted });
-					break;
-				case 'f':
-					fullscreen.toggle();
-					break;
-				case 'c':
-					toggleChat();
-					break;
-				case 'Home':
-					seekTo(0);
-					break;
-				case 'End':
-					seekTo(Math.max(0, duration - 1));
-					break;
-				default:
-					handled = false;
-			}
-			if (handled) {
-				event.preventDefault();
-				poke();
-			}
+		const listener = (event: KeyboardEvent) => {
+			onKey(event);
 		};
-		window.addEventListener('keydown', onKey);
+		window.addEventListener('keydown', listener);
 		return () => {
-			window.removeEventListener('keydown', onKey);
+			window.removeEventListener('keydown', listener);
 		};
-	}, [togglePlay, seekBy, seekTo, fullscreen, toggleChat, duration, poke]);
+	}, []);
 
-	useMediaSession({ stream, playing: state.playing, time, duration, togglePlay, seekBy, seekTo });
+	useMediaSession({ stream, playing: state.playing, clock, duration, togglePlay, seekBy, seekTo });
 
-	const shown = scrub ?? time;
 	const downloads = {
 		video: stream.download_url,
 		json: `/api/streams/${stream.id}/chat.json`,
 		ass: `/api/streams/${stream.id}/chat.ass`,
 	};
-	const VolumeIcon = prefs.muted || prefs.volume === 0 ? VolumeX : prefs.volume < 0.5 ? Volume1 : Volume2;
+	const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 	const pseudoFullscreen = fullscreen.active && !fullscreen.native;
 	// What lies on the picture shows while the pointer is over it, and while paused.
 	const overlay = (hovering && controls) || !state.playing || chaptersOpen;
@@ -617,9 +625,10 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 				<div
 					className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-2 pt-8 pb-1 text-white transition-opacity duration-300 @md:px-3 @md:pt-14 @md:pb-2 @2xl:px-5 @2xl:pb-3 ${overlay ? 'opacity-100' : 'pointer-events-none opacity-0 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100'}`}
 				>
-					<Timeline
+					<PlayheadTimeline
+						clock={clock}
+						scrub={scrub}
 						duration={duration}
-						time={shown}
 						chapters={stream.chapters}
 						cuts={stream.cuts}
 						preview={preview}
@@ -654,9 +663,9 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						</PlayerButton>
 						<div className="group/volume flex items-center">
 							<PlayerButton
-								label={prefs.muted ? t.player.unmute : t.player.mute}
+								label={muted ? t.player.unmute : t.player.mute}
 								onClick={() => {
-									prefs.set({ muted: !prefs.muted });
+									setPrefs({ muted: !muted });
 								}}
 							>
 								<VolumeIcon size={22} />
@@ -668,27 +677,25 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 								min={0}
 								max={1}
 								step={0.01}
-								value={prefs.muted ? 0 : prefs.volume}
-								style={
-									{ '--level': `${(prefs.muted ? 0 : prefs.volume) * 100}%` } as React.CSSProperties
-								}
+								value={muted ? 0 : volume}
+								style={{ '--level': `${(muted ? 0 : volume) * 100}%` } as React.CSSProperties}
 								onChange={(event) => {
-									prefs.set({ volume: event.target.valueAsNumber, muted: false });
+									setPrefs({ volume: event.target.valueAsNumber, muted: false });
 								}}
 							/>
 						</div>
 						<PlayerButton
-							label={prefs.compressor ? t.player.compressorOn : t.player.compressorOff}
-							pressed={prefs.compressor}
+							label={compressor ? t.player.compressorOn : t.player.compressorOff}
+							pressed={compressor}
 							className="@max-sm:hidden"
 							onClick={() => {
-								prefs.set({ compressor: !prefs.compressor });
+								setPrefs({ compressor: !compressor });
 							}}
 						>
 							<AudioLines size={21} />
 						</PlayerButton>
 						<span className="text-ui tabular ml-2 whitespace-nowrap text-white">
-							{formatClock(shown)}
+							<PlayheadTime clock={clock} scrub={scrub} />
 							<span className="text-white/55 @max-md:hidden"> / {formatClock(duration)}</span>
 						</span>
 						<div className="flex-1" />
@@ -696,7 +703,8 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 							<Chapters
 								chapters={stream.chapters}
 								duration={duration}
-								time={shown}
+								clock={clock}
+								scrub={scrub}
 								open={chaptersOpen}
 								setOpen={setChaptersOpen}
 								onSeek={seekTo}
@@ -752,17 +760,37 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 			<aside
 				className={`border-line relative min-h-0 flex-1 flex-col border-t landscape:border-t-0 landscape:border-l lg:border-t-0 lg:border-l ${chatHidden ? 'hidden' : 'flex'}`}
 			>
-				<ChatPanel
+				<ChatAtPlayhead
+					clock={clock}
 					streamId={stream.id}
-					timeMs={Math.floor(time * 1000)}
 					hasChat={stream.chat_messages > 0}
-					onSeek={(ms) => {
-						seekTo(ms / 1000);
-					}}
+					onSeek={seekToMs}
 				/>
 			</aside>
 		</div>
 	);
+}
+
+/** The timeline at the playhead, or where its handle is dragged: the only part of the controls that moves. */
+function PlayheadTimeline({
+	clock,
+	scrub,
+	...props
+}: { clock: Clock; scrub: number | null } & Omit<Parameters<typeof Timeline>[0], 'time'>) {
+	const time = useClock(clock);
+	return <Timeline {...props} time={scrub ?? time} />;
+}
+
+/** The time played, drawn again when its second changes. */
+function PlayheadTime({ clock, scrub }: { clock: Clock; scrub: number | null }) {
+	const seconds = useClock(clock, Math.floor);
+	return formatClock(scrub ?? seconds);
+}
+
+/** The chat at the playhead, in milliseconds. */
+function ChatAtPlayhead({ clock, ...props }: { clock: Clock } & Omit<Parameters<typeof ChatPanel>[0], 'timeMs'>) {
+	const timeMs = useClock(clock, (seconds) => Math.floor(seconds * 1000));
+	return <ChatPanel {...props} timeMs={timeMs} />;
 }
 
 function PlayerButton({
@@ -860,18 +888,29 @@ function StreamOverlay({ stream, visible }: { stream: StreamDetail; visible: boo
 	);
 }
 
+/** The chapter playing at a time (ms), or -1 before the first and past the end. */
+function chapterAt(chapters: StreamDetail['chapters'], ms: number, endMs: number): number {
+	for (let index = chapters.length - 1; index >= 0; index--) {
+		const chapter = chapters[index];
+		if (chapter && ms >= chapter.at_ms) return ms < (chapters[index + 1]?.at_ms ?? endMs) ? index : -1;
+	}
+	return -1;
+}
+
 /** The broadcast's categories, each with its start and length; picking one jumps there. */
 function Chapters({
 	chapters,
 	duration,
-	time,
+	clock,
+	scrub,
 	open,
 	setOpen,
 	onSeek,
 }: {
 	chapters: StreamDetail['chapters'];
 	duration: number;
-	time: number;
+	clock: Clock;
+	scrub: number | null;
 	open: boolean;
 	setOpen: (open: boolean) => void;
 	onSeek: (seconds: number) => void;
@@ -897,7 +936,10 @@ function Chapters({
 		};
 	}, [open, setOpen]);
 
-	const now = time * 1000;
+	// The chapter playing, only while the list is open: closed, the button draws nothing new.
+	const playing = useClock(clock, (seconds) =>
+		open ? chapterAt(chapters, (scrub ?? seconds) * 1000, duration * 1000) : -1,
+	);
 	return (
 		<div ref={wrap} className="relative">
 			<PlayerButton
@@ -922,7 +964,7 @@ function Chapters({
 					<ol ref={list} className="min-h-0 overflow-y-auto overscroll-contain px-1.5 pb-1.5">
 						{chapters.map((chapter, index) => {
 							const end = chapters[index + 1]?.at_ms ?? duration * 1000;
-							const current = now >= chapter.at_ms && now < end;
+							const current = index === playing;
 							return (
 								<li key={chapter.at_ms}>
 									<button

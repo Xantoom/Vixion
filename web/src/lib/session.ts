@@ -30,10 +30,7 @@ export function useCan(permission: Permission): boolean {
 
 /** `login` and `id` from `/$login/$id`, read from the address. */
 export function useRouteParams(): { login: string; id: string } {
-	return useRouterState({
-		select: (state) => routeParams(state.location.pathname),
-		structuralSharing: true,
-	});
+	return useRouterState({ select: (state) => routeParams(state.location.pathname), structuralSharing: true });
 }
 
 export function routeParams(pathname: string): { login: string; id: string } {
