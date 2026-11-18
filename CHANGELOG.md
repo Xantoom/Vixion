@@ -17,6 +17,7 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ### Fixed
 
+- A recording stopped by hand stays stopped after a restart (such as an update) instead of being recorded again; the stop button answers once the recording is closed, so the page shows it stopped at once.
 - A chat connection gone silent is noticed after six minutes and reconnected: before, the periodic flush kept the deadline from ever passing.
 - A recording that crashes no longer leaves its chat task spinning the CPU, and stopping no longer waits for a chat connection or a Twitch check in progress.
 - A playlist with a NaN duration no longer crashes the recording.

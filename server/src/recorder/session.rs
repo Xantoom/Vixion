@@ -232,7 +232,10 @@ async fn wait_for_source(app: &AppState, login: &str, stop: &mut watch::Receiver
     let mut token = app.settings.twitch_token().await;
     while !*stop.borrow() && started.elapsed() < START_PATIENCE {
         let h264_only = app.settings.get().await.h264_only;
-        match pick_source(app, login, token.as_deref(), h264_only).await {
+        let Some(picked) = unless_stopped(stop, pick_source(app, login, token.as_deref(), h264_only)).await else {
+            break;
+        };
+        match picked {
             Ok(Some(source)) => {
                 app.alerts.resolve("twitch_integrity").await;
                 if token.is_some() {

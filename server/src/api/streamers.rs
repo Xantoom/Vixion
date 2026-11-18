@@ -310,9 +310,11 @@ pub async fn update(
         })
         .await?;
     match body.monitored {
-        Some(false) => app.recorder.stop(id),
+        Some(false) => {
+            app.recorder.stop(&app.db, id, std::time::Duration::ZERO).await;
+        }
         // Turned back on during a broadcast: that broadcast is recorded again.
-        Some(true) => app.recorder.resume(id),
+        Some(true) => app.recorder.resume(&app.db, id).await,
         None => {}
     }
     app.recorder.check_now();
@@ -394,8 +396,9 @@ pub async fn stop(State(app): State<AppState>, user: CurrentUser, Path(id): Path
     if !app.recorder.is_recording(id) {
         return Err(AppError::conflict("not_recording", "nothing is being recorded"));
     }
-    app.recorder.stop(id);
+    let ended = app.recorder.stop(&app.db, id, std::time::Duration::from_secs(30)).await;
     tracing::info!(id, by = %user.username, "recording stopped by hand");
     crate::audit::record(&app, &user, "recording.stop", id.to_string()).await;
-    Ok(StatusCode::NO_CONTENT)
+    // Still closing after half a minute: it will end on its own.
+    Ok(if ended { StatusCode::NO_CONTENT } else { StatusCode::ACCEPTED })
 }

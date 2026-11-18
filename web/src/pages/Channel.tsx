@@ -820,8 +820,12 @@ function StopDialog({ streamer, open, onClose }: { streamer: Streamer; open: boo
 			confirm={t.streamer.stop}
 			onConfirm={async () => {
 				try {
+					// Answers once the recording is closed, so the pages show it stopped.
 					await api.post(`/streamers/${streamer.id}/stop`);
-					await client.invalidateQueries({ queryKey: ['channel'] });
+					await Promise.all([
+						client.invalidateQueries({ queryKey: ['channel'] }),
+						client.invalidateQueries({ queryKey: streamersQuery.queryKey }),
+					]);
 				} catch (error) {
 					toast.error(error);
 					throw error;

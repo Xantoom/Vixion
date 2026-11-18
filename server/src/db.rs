@@ -17,6 +17,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/001_initial.sql"),
     include_str!("../migrations/002_channel_art.sql"),
     include_str!("../migrations/003_lookup_indexes.sql"),
+    include_str!("../migrations/004_stopped_by_hand.sql"),
 ];
 
 const READERS: usize = 3;

@@ -19,7 +19,7 @@ use tokio::sync::{Notify, watch};
 
 use crate::alerts::Level;
 use crate::app::AppState;
-use crate::db::now_ms;
+use crate::db::{Db, now_ms};
 use crate::twitch::api::{BATCH_SIZE, Channel, TwitchError};
 
 /// What the interface shows about a recording in progress.
@@ -56,6 +56,8 @@ pub struct Recorder {
     /// What was last written of each streamer, so that unchanged channels cost no write.
     written: Mutex<HashMap<i64, u64>>,
     wake: Notify,
+    /// Told each time a recording ends.
+    ended: Notify,
     /// Set when the process stops: no new recording starts.
     closing: std::sync::atomic::AtomicBool,
 }
@@ -68,6 +70,7 @@ impl Recorder {
             unplayable: Mutex::new(HashMap::new()),
             written: Mutex::new(HashMap::new()),
             wake: Notify::new(),
+            ended: Notify::new(),
             closing: std::sync::atomic::AtomicBool::new(false),
         }
     }
@@ -87,25 +90,78 @@ impl Recorder {
             .unwrap_or_default()
     }
 
-    /// Stops a streamer's recording, keeping what was recorded.
-    pub fn stop(&self, streamer_id: i64) {
-        if let Ok(sessions) = self.sessions.lock()
-            && let Some(handle) = sessions.get(&streamer_id)
-        {
+    /// Stops a streamer's recording, keeping what was recorded, and waits up to `wait` for it to
+    /// be closed. The broadcast isn't recorded again, even after a restart; the next one is.
+    /// Returns whether the recording has ended.
+    pub async fn stop(&self, db: &Db, streamer_id: i64, wait: Duration) -> bool {
+        let broadcast = {
+            let Ok(sessions) = self.sessions.lock() else { return false };
+            let Some(handle) = sessions.get(&streamer_id) else { return true };
             if let Ok(mut stopped) = self.stopped.lock() {
                 stopped.insert(streamer_id, handle.twitch_stream_id.clone());
             }
             let _ = handle.stop.send(true);
+            handle.twitch_stream_id.clone()
+        };
+        let saved = db
+            .write(move |conn| {
+                conn.execute(
+                    "UPDATE streamers SET stopped_stream_id = ?2 WHERE id = ?1",
+                    rusqlite::params![streamer_id, broadcast],
+                )?;
+                Ok(())
+            })
+            .await;
+        if let Err(error) = saved {
+            tracing::warn!(%error, "can't remember a stopped recording");
         }
+        // Closing the file and the chat takes a moment: the answer waits for it, so that the
+        // page shows the recording stopped rather than still running.
+        let ended = async {
+            loop {
+                let notified = self.ended.notified();
+                if !self.is_recording(streamer_id) {
+                    return;
+                }
+                notified.await;
+            }
+        };
+        tokio::time::timeout(wait, ended).await.is_ok()
     }
 
     /// Records a streamer's broadcast again, as when monitoring is turned back on.
-    pub fn resume(&self, streamer_id: i64) {
+    pub async fn resume(&self, db: &Db, streamer_id: i64) {
         if let Ok(mut stopped) = self.stopped.lock() {
             stopped.remove(&streamer_id);
         }
         if let Ok(mut unplayable) = self.unplayable.lock() {
             unplayable.remove(&streamer_id);
+        }
+        let _ = db
+            .write(move |conn| {
+                conn.execute("UPDATE streamers SET stopped_stream_id = NULL WHERE id = ?1", [streamer_id])?;
+                Ok(())
+            })
+            .await;
+    }
+
+    /// The broadcasts stopped by hand before a restart.
+    async fn load_stopped(&self, db: &Db) {
+        let stopped = db
+            .read(|conn| {
+                let mut statement =
+                    conn.prepare("SELECT id, stopped_stream_id FROM streamers WHERE stopped_stream_id IS NOT NULL")?;
+                let rows = statement.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?;
+                Ok(rows.collect::<Result<HashMap<_, _>, _>>()?)
+            })
+            .await;
+        match stopped {
+            Ok(stopped) => {
+                if let Ok(mut map) = self.stopped.lock() {
+                    map.extend(stopped);
+                }
+            }
+            Err(error) => tracing::error!(%error, "can't read the recordings stopped by hand"),
         }
     }
 
@@ -127,6 +183,7 @@ impl Recorder {
         if let Ok(mut sessions) = self.sessions.lock() {
             sessions.remove(&streamer_id);
         }
+        self.ended.notify_waiters();
     }
 }
 
@@ -223,6 +280,7 @@ enum Round {
 
 /// Runs the live checks until the process ends.
 pub async fn run(app: AppState) {
+    app.recorder.load_stopped(&app.db).await;
     // Broadcasts left in parts by earlier versions become one recording before anything records,
     // and before retention looks at them: deleting a part being appended would lose both.
     merge::run(&app).await;
