@@ -9,6 +9,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-18
+
 ### Changed
 
 - The media certificate is now kept as one file per ACME directory (key and chain together): it is requested once more after updating, and a staging certificate is never served in production.
@@ -204,7 +206,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - The release workflow's write access is limited to its last step, and actions are pinned by commit.
 - The compose file runs the container read-only, without capabilities or privilege escalation.
 
-[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Xantoom/Vixion/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Xantoom/Vixion/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/Xantoom/Vixion/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Xantoom/Vixion/compare/v0.2.0...v0.2.1
