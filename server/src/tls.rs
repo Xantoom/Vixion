@@ -111,19 +111,16 @@ pub async fn listen(addr: SocketAddr, slot: Arc<CertSlot>) -> std::io::Result<Tl
 
 struct AcmeFiles {
     account: PathBuf,
-    chain: PathBuf,
-    key: PathBuf,
+    /// The private key and its chain in one file, so that they are always replaced together.
+    bundle: PathBuf,
 }
 
 fn acme_files(data_dir: &Path, domain: &str, directory: &str) -> AcmeFiles {
     let dir = data_dir.join("certificates");
-    // One account per ACME directory: moving from staging to production must not reuse it.
+    // One account and one certificate per ACME directory: moving from staging to production must
+    // reuse neither.
     let tag: String = crate::crypto::sha256(directory.as_bytes()).iter().take(6).map(|b| format!("{b:02x}")).collect();
-    AcmeFiles {
-        account: dir.join(format!("acme-account-{tag}.json")),
-        chain: dir.join(format!("{domain}.crt")),
-        key: dir.join(format!("{domain}.key")),
-    }
+    AcmeFiles { account: dir.join(format!("acme-account-{tag}.json")), bundle: dir.join(format!("{domain}-{tag}.pem")) }
 }
 
 /// Keeps the certificate fresh: loads it, obtains or renews it, and checks again when it is due
@@ -161,6 +158,13 @@ fn renewal_time(chain_pem: &[u8]) -> Option<i64> {
     Some(from + ((until - from) as f64 * RENEW_AT) as i64)
 }
 
+/// When a certificate chain stops being valid, in seconds since 1970.
+fn expiry(chain_pem: &[u8]) -> Option<i64> {
+    use rustls::pki_types::pem::PemObject as _;
+    let first = rustls::pki_types::CertificateDer::pem_slice_iter(chain_pem).next()?.ok()?;
+    validity(&first).map(|(_, until)| until)
+}
+
 async fn load_files(cert: &Path, key: &Path, slot: &CertSlot) -> Result<(), String> {
     let chain = tokio::fs::read(cert).await.map_err(|e| format!("{}: {e}", cert.display()))?;
     let key = tokio::fs::read(key).await.map_err(|e| format!("{}: {e}", key.display()))?;
@@ -172,22 +176,28 @@ async fn load_files(cert: &Path, key: &Path, slot: &CertSlot) -> Result<(), Stri
 async fn acme(app: &AppState, slot: &CertSlot, email: &str, api_token: &str, directory: &str) -> Result<i64, String> {
     let domain = app.config.media_domain.clone();
     let files = acme_files(&app.config.data_dir, &domain, directory);
-    let renew_at = tokio::fs::read(&files.chain).await.ok().and_then(|pem| renewal_time(&pem));
-    if let Some(renew_at) = renew_at.filter(|&at| now_ms() / 1000 < at) {
-        if !slot.is_set() {
-            load_files(&files.chain, &files.key, slot).await?;
+    if let Ok(bundle) = tokio::fs::read(&files.bundle).await
+        && let Some((renew_at, until)) = renewal_time(&bundle).zip(expiry(&bundle))
+    {
+        let now = now_ms() / 1000;
+        // Still valid: served while its renewal is tried, and kept if that fails.
+        if now < until && !slot.is_set() {
+            slot.set(certified_key(&bundle, &bundle)?);
         }
-        return Ok(renew_at);
+        if now < renew_at {
+            return Ok(renew_at);
+        }
     }
     tracing::info!(%domain, %directory, "requesting a certificate");
     let cloudflare = Cloudflare::new(app.http.clone(), api_token);
     let (chain, key) = issue(&files, &domain, email, directory, &cloudflare).await?;
-    if let Some(parent) = files.chain.parent() {
+    if let Some(parent) = files.bundle.parent() {
         tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
     }
-    write_private(&files.key, key.as_bytes()).await?;
-    write_private(&files.chain, chain.as_bytes()).await?;
-    slot.set(certified_key(chain.as_bytes(), key.as_bytes())?);
+    let bundle = format!("{}\n{}", key.trim_end(), chain);
+    let installed = certified_key(bundle.as_bytes(), bundle.as_bytes())?;
+    write_private(&files.bundle, bundle.as_bytes()).await?;
+    slot.set(installed);
     let renew_at = renewal_time(chain.as_bytes()).ok_or("unreadable certificate")?;
     tracing::info!(%domain, renew_in_s = renew_at - now_ms() / 1000, "certificate installed");
     Ok(renew_at)
@@ -428,7 +438,14 @@ impl Cloudflare {
             self.call(reqwest::Method::GET, &format!("/zones/{zone}/dns_records?type=A&name={name}"), None).await?;
         let body = json!({ "type": "A", "name": name, "content": ip, "ttl": 300, "proxied": false });
         match found.pointer("/result/0") {
-            Some(record) if record.get("content").and_then(Value::as_str) == Some(ip) => Ok(false),
+            // Right address and not proxied: nothing to change. A proxied record is fixed even when
+            // its address is right.
+            Some(record)
+                if record.get("content").and_then(Value::as_str) == Some(ip)
+                    && record.get("proxied").and_then(Value::as_bool) != Some(true) =>
+            {
+                Ok(false)
+            }
             Some(record) => {
                 let id = record.get("id").and_then(Value::as_str).ok_or("no record ID")?;
                 self.call(reqwest::Method::PUT, &format!("/zones/{zone}/dns_records/{id}"), Some(body)).await?;

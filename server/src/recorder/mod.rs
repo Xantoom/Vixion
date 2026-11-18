@@ -316,6 +316,8 @@ async fn check(app: &AppState) -> Round {
     }
     let ids: Vec<String> = watched.iter().map(|streamer| streamer.twitch_id.clone()).collect();
     let batches = ids.len().div_ceil(BATCH_SIZE);
+    let by_id: HashMap<&str, &Watched> =
+        watched.iter().map(|streamer| (streamer.twitch_id.as_str(), streamer)).collect();
     let mut failed: Vec<String> = Vec::new();
     for (index, chunk) in ids.chunks(BATCH_SIZE).enumerate() {
         if index > 0 {
@@ -323,8 +325,6 @@ async fn check(app: &AppState) -> Round {
         }
         match app.twitch.channels_by_id(chunk).await {
             Ok(channels) => {
-                let by_id: HashMap<&str, &Watched> =
-                    watched.iter().map(|streamer| (streamer.twitch_id.as_str(), streamer)).collect();
                 for channel in &channels {
                     if let Some(streamer) = by_id.get(channel.id.as_str()) {
                         handle(app, streamer, channel).await;

@@ -69,7 +69,12 @@ pub async fn serve(uri: Uri, headers: HeaderMap) -> Response {
             break;
         }
     }
-    (StatusCode::OK, response_headers, Body::from(body.into_owned())).into_response()
+    // Embedded in release builds: served from the binary without a copy.
+    let body = match body {
+        std::borrow::Cow::Borrowed(bytes) => Body::from(bytes),
+        std::borrow::Cow::Owned(bytes) => Body::from(bytes),
+    };
+    (StatusCode::OK, response_headers, body).into_response()
 }
 
 /// Where the browser asks for the video, from the host the page was loaded on.

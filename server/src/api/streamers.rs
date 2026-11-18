@@ -107,10 +107,15 @@ async fn cached_profile(app: &AppState, login: &str) -> Option<Profile> {
     type Profiles = std::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, Option<Profile>)>>;
     static PROFILES: std::sync::OnceLock<Profiles> = std::sync::OnceLock::new();
     const KEEP: std::time::Duration = std::time::Duration::from_secs(60);
+    // Requests arriving together wait for the first answer instead of each asking Twitch.
+    static FETCHING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     let profiles = PROFILES.get_or_init(Default::default);
-    if let Some((_, profile)) =
-        profiles.lock().ok().and_then(|map| map.get(login).filter(|(at, _)| at.elapsed() < KEEP).cloned())
-    {
+    let cached = || profiles.lock().ok().and_then(|map| map.get(login).filter(|(at, _)| at.elapsed() < KEEP).cloned());
+    if let Some((_, profile)) = cached() {
+        return profile;
+    }
+    let _fetching = FETCHING.lock().await;
+    if let Some((_, profile)) = cached() {
         return profile;
     }
     match app.twitch.profile(login).await {

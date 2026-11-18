@@ -273,6 +273,7 @@ async fn serve(config: Config) -> ExitCode {
 
 async fn start(config: Config, logs: logs::LogBuffer) -> Result<(), Box<dyn std::error::Error>> {
     let _ = rustls::crypto::ring::default_provider().install_default();
+    std::fs::create_dir_all(&config.data_dir)?;
     std::fs::create_dir_all(config.streams_dir())?;
     let db = db::Db::open(&config.db_path())?;
     let keys = crypto::Keys::load_or_create(&config.data_dir.join("secret.key"))?;

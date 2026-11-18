@@ -241,16 +241,33 @@ pub async fn create_user(
     Ok(StatusCode::CREATED)
 }
 
-async fn active_admins(app: &AppState) -> AppResult<i64> {
-    app.db
-        .read(|conn| {
-            Ok(conn.query_row(
-                "SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE r.builtin = 'admin' AND u.disabled = 0",
-                [],
-                |row| row.get(0),
-            )?)
-        })
-        .await
+/// Counted inside the transaction that changes an account, so that two changes at once can't
+/// each leave the other administrator as the last one, then both go.
+fn active_admins(conn: &rusqlite::Connection) -> AppResult<i64> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE r.builtin = 'admin' AND u.disabled = 0",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+fn last_admin() -> AppError {
+    AppError::conflict("last_admin", "there must be at least one administrator")
+}
+
+/// An account's permissions as they stand, read inside a transaction.
+fn permissions_of(conn: &rusqlite::Connection, id: i64) -> AppResult<std::collections::BTreeSet<String>> {
+    Ok(auth::load_account(conn, id)?.map(|(account, _)| account.permissions).unwrap_or_default())
+}
+
+/// Whatever a change gave an account (an exception cleared back to its role's grant, a new role)
+/// must be held by whoever made it.
+fn gains_within(
+    manager: &CurrentUser,
+    before: &std::collections::BTreeSet<String>,
+    after: &std::collections::BTreeSet<String>,
+) -> AppResult<()> {
+    require_within(manager, after.difference(before))
 }
 
 #[derive(Deserialize)]
@@ -307,9 +324,7 @@ pub async fn update_user(
     }
     let demoting =
         target_admin && (body.role_id.is_some_and(|role| role != target_role) || body.disabled == Some(true));
-    if demoting && active_admins(&app).await? <= 1 {
-        return Err(AppError::conflict("last_admin", "there must be at least one administrator"));
-    }
+    let manager = user.clone();
     let hash = match body.password {
         Some(password) => {
             auth::validate_password(&password)?;
@@ -321,6 +336,7 @@ pub async fn update_user(
     app.db
         .write(move |conn| {
             let tx = conn.transaction()?;
+            let before = permissions_of(&tx, id)?;
             if let Some(role_id) = body.role_id {
                 tx.execute("UPDATE users SET role_id = ?2 WHERE id = ?1", rusqlite::params![id, role_id])?;
             }
@@ -349,6 +365,12 @@ pub async fn update_user(
                     )?,
                 };
             }
+            if !manager.admin {
+                gains_within(&manager, &before, &permissions_of(&tx, id)?)?;
+            }
+            if demoting && active_admins(&tx)? < 1 {
+                return Err(last_admin());
+            }
             tx.commit()?;
             Ok(())
         })
@@ -365,17 +387,18 @@ pub async fn delete_user(State(app): State<AppState>, user: CurrentUser, Path(id
     }
     let target = account(&app, id).await?;
     require_within(&user, &target.permissions)?;
-    if target.admin {
-        if !user.admin {
-            return Err(AppError::forbidden());
-        }
-        if active_admins(&app).await? <= 1 {
-            return Err(AppError::conflict("last_admin", "there must be at least one administrator"));
-        }
+    if target.admin && !user.admin {
+        return Err(AppError::forbidden());
     }
+    let target_admin = target.admin;
     app.db
         .write(move |conn| {
-            conn.execute("DELETE FROM users WHERE id = ?1", [id])?;
+            let tx = conn.transaction()?;
+            tx.execute("DELETE FROM users WHERE id = ?1", [id])?;
+            if target_admin && active_admins(&tx)? < 1 {
+                return Err(last_admin());
+            }
+            tx.commit()?;
             Ok(())
         })
         .await?;
@@ -510,9 +533,17 @@ pub async fn delete_role(State(app): State<AppState>, user: CurrentUser, Path(id
     user.require("users.manage")?;
     let (_, current) = role_info(&app, id).await?;
     require_within(&user, &current)?;
+    let manager = user.clone();
     app.db
         .write(move |conn| {
             let tx = conn.transaction()?;
+            // Its members move to the `user` role: whatever that gives them must be the manager's.
+            let members: Vec<i64> = {
+                let mut statement = tx.prepare("SELECT id FROM users WHERE role_id = ?1")?;
+                let rows = statement.query_map([id], |row| row.get(0))?;
+                rows.collect::<Result<_, _>>()?
+            };
+            let before = members.iter().map(|&member| permissions_of(&tx, member)).collect::<AppResult<Vec<_>>>()?;
             let builtin: Option<String> =
                 tx.query_row("SELECT builtin FROM roles WHERE id = ?1", [id], |row| row.get(0))?;
             if builtin.is_some() {
@@ -520,6 +551,11 @@ pub async fn delete_role(State(app): State<AppState>, user: CurrentUser, Path(id
             }
             let fallback: i64 = tx.query_row("SELECT id FROM roles WHERE builtin = 'user'", [], |row| row.get(0))?;
             tx.execute("UPDATE users SET role_id = ?2 WHERE role_id = ?1", rusqlite::params![id, fallback])?;
+            if !manager.admin {
+                for (&member, before) in members.iter().zip(&before) {
+                    gains_within(&manager, before, &permissions_of(&tx, member)?)?;
+                }
+            }
             tx.execute("DELETE FROM roles WHERE id = ?1", [id])?;
             tx.commit()?;
             Ok(())

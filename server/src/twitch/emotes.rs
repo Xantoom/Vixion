@@ -3,6 +3,8 @@
 //!
 //! Lists are fetched per channel and kept an hour: they change rarely and every viewer of a
 //! recording asks for the same ones. Expired lists are dropped, not just refreshed. A provider that fails only leaves its emotes out.
+//! The global lists of 7TV and BetterTTV are fetched once for every channel, and a list being
+//! fetched is waited for rather than fetched a second time.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -32,7 +34,14 @@ type Cached = (Instant, Duration, Arc<ChatAssets>);
 #[derive(Default)]
 pub struct ChatAssetCache {
     entries: Mutex<HashMap<String, Cached>>,
+    /// Providers' global lists, by address, with when they were fetched.
+    globals: Mutex<HashMap<&'static str, (Instant, Arc<Value>)>>,
+    /// Held while lists are fetched: a second viewer waits for the first answer.
+    fetching: tokio::sync::Mutex<()>,
 }
+
+const SEVENTV_GLOBAL: &str = "https://7tv.io/v3/emote-sets/global";
+const BTTV_GLOBAL: &str = "https://api.betterttv.net/3/cached/emotes/global";
 
 impl ChatAssetCache {
     /// Lets expired lists go: otherwise every channel ever recorded keeps its emotes for good.
@@ -41,19 +50,43 @@ impl ChatAssetCache {
             map.retain(|_, (at, keep, _)| at.elapsed() < *keep);
             map.shrink_to_fit();
         }
+        if let Ok(mut globals) = self.globals.lock() {
+            globals.retain(|_, (at, _)| at.elapsed() < KEEP);
+        }
+    }
+
+    fn cached(&self, channel_id: &str) -> Option<Arc<ChatAssets>> {
+        let (at, keep, assets) = self.entries.lock().ok()?.get(channel_id).cloned()?;
+        (at.elapsed() < keep).then_some(assets)
+    }
+
+    /// A provider's global list: kept an hour once fetched, None while it fails.
+    async fn global(&self, http: &reqwest::Client, url: &'static str) -> Option<Option<Arc<Value>>> {
+        let cached = self.globals.lock().ok().and_then(|globals| globals.get(url).cloned());
+        if let Some((at, list)) = cached
+            && at.elapsed() < KEEP
+        {
+            return Some(Some(list));
+        }
+        let list = fetch(http, url).await?.map(Arc::new);
+        if let (Some(list), Ok(mut globals)) = (&list, self.globals.lock()) {
+            globals.insert(url, (Instant::now(), Arc::clone(list)));
+        }
+        Some(list)
     }
 
     pub async fn get(&self, twitch: &TwitchApi, http: &reqwest::Client, channel_id: &str) -> Arc<ChatAssets> {
-        let cached = self.entries.lock().ok().and_then(|map| map.get(channel_id).cloned());
-        if let Some((at, keep, assets)) = cached
-            && at.elapsed() < keep
-        {
+        if let Some(assets) = self.cached(channel_id) {
+            return assets;
+        }
+        let _fetching = self.fetching.lock().await;
+        if let Some(assets) = self.cached(channel_id) {
             return assets;
         }
         let (badges, seventv, bttv, ffz) = tokio::join!(
             twitch.badges(channel_id),
-            seventv(http, channel_id),
-            bttv(http, channel_id),
+            seventv(self, http, channel_id),
+            bttv(self, http, channel_id),
             ffz(http, channel_id),
         );
         let complete = badges.is_ok() && ffz.is_some() && bttv.is_some() && seventv.is_some();
@@ -89,11 +122,15 @@ fn str_at<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key).and_then(Value::as_str)
 }
 
-async fn seventv(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String, [String; 3])>> {
+async fn seventv(
+    cache: &ChatAssetCache,
+    http: &reqwest::Client,
+    channel_id: &str,
+) -> Option<Vec<(String, [String; 3])>> {
     let user = format!("https://7tv.io/v3/users/twitch/{channel_id}");
-    let (global, channel) = tokio::join!(fetch(http, "https://7tv.io/v3/emote-sets/global"), fetch(http, &user));
+    let (global, channel) = tokio::join!(cache.global(http, SEVENTV_GLOBAL), fetch(http, &user));
     let (global, channel) = (global?, channel?);
-    let sets = [global.as_ref(), channel.as_ref().and_then(|user| user.get("emote_set"))];
+    let sets = [global.as_deref(), channel.as_ref().and_then(|user| user.get("emote_set"))];
     sets.into_iter()
         .flatten()
         .filter_map(|set| set.get("emotes")?.as_array())
@@ -108,13 +145,12 @@ async fn seventv(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String
         .into()
 }
 
-async fn bttv(http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String, [String; 3])>> {
+async fn bttv(cache: &ChatAssetCache, http: &reqwest::Client, channel_id: &str) -> Option<Vec<(String, [String; 3])>> {
     let user = format!("https://api.betterttv.net/3/cached/users/twitch/{channel_id}");
-    let (global, channel) =
-        tokio::join!(fetch(http, "https://api.betterttv.net/3/cached/emotes/global"), fetch(http, &user));
+    let (global, channel) = tokio::join!(cache.global(http, BTTV_GLOBAL), fetch(http, &user));
     let (global, channel) = (global?, channel?);
     let lists = [
-        global.as_ref(),
+        global.as_deref(),
         channel.as_ref().and_then(|user| user.get("sharedEmotes")),
         channel.as_ref().and_then(|user| user.get("channelEmotes")),
     ];

@@ -2,7 +2,8 @@
 //!
 //! One connection writes and a few read, in WAL mode, so a long listing never waits for a write.
 //! Calls run on Tokio's blocking pool: SQLite is fast enough that a thread hop costs more than
-//! the query, but it must never block the async workers.
+//! the query, but it must never block the async workers. A call waits for a free connection
+//! before it takes a thread, so queued calls don't fill the pool that other work needs.
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -24,6 +25,9 @@ const READERS: usize = 3;
 pub struct Db {
     writer: Arc<Mutex<Connection>>,
     readers: Arc<Vec<Mutex<Connection>>>,
+    /// One permit per connection, waited for asynchronously.
+    writer_turn: Arc<tokio::sync::Semaphore>,
+    reader_turns: Arc<tokio::sync::Semaphore>,
 }
 
 fn configure(conn: &Connection) -> rusqlite::Result<()> {
@@ -52,7 +56,12 @@ impl Db {
                 Ok(Mutex::new(conn))
             })
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(Self { writer: Arc::new(Mutex::new(writer)), readers: Arc::new(readers) })
+        Ok(Self {
+            writer: Arc::new(Mutex::new(writer)),
+            readers: Arc::new(readers),
+            writer_turn: Arc::new(tokio::sync::Semaphore::new(1)),
+            reader_turns: Arc::new(tokio::sync::Semaphore::new(READERS)),
+        })
     }
 
     /// Runs `f` on the writing connection.
@@ -62,7 +71,9 @@ impl Db {
         F: FnOnce(&mut Connection) -> Result<T, AppError> + Send + 'static,
     {
         let writer = Arc::clone(&self.writer);
+        let turn = Arc::clone(&self.writer_turn).acquire_owned().await;
         tokio::task::spawn_blocking(move || {
+            let _turn = turn;
             // A panic in an earlier call poisons the lock, but leaves the connection sound: SQLite
             // rolled back what that call had open. Refusing it would stop every write until restart.
             let mut conn = writer.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -72,14 +83,16 @@ impl Db {
         .map_err(|error| AppError::internal(format!("database task failed: {error}")))?
     }
 
-    /// Runs `f` on a reading connection: the first free one, else the first.
+    /// Runs `f` on a reading connection: a free one, once there is one.
     pub async fn read<T, F>(&self, f: F) -> Result<T, AppError>
     where
         T: Send + 'static,
         F: FnOnce(&Connection) -> Result<T, AppError> + Send + 'static,
     {
         let readers = Arc::clone(&self.readers);
+        let turn = Arc::clone(&self.reader_turns).acquire_owned().await;
         tokio::task::spawn_blocking(move || {
+            let _turn = turn;
             // Poisoned or not, as for the writer: a read leaves nothing half done.
             let guard = readers
                 .iter()

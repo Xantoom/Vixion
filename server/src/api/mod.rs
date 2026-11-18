@@ -50,6 +50,9 @@ pub fn router() -> Router<AppState> {
 
 /// JSON answers carry an ETag, and the browser revalidates them: a page refreshed every few
 /// seconds gets an empty 304 when nothing changed instead of the same list again.
+/// Largest answer given an `ETag`.
+const ETAG_LIMIT: u64 = 16 << 20;
+
 async fn revalidate(request: axum::extract::Request, next: middleware::Next) -> axum::response::Response {
     use axum::http::{HeaderValue, Method, StatusCode, header};
     use axum::response::IntoResponse as _;
@@ -71,8 +74,12 @@ async fn revalidate(request: axum::extract::Request, next: middleware::Next) -> 
     {
         return response;
     }
+    // An answer too large (or of unknown size) to hash in memory goes as it is, untagged.
+    if axum::body::HttpBody::size_hint(response.body()).upper().is_none_or(|size| size > ETAG_LIMIT) {
+        return response;
+    }
     let (mut parts, body) = response.into_parts();
-    let Ok(bytes) = axum::body::to_bytes(body, 16 << 20).await else {
+    let Ok(bytes) = axum::body::to_bytes(body, usize::try_from(ETAG_LIMIT).unwrap_or(usize::MAX)).await else {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
     let digest = crate::crypto::sha256(&bytes);

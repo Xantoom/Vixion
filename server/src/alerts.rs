@@ -120,8 +120,11 @@ impl Alerts {
         self.db
             .read(move |conn| {
                 let mut statement = conn.prepare_cached(
+                    // Every open alert, however old, and the latest of the others.
                     "SELECT id, level, kind, message, created_at, resolved FROM alerts
-                     WHERE (?1 = 0 OR resolved = 0) ORDER BY created_at DESC LIMIT 200",
+                     WHERE resolved = 0 OR (?1 = 0 AND id IN (SELECT id FROM alerts WHERE resolved = 1
+                       ORDER BY created_at DESC LIMIT 200))
+                     ORDER BY created_at DESC",
                 )?;
                 let rows = statement.query_map([i64::from(open_only)], |row| {
                     Ok(Alert {

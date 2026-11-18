@@ -417,12 +417,22 @@ async fn timed_chat(id: i64, located: &Located) -> AppResult<Arc<Vec<Entry>>> {
         Ok(meta) => meta.len(),
         Err(_) => return Ok(Arc::new(Vec::new())),
     };
-    if let Some(found) = cache().lock().ok().and_then(|mut cache| {
-        cache.get_mut(&(id, size)).map(|(lines, used)| {
-            *used = std::time::Instant::now();
-            Arc::clone(lines)
+    let cached = || {
+        cache().lock().ok().and_then(|mut cache| {
+            cache.get_mut(&(id, size)).map(|(lines, used)| {
+                *used = std::time::Instant::now();
+                Arc::clone(lines)
+            })
         })
-    }) {
+    };
+    if let Some(found) = cached() {
+        return Ok(found);
+    }
+    // One index is built at a time: the player's first two requests, or several viewers opening
+    // the same recording, wait for the first build instead of each reading the whole file.
+    static BUILDING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _building = BUILDING.lock().await;
+    if let Some(found) = cached() {
         return Ok(found);
     }
     // The index of an older size goes before the new one is built, not after: never both at once.
@@ -439,6 +449,10 @@ async fn timed_chat(id: i64, located: &Located) -> AppResult<Arc<Vec<Entry>>> {
     .await
     .map_err(|error| AppError::internal(error.to_string()))?;
     let lines = Arc::new(lines);
+    // An index larger than the whole cache is served, not kept: the limit holds.
+    if lines.len() > CACHED_LINES {
+        return Ok(lines);
+    }
     if let Ok(mut cache) = cache().lock() {
         cache.retain(|(cached, _), _| *cached != id);
         // The least recently used go first, until the new one fits.
@@ -453,11 +467,21 @@ async fn timed_chat(id: i64, located: &Located) -> AppResult<Arc<Vec<Entry>>> {
 }
 
 /// A response body written by a blocking thread as it goes, so that a download of millions of
-/// lines never sits whole in memory. The thread stops when the client goes away.
-fn streamed(write: impl FnOnce(&mut dyn FnMut(Vec<u8>) -> bool) + Send + 'static) -> axum::body::Body {
+/// lines never sits whole in memory. The thread stops when the client goes away, or when it
+/// stops reading for [`STALLED`]: a download left hanging must not hold a thread for good.
+/// Only [`DOWNLOADS`] are written at once; more wait their turn without taking a thread, so
+/// downloads can't take the threads the database and recordings need.
+async fn streamed(write: impl FnOnce(&mut dyn FnMut(Vec<u8>) -> bool) + Send + 'static) -> axum::body::Body {
+    static TURNS: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
+    let turns = Arc::clone(TURNS.get_or_init(|| Arc::new(tokio::sync::Semaphore::new(DOWNLOADS))));
+    let turn = turns.acquire_owned().await;
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<Vec<u8>>(4);
+    let runtime = tokio::runtime::Handle::current();
     tokio::task::spawn_blocking(move || {
-        let mut send = |chunk: Vec<u8>| sender.blocking_send(chunk).is_ok();
+        let _turn = turn;
+        let mut send = |chunk: Vec<u8>| {
+            runtime.block_on(tokio::time::timeout(STALLED, sender.send(chunk))).is_ok_and(|sent| sent.is_ok())
+        };
         write(&mut send);
     });
     // Polling again after the end is allowed here (compression does it), unlike with `unfold`.
@@ -465,6 +489,11 @@ fn streamed(write: impl FnOnce(&mut dyn FnMut(Vec<u8>) -> bool) + Send + 'static
         receiver.poll_recv(cx).map(|chunk| chunk.map(|chunk| Ok::<_, std::io::Error>(bytes::Bytes::from(chunk))))
     }))
 }
+
+/// Chat downloads written at the same time.
+const DOWNLOADS: usize = 4;
+/// A download whose reader takes nothing for this long is dropped.
+const STALLED: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// Chunks of a streamed body are sent once they reach this size.
 const CHUNK: usize = 256 * 1024;
@@ -477,6 +506,10 @@ pub struct Window {
     to: Option<i64>,
     /// Asks for the lines said before this time (exclusive) instead: the last `limit` of them.
     before: Option<i64>,
+    /// With `before`: how many of the lines said at exactly that time the reader holds already,
+    /// the last ones. The others come back too, so that lines sharing one time (all those said
+    /// during a cut ad land on its end) are never skipped.
+    held: Option<usize>,
     limit: Option<usize>,
 }
 
@@ -492,7 +525,14 @@ pub async fn chat_window(
     let located = locate(&app, id).await?;
     let lines = timed_chat(id, &located).await?;
     let range = if let Some(before) = window.before {
-        let end = lines.partition_point(|line| i64::from(line.o) < before);
+        let end = match window.held {
+            Some(held) => {
+                let start = lines.partition_point(|line| i64::from(line.o) < before);
+                let after = lines.partition_point(|line| i64::from(line.o) <= before);
+                after.saturating_sub(held).max(start)
+            }
+            None => lines.partition_point(|line| i64::from(line.o) < before),
+        };
         end.saturating_sub(window.limit.unwrap_or(100).min(1000))..end
     } else {
         let from = window.from.unwrap_or(0);
@@ -558,7 +598,8 @@ pub async fn chat_json(State(app): State<AppState>, user: CurrentUser, Path(id):
             out.extend_from_slice(b"]}");
             send(out);
         }
-    });
+    })
+    .await;
     let name = download_name(&located, "chat.json");
     Ok((
         [(header::CONTENT_TYPE, "application/json".to_owned()), (header::CONTENT_DISPOSITION, attachment(&name))],
@@ -586,7 +627,7 @@ pub async fn chat_ass(State(app): State<AppState>, user: CurrentUser, Path(id): 
     let located = locate(&app, id).await?;
     let lines = timed_chat(id, &located).await?;
     let chat_path = located.dir.join(storage::CHAT_FILE);
-    let body = streamed(move |send| write_ass(&chat_path, &lines, send));
+    let body = streamed(move |send| write_ass(&chat_path, &lines, send)).await;
     let name = download_name(&located, "chat.ass");
     Ok((
         StatusCode::OK,
