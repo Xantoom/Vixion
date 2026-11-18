@@ -75,7 +75,9 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ hashFiles('web/bun.lock') }}
       - run: bun install --frozen-lockfile
-      - run: bun audit
+      # GHSA-fc5q-39xc-vjpf: picomatch (through Vite) only globs at build time, on our own
+      # patterns, and isn't in what ships. No fixed version is out yet: drop this once there is.
+      - run: bun audit --ignore GHSA-fc5q-39xc-vjpf
       - run: bun run fmt:check
       - run: bun run typecheck
       - run: bun run lint
