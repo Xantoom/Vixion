@@ -9,6 +9,33 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Changed
+
+- The media certificate is now kept as one file per ACME directory (key and chain together): it is requested once more after updating, and a staging certificate is never served in production.
+- Channel pages refresh every two minutes unless the channel is live or being recorded.
+- At most four chat downloads are written at once; others wait their turn.
+
+### Fixed
+
+- A chat connection gone silent is noticed after six minutes and reconnected: before, the periodic flush kept the deadline from ever passing.
+- A recording that crashes no longer leaves its chat task spinning the CPU, and stopping no longer waits for a chat connection or a Twitch check in progress.
+- A playlist with a NaN duration no longer crashes the recording.
+- Deleting several parts at once no longer leaves their folder behind, retention no longer deletes a recording kept forever (or resumed) after it picked it, and a resumed recording can't lose its file to a deletion.
+- A recording whose closing fails keeps its duration and size; one closed just before a crash keeps its full duration; a timeline that can't be saved raises an alert.
+- MP4 segments with several sample tables are read correctly, and a damaged table can't fill memory.
+- A download left hanging no longer holds a server thread for good.
+- Chat lines said at the same moment (those during a cut ad) can all be read back, the 5,000 kept lines never push out those at the playhead, and a network failure is retried with growing waits, even while paused.
+- When audio decoding fails, the video goes on from where it was instead of jumping; seeking past the end of the sound no longer leaves the player waiting, and the sound ending first no longer stops the video.
+- The refresh button no longer opens the player twice; a link older than six hours is fetched again before playing.
+- Open alerts stay listed however many events come after them.
+- A still valid certificate is served while its renewal is retried; DDNS turns the Cloudflare proxy off even when the address is right.
+- The data folder is created at first start; a stray `%` in the address no longer stops the app; the Twitch tab falls back to recordings when Twitch can't be reached; a failed sign-out says so.
+- Very large answers are sent without an ETag instead of failing.
+
+### Security
+
+- The last administrator can't be removed by two changes at once, and clearing a permission exception or deleting a role can't give someone more than the manager holds.
+
 ## [0.3.0] - 2026-11-15
 
 ### Added
