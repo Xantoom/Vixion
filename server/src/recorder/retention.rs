@@ -3,60 +3,91 @@
 
 use std::time::Duration;
 
+use rusqlite::OptionalExtension as _;
+
 use super::storage;
 use crate::alerts::Level;
 use crate::app::AppState;
 use crate::db::now_ms;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::media::fmp4;
 use crate::system;
 
 const GIB: u64 = 1 << 30;
 
-/// Deletes a recording part: its files, its folder once no other part uses it, and its row.
-pub async fn delete_stream(app: &AppState, id: i64) -> AppResult<()> {
-    let (dir, part, shared) = app
+/// Who asks for a deletion, which decides what stops it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Deletion {
+    /// Someone asked for it: anything but a recording in progress.
+    Manual,
+    /// Retention or a full disk: only what isn't kept forever, nor recording.
+    Automatic,
+}
+
+/// Deletes a recording part: its row, then its files, and its folder once no other part uses it.
+/// Returns false when the part is protected (or already gone) and was left alone.
+///
+/// The row goes and the remaining parts are counted in one transaction, checked against its
+/// status at that moment: two deletions at once can't each leave the folder to the other, a
+/// part kept or resumed since it was picked stays, and a resumed part can't lose its files
+/// (a resume marks the row recording before it touches them).
+pub async fn delete_stream(app: &AppState, id: i64, by: Deletion) -> AppResult<bool> {
+    // Retention starts once the merge is over; someone may ask sooner.
+    if super::merge::running() {
+        return Err(AppError::conflict("merging", "recordings are being merged, try again in a moment"));
+    }
+    let found = app
         .db
-        .read(move |conn| {
-            let (dir, part): (String, i64) =
-                conn.query_row("SELECT dir, part FROM streams WHERE id = ?1", [id], |row| {
-                    Ok((row.get(0)?, row.get(1)?))
-                })?;
-            let shared: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM streams WHERE dir = ?1 AND id != ?2",
-                rusqlite::params![dir, id],
-                |row| row.get(0),
-            )?;
-            Ok((dir, part, shared > 0))
+        .write(move |conn| {
+            let tx = conn.transaction()?;
+            let row: Option<(String, i64, String, bool)> = tx
+                .query_row("SELECT dir, part, status, keep_forever FROM streams WHERE id = ?1", [id], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                })
+                .optional()?;
+            let Some((dir, part, status, keep)) = row else { return Ok(None) };
+            if status == "recording" {
+                return match by {
+                    Deletion::Manual => Err(AppError::conflict("recording", "stop the recording first")),
+                    Deletion::Automatic => Ok(None),
+                };
+            }
+            if keep && by == Deletion::Automatic {
+                return Ok(None);
+            }
+            tx.execute("DELETE FROM streams WHERE id = ?1", [id])?;
+            let shared: i64 = tx.query_row("SELECT COUNT(*) FROM streams WHERE dir = ?1", [&dir], |row| row.get(0))?;
+            tx.commit()?;
+            Ok(Some((dir, part, shared > 0)))
         })
         .await?;
-    if let Some(folder) = storage::stream_dir(&app.config.streams_dir(), &dir) {
-        if shared {
-            for file in [storage::video_file(part), storage::timeline_file(part)] {
-                match tokio::fs::remove_file(folder.join(file)).await {
-                    Ok(()) => {}
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(error) => return Err(error.into()),
-                }
-            }
-        } else {
-            match tokio::fs::remove_dir_all(&folder).await {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error.into()),
-            }
-            // The streamer's folder goes too once empty; failing means it isn't.
-            if let Some(parent) = folder.parent() {
-                let _ = tokio::fs::remove_dir(parent).await;
+    let Some((dir, part, shared)) = found else { return Ok(false) };
+    let Some(folder) = storage::stream_dir(&app.config.streams_dir(), &dir) else { return Ok(true) };
+    let removed = if shared {
+        let mut removed = Ok(());
+        for file in [storage::video_file(part), storage::timeline_file(part)] {
+            match tokio::fs::remove_file(folder.join(file)).await {
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => removed = Err(error),
+                _ => {}
             }
         }
+        removed
+    } else {
+        let removed = match tokio::fs::remove_dir_all(&folder).await {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+            _ => Ok(()),
+        };
+        // The streamer's folder goes too once empty; failing means it isn't.
+        if let Some(parent) = folder.parent() {
+            let _ = tokio::fs::remove_dir(parent).await;
+        }
+        removed
+    };
+    // The row is gone already: files that resist are reported, not a reason to fail.
+    if let Err(error) = removed {
+        tracing::error!(%error, folder = %folder.display(), "a deleted recording left files behind");
     }
-    app.db
-        .write(move |conn| {
-            conn.execute("DELETE FROM streams WHERE id = ?1", [id])?;
-            Ok(())
-        })
-        .await
+    Ok(true)
 }
 
 /// Deletes expired recordings every hour, and once at start. Free space is watched every minute,
@@ -93,13 +124,16 @@ pub async fn sweep(app: &AppState) -> AppResult<()> {
             Ok(rows.collect::<Result<Vec<_>, _>>()?)
         })
         .await?;
-    for id in &expired {
-        if let Err(error) = delete_stream(app, *id).await {
-            tracing::warn!(%error, id, "can't delete an expired recording");
+    let mut deleted = 0;
+    for id in expired {
+        match delete_stream(app, id, Deletion::Automatic).await {
+            Ok(true) => deleted += 1,
+            Ok(false) => {}
+            Err(error) => tracing::warn!(%error, id, "can't delete an expired recording"),
         }
     }
-    if !expired.is_empty() {
-        tracing::info!(count = expired.len(), "expired recordings deleted");
+    if deleted > 0 {
+        tracing::info!(count = deleted, "expired recordings deleted");
     }
     check_disk(app, true).await
 }
@@ -128,7 +162,7 @@ pub async fn check_disk(app: &AppState, free_space: bool) -> AppResult<()> {
             if space.free + freed >= reserve {
                 break;
             }
-            if delete_stream(app, id).await.is_ok() {
+            if delete_stream(app, id, Deletion::Automatic).await.unwrap_or(false) {
                 freed += u64::try_from(size).unwrap_or(0);
                 deleted += 1;
             }

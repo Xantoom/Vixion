@@ -10,6 +10,7 @@
 //! says how long the file was before, so a merge interrupted halfway starts again cleanly.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -44,8 +45,22 @@ struct Row {
     error: Option<String>,
 }
 
+/// Set while the merge runs: parts are being moved, so none is deleted by hand meanwhile.
+static RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Whether parts are being merged right now.
+pub fn running() -> bool {
+    RUNNING.load(Ordering::Acquire)
+}
+
 /// Merges the parts of every finished broadcast. Runs once at startup, before recording.
 pub async fn run(app: &AppState) {
+    RUNNING.store(true, Ordering::Release);
+    merge_all(app).await;
+    RUNNING.store(false, Ordering::Release);
+}
+
+async fn merge_all(app: &AppState) {
     let dirs = app
         .db
         .read(|conn| {

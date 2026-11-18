@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use rusqlite::OptionalExtension as _;
 use tokio::sync::watch;
 
 use super::LiveProgress;
@@ -174,7 +175,7 @@ struct Session<'a> {
 async fn sleep_or_stop(stop: &mut watch::Receiver<bool>, duration: Duration) {
     tokio::select! {
         () = tokio::time::sleep(duration) => {}
-        _ = stop.changed() => {}
+        _ = stop.wait_for(|stopped| *stopped) => {}
     }
 }
 
@@ -405,7 +406,7 @@ impl Session<'_> {
                     failures += 1;
                     tracing::debug!(%login, %error, failures, "playlist unavailable");
                     if matches!(error, TwitchError::Status(403 | 404 | 410)) || failures.is_multiple_of(5) {
-                        if !self.still_live().await {
+                        if !unless_stopped(stop, self.still_live()).await.unwrap_or(false) {
                             break;
                         }
                         if let Some(next) = wait_for_source(self.app, &login, stop).await {
@@ -422,7 +423,7 @@ impl Session<'_> {
                 && last_dodge.is_none_or(|at| at.elapsed() >= DODGE_EVERY)
             {
                 last_dodge = Some(Instant::now());
-                if let Some(next) = dodge_ad(self.app, &login, source).await {
+                if let Some(next) = unless_stopped(stop, dodge_ad(self.app, &login, source)).await.flatten() {
                     *source = next;
                     continue;
                 }
@@ -487,7 +488,7 @@ impl Session<'_> {
                 break;
             }
             if fresh.elapsed() > STALE {
-                if !self.still_live().await {
+                if !unless_stopped(stop, self.still_live()).await.unwrap_or(false) {
                     break;
                 }
                 // Live, but this playlist stalled: ask for a new one.
@@ -577,8 +578,10 @@ impl Session<'_> {
         if let (Some(start), Some(date)) = (anchor, date) {
             part.timeline.anchors.push(((start * 1000.0).round() as i64, date));
             let path = self.path.join(storage::timeline_file(part.number));
-            let _ = tokio::task::block_in_place(|| part.timeline.save(&path));
+            let saved = tokio::task::block_in_place(|| part.timeline.save(&path));
+            timeline_saved(self.app, &self.broadcast.login, saved).await;
         }
+        let part = self.part.as_mut().ok_or_else(|| RecordError::Io(std::io::Error::other("no part")))?;
         let written = part.writer.progress();
         let (ads, chat) = part.counts(self.ads_ms, &self.chat_count);
         if let Ok(mut progress) = self.progress.lock() {
@@ -640,34 +643,66 @@ impl Session<'_> {
     /// Opens the last part recorded before a restart again, when this picture can go on in it.
     async fn resume_part(&mut self, segment: &Segment) -> Option<Part> {
         let earlier = self.resume.take()?;
+        let row = earlier.row;
+        // The row is marked recording before the file is touched: from then on no deletion takes
+        // it (and if one took it first, there is nothing to go on in).
+        let reopened = self
+            .app
+            .db
+            .write(move |conn| {
+                let tx = conn.transaction()?;
+                let status: Option<(String, Option<i64>, Option<String>)> = tx
+                    .query_row(
+                        "SELECT status, ended_at, error FROM streams WHERE id = ?1 AND status != 'recording'",
+                        [row],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    )
+                    .optional()?;
+                if status.is_some() {
+                    tx.execute(
+                        "UPDATE streams SET status = 'recording', ended_at = NULL, error = NULL WHERE id = ?1",
+                        [row],
+                    )?;
+                }
+                tx.commit()?;
+                Ok(status)
+            })
+            .await;
+        let before = match reopened {
+            Ok(Some(before)) => before,
+            Ok(None) => return None,
+            Err(error) => {
+                tracing::warn!(%error, "can't reopen a recording");
+                return None;
+            }
+        };
+        // Back as it was, when the part can't go on after all.
+        let restore = |app: AppState| async move {
+            let (status, ended_at, error) = before;
+            let _ = app
+                .db
+                .write(move |conn| {
+                    conn.execute(
+                        "UPDATE streams SET status = ?2, ended_at = ?3, error = ?4 WHERE id = ?1",
+                        rusqlite::params![row, status, ended_at, error],
+                    )?;
+                    Ok(())
+                })
+                .await;
+        };
         let file = self.path.join(storage::video_file(earlier.part));
         let writer = match tokio::task::block_in_place(|| Writer::resume(&file)) {
             Ok(writer) => writer,
             Err(error) => {
                 tracing::warn!(login = %self.broadcast.login, %error, "can't go on in the last part");
+                restore(self.app.clone()).await;
                 return None;
             }
         };
         if !writer.accepts(segment) {
             // Another picture: the part is closed again as it was, and a new one starts.
             let _ = tokio::task::block_in_place(|| writer.finish());
-            return None;
-        }
-        let row = earlier.row;
-        let reopened = self
-            .app
-            .db
-            .write(move |conn| {
-                conn.execute(
-                    "UPDATE streams SET status = 'recording', ended_at = NULL, error = NULL WHERE id = ?1",
-                    [row],
-                )?;
-                Ok(())
-            })
-            .await;
-        if let Err(error) = reopened {
-            tracing::warn!(%error, "can't reopen a recording");
-            let _ = tokio::task::block_in_place(|| writer.finish());
+            restore(self.app.clone()).await;
             return None;
         }
         if let Ok(mut progress) = self.progress.lock() {
@@ -677,7 +712,8 @@ impl Session<'_> {
         let timeline_path = self.path.join(storage::timeline_file(earlier.part));
         let mut timeline = Timeline::load(&timeline_path);
         timeline.cuts.push(writer.progress().duration_ms);
-        let _ = tokio::task::block_in_place(|| timeline.save(&timeline_path));
+        let saved = tokio::task::block_in_place(|| timeline.save(&timeline_path));
+        timeline_saved(self.app, &self.broadcast.login, saved).await;
         tracing::info!(login = %self.broadcast.login, part = earlier.part, "recording goes on after a cut");
         self.app.alerts.resolve(&format!("write:{}", self.broadcast.login)).await;
         self.app.alerts.resolve(&format!("crash:{}", self.broadcast.login)).await;
@@ -763,6 +799,7 @@ impl Session<'_> {
         tracing::info!(login = %self.broadcast.login, display = %self.broadcast.display_name, part = number, "recording started");
         self.app.alerts.resolve(&format!("write:{}", self.broadcast.login)).await;
         self.app.alerts.resolve(&format!("crash:{}", self.broadcast.login)).await;
+        self.app.alerts.resolve(&format!("timeline:{}", self.broadcast.login)).await;
         Ok(Part {
             row,
             number,
@@ -778,13 +815,16 @@ impl Session<'_> {
     async fn finish_part(&mut self, error: Option<RecordError>) {
         let Some(part) = self.part.take() else { return };
         let path = self.path.join(storage::timeline_file(part.number));
-        let _ = tokio::task::block_in_place(|| part.timeline.save(&path));
+        let saved = tokio::task::block_in_place(|| part.timeline.save(&path));
+        timeline_saved(self.app, &self.broadcast.login, saved).await;
         let gaps = part.before.gaps + i64::from(part.writer.discontinuities);
         let (ads, chat) = part.counts(self.ads_ms, &self.chat_count);
+        // What is on disk already counts even when closing the file fails.
+        let so_far = part.writer.progress();
         let finished = tokio::task::block_in_place(|| part.writer.finish());
         let (status, written, error) = match finished {
             Ok(written) => (if error.is_some() { "failed" } else { "done" }, written, error.map(|e| e.to_string())),
-            Err(failure) => ("failed", crate::media::fmp4::Progress::default(), Some(failure.to_string())),
+            Err(failure) => ("failed", so_far, Some(failure.to_string())),
         };
         let row = part.row;
         let result = self
@@ -815,6 +855,20 @@ impl Session<'_> {
         }
         crate::media_server::forget_live_index(row);
         self.parts_done.push(row);
+    }
+}
+
+/// Says when a timeline couldn't be saved: the video goes on, but its chat would no longer line
+/// up after a restart.
+async fn timeline_saved(app: &AppState, login: &str, saved: std::io::Result<()>) {
+    if let Err(error) = saved {
+        app.alerts
+            .raise(
+                Level::Warning,
+                format!("timeline:{login}"),
+                format!("Can't save the timeline of {login}'s recording, its chat may not line up: {error}"),
+            )
+            .await;
     }
 }
 

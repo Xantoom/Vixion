@@ -476,10 +476,23 @@ impl Writer {
 /// of many hours is repaired without sitting in memory.
 pub fn repair(path: &Path) -> std::io::Result<Progress> {
     let length = std::fs::metadata(path)?.len();
-    if has_index(&File::open(path)?, length)? {
-        return Ok(Progress { bytes: length, ..Progress::default() });
+    let file = File::open(path)?;
+    if has_index(&file, length)? {
+        // Closed cleanly already (the crash came after): its duration is the one written then.
+        return Ok(Progress { bytes: length, duration_ms: written_duration(&file, length)?, ..Progress::default() });
     }
     Writer::resume(path)?.finish()
+}
+
+/// The duration a clean finish wrote in `mehd`, in milliseconds.
+fn written_duration(file: &File, length: u64) -> std::io::Result<i64> {
+    use std::os::unix::fs::FileExt;
+
+    let (head, _) = read_head(file, length)?;
+    let at = mehd_duration_offset(&head).ok_or_else(|| invalid("no mehd box"))?;
+    let mut field = [0u8; 8];
+    file.read_exact_at(&mut field, at)?;
+    Ok(i64::try_from(u64::from_be_bytes(field)).unwrap_or(0))
 }
 
 /// Whether the file ends with an `mfra`, which its last box, `mfro`, gives the size of.
@@ -960,7 +973,7 @@ mod tests {
         let file = std::fs::read(&path).expect("read back");
         let init = mp4read::parse_init(&file).expect("init");
         assert_eq!(init.tracks.len(), 2);
-        let segment = mp4read::demux(&file, &init).expect("demux");
+        let segment = mp4read::demux(&bytes::Bytes::from(file.clone()), &init).expect("demux");
         let video = segment.video.expect("video");
         assert_eq!(video.samples.len(), 120);
         assert_eq!(video.samples[0].dts, 0);
@@ -981,9 +994,11 @@ mod tests {
         std::fs::write(&path, &file[..without_index - 100]).expect("truncate");
         let repaired = repair(&path).expect("repair");
         assert!((1_900..2_100).contains(&repaired.duration_ms), "{}", repaired.duration_ms);
-        // A file with its index is left as it is.
+        // A file with its index is left as it is, and tells the duration it was closed with.
         let length = std::fs::metadata(&path).expect("metadata").len();
-        assert_eq!(repair(&path).expect("again").bytes, length);
+        let again = repair(&path).expect("again");
+        assert_eq!(again.bytes, length);
+        assert_eq!(again.duration_ms, repaired.duration_ms);
         assert_eq!(std::fs::metadata(&path).expect("metadata").len(), length);
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -1023,7 +1038,7 @@ mod tests {
         let file = std::fs::read(&path).expect("read back");
         assert_eq!(mp4read::boxes(&file).filter(|(k, _, _)| k == b"mfra").count(), 1);
         let init = mp4read::parse_init(&file).expect("init");
-        let video = mp4read::demux(&file, &init).expect("demux").video.expect("video");
+        let video = mp4read::demux(&bytes::Bytes::from(file.clone()), &init).expect("demux").video.expect("video");
         assert_eq!(video.samples.len(), 120);
         assert!((180_000..=181_000).contains(&video.samples[60].dts), "{}", video.samples[60].dts);
         std::fs::remove_dir_all(&dir).ok();
@@ -1052,7 +1067,7 @@ mod tests {
 
         let file = std::fs::read(&one).expect("read back");
         let init = mp4read::parse_init(&file).expect("init");
-        let segment = mp4read::demux(&file, &init).expect("demux");
+        let segment = mp4read::demux(&bytes::Bytes::from(file.clone()), &init).expect("demux");
         let video = segment.video.expect("video");
         assert_eq!(video.samples.len(), 180);
         assert!(video.samples.windows(2).all(|pair| pair[1].dts > pair[0].dts));

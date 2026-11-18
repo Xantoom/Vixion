@@ -15,7 +15,7 @@ use crate::app::AppState;
 use crate::auth::CurrentUser;
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
-use crate::recorder::retention::delete_stream;
+use crate::recorder::retention::{Deletion, delete_stream};
 use crate::recorder::storage::{self, Timeline};
 use crate::twitch::chat::ChatLine;
 
@@ -289,7 +289,9 @@ pub async fn remove(State(app): State<AppState>, user: CurrentUser, Path(id): Pa
     if located.status == "recording" {
         return Err(AppError::conflict("recording", "stop the recording first"));
     }
-    delete_stream(&app, id).await?;
+    if !delete_stream(&app, id, Deletion::Manual).await? {
+        return Err(AppError::not_found());
+    }
     tracing::info!(id, by = %user.username, "recording deleted");
     crate::audit::record(&app, &user, "stream.delete", format!("{id} {} {}", located.login, located.title)).await;
     Ok(StatusCode::NO_CONTENT)

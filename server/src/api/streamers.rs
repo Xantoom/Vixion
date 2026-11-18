@@ -13,7 +13,7 @@ use crate::auth::CurrentUser;
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::recorder::LiveProgress;
-use crate::recorder::retention::delete_stream;
+use crate::recorder::retention::{Deletion, delete_stream};
 use crate::twitch::api::{Profile, SearchHit, valid_login};
 
 #[derive(Debug, Serialize)]
@@ -370,7 +370,7 @@ pub async fn remove(
         return Err(AppError::conflict("has_recordings", "this streamer still has recordings"));
     }
     for stream in streams {
-        delete_stream(&app, stream).await?;
+        delete_stream(&app, stream, Deletion::Manual).await?;
     }
     app.db
         .write(move |conn| {

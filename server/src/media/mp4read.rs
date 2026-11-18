@@ -190,7 +190,9 @@ fn prefer_hvc1(entry: &mut [u8]) {
 const SAMPLE_NON_SYNC: u32 = 0x0001_0000;
 
 /// Demuxes a media segment (one or more `moof` + `mdat`) with the tracks of its init segment.
-pub fn demux(data: &[u8], init: &Init) -> Result<Segment, MediaError> {
+///
+/// Samples share `data`'s memory rather than copy it.
+pub fn demux(data: &Bytes, init: &Init) -> Result<Segment, MediaError> {
     let mut segment = Segment::default();
     for (kind, moof, moof_offset) in boxes(data) {
         if &kind != b"moof" {
@@ -207,7 +209,7 @@ pub fn demux(data: &[u8], init: &Init) -> Result<Segment, MediaError> {
 }
 
 fn read_traf(
-    data: &[u8],
+    data: &Bytes,
     moof_offset: usize,
     traf: &[u8],
     init: &Init,
@@ -251,6 +253,8 @@ fn read_traf(
     };
     let track_data = target.get_or_insert_with(|| TrackData { config: track.config.clone(), samples: Vec::new() });
 
+    // A trun without a data offset follows on from the one before it.
+    let mut next_offset = base;
     for (kind, trun, _) in boxes(traf) {
         if &kind != b"trun" {
             continue;
@@ -258,16 +262,25 @@ fn read_traf(
         let Some(&version) = trun.first() else { continue };
         let run_flags = be_u32(trun, 0).unwrap_or(0) & 0x00FF_FFFF;
         let count = be_u32(trun, 4).unwrap_or(0);
-        // Each sample takes at least a byte of the segment: a larger count is a damaged table,
-        // which would otherwise fill memory with empty samples.
         if usize::try_from(count).map_or(true, |count| count > data.len()) {
             return err("trun sample count larger than the segment");
         }
+        // Every field a sample entry carries, and every sample's bytes, must be there: a damaged
+        // table can't declare more samples than the segment holds, which would fill memory.
+        let entry = [0x100, 0x200, 0x400, 0x800].iter().filter(|&&field| run_flags & field != 0).count() * 4;
+        let header = 8 + [0x1, 0x4].iter().filter(|&&field| run_flags & field != 0).count() * 4;
+        let count_usize = usize::try_from(count).unwrap_or(usize::MAX);
+        if count_usize.saturating_mul(entry).saturating_add(header) > trun.len() {
+            return err("trun shorter than its samples");
+        }
+        if run_flags & 0x200 == 0 && count_usize.saturating_mul(default_size as usize) > data.len() {
+            return err("trun samples larger than the segment");
+        }
         let mut at = 8;
-        let mut offset = base;
+        let mut offset = next_offset;
         if run_flags & 0x1 != 0 {
             let relative = i64::from(be_u32(trun, at).unwrap_or(0).cast_signed());
-            offset = offset.wrapping_add_signed(relative);
+            offset = base.wrapping_add_signed(relative);
             at += 4;
         }
         let mut first_flags = None;
@@ -292,17 +305,25 @@ fn read_traf(
 
             let start = usize::try_from(offset).unwrap_or(usize::MAX);
             let end = start.saturating_add(size as usize);
-            let Some(bytes) = data.get(start..end) else { return err("sample outside the segment") };
+            if end > data.len() {
+                return err("sample outside the segment");
+            }
+            // An empty sample has nothing to play: only its duration counts.
+            if size == 0 {
+                dts = dts.saturating_add(i64::from(duration));
+                continue;
+            }
             track_data.samples.push(Sample {
                 dts,
                 cts_offset,
                 duration,
                 keyframe: track.config.kind == TrackKind::Audio || sample_flags & SAMPLE_NON_SYNC == 0,
-                data: Bytes::copy_from_slice(bytes),
+                data: data.slice(start..end),
             });
             dts = dts.saturating_add(i64::from(duration));
             offset = offset.saturating_add(u64::from(size));
         }
+        next_offset = offset;
     }
     Ok(())
 }
@@ -328,7 +349,7 @@ mod tests {
         traf.extend_from_slice(&crate::media::mp4_box(b"tfdt", &[]));
         traf.extend_from_slice(&crate::media::mp4_box(b"trun", &[]));
         let moof = crate::media::mp4_box(b"moof", &crate::media::mp4_box(b"traf", &traf));
-        assert!(demux(&moof, &init_with_track(1)).is_ok());
+        assert!(demux(&Bytes::from(moof), &init_with_track(1)).is_ok());
     }
 
     #[test]
@@ -336,7 +357,41 @@ mod tests {
         let mut traf = crate::media::full_box(b"tfhd", 0, 0, &1u32.to_be_bytes());
         traf.extend_from_slice(&crate::media::full_box(b"trun", 0, 0, &u32::MAX.to_be_bytes()));
         let moof = crate::media::mp4_box(b"moof", &crate::media::mp4_box(b"traf", &traf));
-        assert!(demux(&moof, &init_with_track(1)).is_err());
+        assert!(demux(&Bytes::from(moof), &init_with_track(1)).is_err());
+    }
+
+    #[test]
+    fn a_trun_without_offset_follows_the_one_before() {
+        use crate::media::{full_box, mp4_box};
+        let traf_for = |first_offset: u32| {
+            let mut traf = full_box(b"tfhd", 0, 0, &1u32.to_be_bytes());
+            // Data offset and one size of 1 byte, then a run with only its size.
+            let mut first = 1u32.to_be_bytes().to_vec();
+            first.extend_from_slice(&first_offset.to_be_bytes());
+            first.extend_from_slice(&1u32.to_be_bytes());
+            traf.extend_from_slice(&full_box(b"trun", 0, 0x201, &first));
+            let mut second = 1u32.to_be_bytes().to_vec();
+            second.extend_from_slice(&1u32.to_be_bytes());
+            traf.extend_from_slice(&full_box(b"trun", 0, 0x200, &second));
+            mp4_box(b"moof", &mp4_box(b"traf", &traf))
+        };
+        let length = traf_for(0).len();
+        let mut data = traf_for(u32::try_from(length + 8).expect("small"));
+        data.extend_from_slice(&mp4_box(b"mdat", &[170, 187]));
+        let segment = demux(&Bytes::from(data), &init_with_track(1)).expect("demux");
+        let samples = segment.video.expect("video").samples;
+        let bytes: Vec<&[u8]> = samples.iter().map(|sample| &sample.data[..]).collect();
+        assert_eq!(bytes, [&[170u8][..], &[187u8][..]]);
+    }
+
+    #[test]
+    fn a_count_larger_than_its_table_is_refused() {
+        // 100 000 samples announced, sizes to be read from a table that isn't there.
+        let mut traf = crate::media::full_box(b"tfhd", 0, 0, &1u32.to_be_bytes());
+        traf.extend_from_slice(&crate::media::full_box(b"trun", 0, 0x200, &100_000u32.to_be_bytes()));
+        let mut moof = crate::media::mp4_box(b"moof", &crate::media::mp4_box(b"traf", &traf));
+        moof.resize(200_000, 0);
+        assert!(demux(&Bytes::from(moof), &init_with_track(1)).is_err());
     }
 
     fn init_with_track(id: u32) -> Init {

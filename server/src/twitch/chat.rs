@@ -136,7 +136,8 @@ pub async fn record(login: String, path: std::path::PathBuf, mut stop: watch::Re
                 tracing::warn!(%login, %error, "chat disconnected, reconnecting");
                 tokio::select! {
                     () = tokio::time::sleep(backoff) => {}
-                    _ = stop.changed() => {}
+                    // The recording ended without saying so (it crashed): nothing left to wait for.
+                    changed = stop.changed() => if changed.is_err() { break },
                 }
                 backoff = (backoff * 2).min(Duration::from_secs(60));
             }
@@ -147,6 +148,15 @@ pub async fn record(login: String, path: std::path::PathBuf, mut stop: watch::Re
     }
 }
 
+/// Longest wait for a line before the connection is taken for dead.
+const SILENCE: Duration = Duration::from_secs(360);
+
+/// Resolves once the recording asks to stop, or once it is gone without asking (it crashed):
+/// a closed channel would otherwise wake the loop again and again.
+async fn stopped(stop: &mut watch::Receiver<bool>) {
+    let _ = stop.wait_for(|stop| *stop).await;
+}
+
 async fn session(
     login: &str,
     out: &mut BufWriter<tokio::fs::File>,
@@ -155,9 +165,16 @@ async fn session(
 ) -> std::io::Result<()> {
     let config = rustls::ClientConfig::with_platform_verifier().map_err(std::io::Error::other)?;
     let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
-    let tcp = tokio::time::timeout(Duration::from_secs(10), TcpStream::connect((HOST, PORT))).await??;
     let name = ServerName::try_from(HOST).map_err(std::io::Error::other)?;
-    let tls = connector.connect(name, tcp).await?;
+    let connect = async {
+        let tcp = TcpStream::connect((HOST, PORT)).await?;
+        connector.connect(name, tcp).await
+    };
+    // Connecting is bounded in time, and stopping doesn't wait for it.
+    let tls = tokio::select! {
+        tls = tokio::time::timeout(Duration::from_secs(10), connect) => tls??,
+        () = stopped(stop) => return Ok(()),
+    };
     let (reader, mut writer) = tokio::io::split(tls);
     let nick = format!("justinfan{}", 10_000 + u32::from_le_bytes(crate::crypto::random_bytes::<4>()) % 89_999);
     writer
@@ -172,18 +189,21 @@ async fn session(
     let mut lines = BufReader::new(reader).lines();
     let mut flush = tokio::time::interval(Duration::from_secs(2));
     let mut serialized = Vec::with_capacity(512);
+    // Twitch pings every five minutes: silence for longer means the link is dead. The deadline
+    // moves only when a line arrives, not every time another branch wakes the loop.
+    let silence = tokio::time::sleep(SILENCE);
+    tokio::pin!(silence);
     loop {
         tokio::select! {
-            _ = stop.changed() => {
-                if *stop.borrow() {
-                    out.flush().await?;
-                    return Ok(());
-                }
+            () = stopped(stop) => {
+                out.flush().await?;
+                return Ok(());
             }
             _ = flush.tick() => out.flush().await?,
-            // Twitch pings every five minutes: silence for longer means the link is dead.
-            line = tokio::time::timeout(Duration::from_secs(360), lines.next_line()) => {
-                let Some(line) = line?? else { return Err(std::io::ErrorKind::UnexpectedEof.into()) };
+            () = &mut silence => return Err(std::io::ErrorKind::TimedOut.into()),
+            line = lines.next_line() => {
+                silence.as_mut().reset(tokio::time::Instant::now() + SILENCE);
+                let Some(line) = line? else { return Err(std::io::ErrorKind::UnexpectedEof.into()) };
                 if let Some(payload) = line.strip_prefix("PING") {
                     writer.write_all(format!("PONG{payload}\r\n").as_bytes()).await?;
                     continue;

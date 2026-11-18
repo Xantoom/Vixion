@@ -146,6 +146,12 @@ pub struct MediaPlaylist {
     pub segments: Vec<MediaSegment>,
 }
 
+/// A duration from a playlist: a number of seconds, not negative, not NaN nor infinite (which
+/// would panic once made a `Duration`).
+fn finite(text: &str) -> Option<f64> {
+    text.trim().parse::<f64>().ok().filter(|value| value.is_finite() && *value >= 0.0)
+}
+
 /// Parses a media playlist. Ads are recognised by their title (not `live`) or by falling inside
 /// a `twitch-stitched-ad` date range.
 pub fn parse_media(text: &str) -> MediaPlaylist {
@@ -160,7 +166,7 @@ pub fn parse_media(text: &str) -> MediaPlaylist {
     let mut have_info = false;
     for line in text.lines().map(str::trim) {
         if let Some(rest) = line.strip_prefix("#EXT-X-TARGETDURATION:") {
-            playlist.target_duration = rest.parse().unwrap_or(2.0);
+            playlist.target_duration = finite(rest).unwrap_or(2.0);
         } else if let Some(rest) = line.strip_prefix("#EXT-X-MEDIA-SEQUENCE:") {
             sequence = rest.parse().unwrap_or(0);
         } else if line == "#EXT-X-ENDLIST" {
@@ -176,12 +182,12 @@ pub fn parse_media(text: &str) -> MediaPlaylist {
             let is_ad = attrs.get("CLASS").is_some_and(|class| class == "twitch-stitched-ad")
                 || attrs.get("ID").is_some_and(|id| id.starts_with("stitched-ad-"));
             if is_ad && let Some(start) = attrs.get("START-DATE").and_then(|d| parse_iso8601(d)) {
-                let length = attrs.get("DURATION").and_then(|d| d.parse::<f64>().ok()).unwrap_or(30.0);
+                let length = attrs.get("DURATION").and_then(|d| finite(d)).unwrap_or(30.0);
                 ad_ranges.push((start, start + (length * 1000.0) as i64));
             }
         } else if let Some(rest) = line.strip_prefix("#EXTINF:") {
             let (length, name) = rest.split_once(',').unwrap_or((rest, ""));
-            duration = length.parse().unwrap_or(0.0);
+            duration = finite(length).unwrap_or(0.0);
             title = name.to_owned();
             have_info = true;
         } else if !line.is_empty() && !line.starts_with('#') && have_info {
