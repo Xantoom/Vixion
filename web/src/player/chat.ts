@@ -29,6 +29,43 @@ function lowerBound(lines: ChatLine[], ms: number): number {
 	return low;
 }
 
+/**
+ * Keeps at most `KEPT` lines: those from `fromMs` on (all of them, so `from` stays true), and
+ * past that, cuts the far end at a change of time (so `to` stays true and the next fetch from it
+ * brings back exactly what was cut), never at or before `atMs`, which must stay covered.
+ */
+export function trim(loaded: Loaded, fromMs: number, atMs: number): Loaded {
+	if (loaded.lines.length <= KEPT) return loaded;
+	let { lines, from, atStart } = loaded;
+	let to = loaded.to;
+	const first = lowerBound(lines, fromMs);
+	if (first > 0) {
+		lines = lines.slice(first);
+		from = fromMs;
+		atStart = false;
+	}
+	if (lines.length > KEPT) {
+		const cutAt = Math.max(lines[KEPT]?.o ?? to, atMs + 1);
+		const end = lowerBound(lines, cutAt);
+		if (end > 0 && end < lines.length) {
+			lines = lines.slice(0, end);
+			to = cutAt;
+		}
+	}
+	return { from, to, atStart, lines };
+}
+
+/** How many of the first lines share the first one's time: the server leaves those out of `before`. */
+export function heldAtStart(lines: ChatLine[]): number {
+	const first = lines[0]?.o;
+	let held = 0;
+	while (held < lines.length && lines[held]?.o === first) held += 1;
+	return held;
+}
+
+/** Waits after failed fetches: 2 s, 4 s… up to half a minute. */
+const backoff = (failures: number) => Math.min(30_000, 1000 * 2 ** failures);
+
 const covers = (loaded: Loaded | null, ms: number): loaded is Loaded =>
 	loaded !== null && ms >= loaded.from && ms <= loaded.to;
 
@@ -60,11 +97,23 @@ export function useChat(streamId: number, timeMs: number): Chat {
 	// While a jump loads, the panel keeps showing the chat at the last time it had.
 	const shownAt = useRef(0);
 	const [frozen, setFrozen] = useState<number | null>(null);
+	// After a failure, fetches wait a while, then `retry` runs the effects again (even paused).
+	const failures = useRef(0);
+	const blockedUntil = useRef(0);
+	const [retry, setRetry] = useState(0);
+	const failed = useCallback(() => {
+		failures.current += 1;
+		const wait = backoff(failures.current);
+		blockedUntil.current = Date.now() + wait;
+		window.setTimeout(() => {
+			setRetry((count) => count + 1);
+		}, wait);
+	}, []);
 	const url = `/streams/${streamId}/chat`;
 
 	// A jump: anywhere the loaded lines do not cover.
 	useEffect(() => {
-		if (covers(loaded, timeMs)) return;
+		if (covers(loaded, timeMs) || Date.now() < blockedUntil.current) return;
 		// Already on its way for about this time (the clock moves on while it loads).
 		const waiting = pending.current;
 		if (waiting !== null && timeMs >= waiting - 1000 && timeMs <= waiting + 20_000) return;
@@ -81,45 +130,49 @@ export function useChat(streamId: number, timeMs: number): Chat {
 		])
 			.then(([past, next]) => {
 				if (run !== generation.current) return;
+				failures.current = 0;
 				const atStart = past.length < SHOWN;
-				setLoaded({
-					from: atStart ? 0 : (past[0]?.o ?? at),
-					to: at + AHEAD_MS,
-					atStart,
-					lines: [...past, ...next],
-				});
+				const start = atStart ? 0 : (past[0]?.o ?? at);
+				setLoaded(trim({ from: start, to: at + AHEAD_MS, atStart, lines: [...past, ...next] }, start, at));
 				setAnchor(null);
 				setFrozen(null);
 				setEpoch(run);
 			})
-			.catch(() => undefined)
+			.catch(() => {
+				if (run === generation.current) failed();
+			})
 			.finally(() => {
 				if (run === generation.current) pending.current = null;
 			});
-	}, [url, timeMs, loaded]);
+	}, [url, timeMs, loaded, retry, failed]);
 
 	// Playing on: the next five minutes, before they are needed.
 	useEffect(() => {
 		if (!covers(loaded, timeMs) || ahead.current || loaded.to - timeMs > 90_000) return;
+		if (Date.now() < blockedUntil.current) return;
 		ahead.current = true;
 		const run = generation.current;
 		const from = loaded.to;
 		api.get<ChatLine[]>(`${url}?from=${from}&to=${from + AHEAD_MS}`)
 			.then((next) => {
 				if (run !== generation.current) return;
+				failures.current = 0;
 				setLoaded((current) => {
 					if (current?.to !== from) return current;
 					const lines = [...current.lines, ...next];
-					if (lines.length <= KEPT) return { ...current, to: from + AHEAD_MS, lines };
-					const kept = lines.slice(lines.length - KEPT);
-					return { from: kept[0]?.o ?? from, to: from + AHEAD_MS, atStart: false, lines: kept };
+					// The oldest go first, but never the lines shown at the playhead: on a busy chat the
+					// five minutes ahead alone can be more than is kept, and are cut instead.
+					const shownFrom = lines[Math.max(0, lowerBound(lines, timeMs + 1) - SHOWN)]?.o ?? current.from;
+					return trim({ ...current, to: from + AHEAD_MS, lines }, shownFrom, timeMs);
 				});
 			})
-			.catch(() => undefined)
+			.catch(() => {
+				if (run === generation.current) failed();
+			})
 			.finally(() => {
 				if (run === generation.current) ahead.current = false;
 			});
-	}, [url, timeMs, loaded]);
+	}, [url, timeMs, loaded, retry, failed]);
 
 	const showOlder = useCallback(() => {
 		if (!loaded) return;
@@ -133,20 +186,19 @@ export function useChat(streamId: number, timeMs: number): Chat {
 		older.current = true;
 		const run = generation.current;
 		const before = loaded.lines[0]?.o ?? loaded.from;
-		api.get<ChatLine[]>(`${url}?before=${before}&limit=${SHOWN * 2}`)
+		// Lines said at the same time as the first held one (all those said during a cut ad) come
+		// back too, except those already held.
+		const held = loaded.lines[0] ? heldAtStart(loaded.lines) : 0;
+		api.get<ChatLine[]>(`${url}?before=${before}&held=${held}&limit=${SHOWN * 2}`)
 			.then((past) => {
 				if (run !== generation.current) return;
 				const atStart = past.length < SHOWN * 2;
-				setLoaded((current) =>
-					current
-						? {
-								...current,
-								from: atStart ? 0 : (past[0]?.o ?? current.from),
-								atStart,
-								lines: [...past.filter((item) => item.o < before), ...current.lines],
-							}
-						: current,
-				);
+				setLoaded((current) => {
+					if (!current || current.lines[0]?.o !== before) return current;
+					const from = atStart ? 0 : (past[0]?.o ?? current.from);
+					// Reading back keeps the older lines: what goes is the far end, past the playhead.
+					return trim({ ...current, from, atStart, lines: [...past, ...current.lines] }, from, timeMs);
+				});
 			})
 			.catch(() => undefined)
 			.finally(() => {

@@ -220,7 +220,8 @@ export function StudioPage() {
 		if (actual && actual !== login)
 			void navigate({ to: '/$login/$id', params: { login: actual, id }, replace: true });
 	}, [actual, login, id, navigate]);
-	if (detail.isPending) return <PageLoading />;
+	// A link kept too long may have expired: the page opens with a fresh one.
+	if (detail.isPending || (detail.isStale && detail.isFetching)) return <PageLoading />;
 	if (detail.error) return <NotFound forbidden={detail.error instanceof ApiError && detail.error.status === 403} />;
 	if (detail.data.status === 'recording') return <StillRecording stream={detail.data} />;
 	return (
@@ -329,15 +330,19 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 		reopen.current = open;
 	}, [open]);
 
+	// Opened once per recording (the page is keyed by it): a fresher answer for the same one, such
+	// as the refresh button's, must not open the player again over the one playing.
+	const first = useRef(initial);
 	useEffect(() => {
-		const carryOn = playNext === initial.id;
+		const start = first.current;
+		const carryOn = playNext === start.id;
 		playNext = null;
-		open(initial.video_url, initial.duration_ms, carryOn ? 0 : resumeAt(initial.id), carryOn);
+		open(start.video_url, start.duration_ms, carryOn ? 0 : resumeAt(start.id), carryOn);
 		return () => {
 			engine.current?.dispose();
 			engine.current = null;
 		};
-	}, [initial, open]);
+	}, [open]);
 
 	useEffect(() => {
 		engine.current?.setVolume(volume, muted);

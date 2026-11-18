@@ -78,7 +78,9 @@ export function ChannelPage() {
 	if (error) return error instanceof ApiError && error.status === 404 ? <NotFound /> : <NotFound forbidden />;
 	const { profile, streamer, streams } = data;
 	const name = streamer?.display_name ?? profile?.display_name ?? login;
-	const shown = tab ?? (streamer && (streams.length > 0 || !profile?.videos.length) ? 'recordings' : 'twitch');
+	// The Twitch tab chosen earlier is gone while Twitch can't be reached.
+	const chosen = tab === 'twitch' && !profile ? null : tab;
+	const shown = chosen ?? (streamer && (streams.length > 0 || !profile?.videos.length) ? 'recordings' : 'twitch');
 	// One stop for the Tab key; the arrows go from tab to tab and open the one they reach.
 	const onTabKey = (event: KeyboardEvent<HTMLDivElement>) => {
 		const list = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=tab]')];

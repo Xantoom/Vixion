@@ -81,6 +81,23 @@ class Compressor extends AudioWorkletProcessor {
 		const frames = input[0]?.length ?? 0;
 		while (this.delay.length < channels) this.delay.push(new Float32Array(this.lookahead));
 
+		// Off and faded out: the sound only goes through the delay line (its latency stays the same,
+		// so turning the effect on or off doesn't jump), with none of the per-sample work.
+		if (!this.enabled && this.mix === 0) {
+			for (let i = 0; i < frames; i++) {
+				for (let c = 0; c < channels; c++) {
+					const line = this.delay[c];
+					const out = output[c];
+					if (!line || !out) continue;
+					out[i] = line[this.write] ?? 0;
+					line[this.write] = input[c]?.[i] ?? 0;
+				}
+				this.write = (this.write + 1) % this.lookahead;
+			}
+			for (let c = channels; c < output.length; c++) output[c]?.set(output[0] ?? new Float32Array(frames));
+			return true;
+		}
+
 		for (let i = 0; i < frames; i++) {
 			// Detection on the incoming sample; gain applied to the one leaving the delay line.
 			let sum = 0;

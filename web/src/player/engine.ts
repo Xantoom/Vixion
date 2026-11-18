@@ -105,6 +105,10 @@ export class MediabunnyEngine implements Engine {
 	/** Media time up to which sound is scheduled. */
 	private scheduledTo = 0;
 	private audioDone = false;
+	/** Every picture of this run was shown. */
+	private picturesDone = false;
+	/** Whether sound keeps the time; else the page clock does (no sound, or none left). */
+	private audioClock = false;
 	/** Without sound, the page clock: page time at which a media time played. */
 	private pageAnchor = { page: 0, media: 0 };
 	private position = 0;
@@ -188,7 +192,7 @@ export class MediabunnyEngine implements Engine {
 
 	time(): number {
 		if (!this.playing) return this.position;
-		if (this.audioSink) {
+		if (this.audioClock) {
 			if (!this.anchor) return this.position;
 			return Math.min(
 				this.duration,
@@ -279,15 +283,12 @@ export class MediabunnyEngine implements Engine {
 		this.playing = true;
 		this.waiting = true;
 		this.audioDone = false;
+		this.picturesDone = !this.videoSink;
+		this.audioClock = Boolean(this.audioSink);
 		this.scheduledTo = from;
 		this.emit();
-		if (this.audioSink) {
-			void this.pumpAudio(run, from);
-		} else {
-			this.pageAnchor = { page: performance.now(), media: from };
-			this.waiting = false;
-			this.emit();
-		}
+		if (this.audioSink) void this.pumpAudio(run, from);
+		else this.toPageClock(from);
 		void this.pumpPictures(run, from);
 		this.cancelTick = schedule(this.tick);
 	}
@@ -297,7 +298,12 @@ export class MediabunnyEngine implements Engine {
 		if (!this.playing) return;
 		const time = this.time();
 		this.onTime(time);
-		if (time >= this.duration - 0.02 || (this.audioDone && this.anchor && time >= this.scheduledTo)) {
+		// Sound is over and pictures go on: the page keeps the time from there.
+		if (this.audioClock && this.audioDone && this.anchor && time >= this.scheduledTo && !this.picturesDone) {
+			this.toPageClock(this.scheduledTo);
+		}
+		const soundOver = !this.audioClock || (this.audioDone && time >= this.scheduledTo);
+		if (time >= this.duration - 0.02 || (this.picturesDone && soundOver)) {
 			this.position = Math.min(time, this.duration);
 			this.stop();
 			this.playing = false;
@@ -305,7 +311,7 @@ export class MediabunnyEngine implements Engine {
 			return;
 		}
 		// Sound is about to run out and more isn't decoded yet: hold the clock.
-		if (this.audioSink && this.anchor && !this.waiting && !this.audioDone && time > this.scheduledTo - 0.03) {
+		if (this.audioClock && this.anchor && !this.waiting && !this.audioDone && time > this.scheduledTo - 0.03) {
 			this.waiting = true;
 			void this.context.suspend();
 			this.emit();
@@ -316,7 +322,10 @@ export class MediabunnyEngine implements Engine {
 	private async pumpAudio(run: number, from: number) {
 		const sink = this.audioSink;
 		const inlet = this.output?.inlet;
-		if (!sink || !inlet) return;
+		if (!sink || !inlet) {
+			if (run === this.run) this.toPageClock(from);
+			return;
+		}
 		const buffers = sink.buffers(from);
 		try {
 			while (run === this.run) {
@@ -328,6 +337,9 @@ export class MediabunnyEngine implements Engine {
 				if (run !== this.run) break;
 				if (next.done) {
 					this.audioDone = true;
+					// No sound at all past this point (a jump after the sound's end): pictures play
+					// on the page clock rather than wait for a sound that never comes.
+					if (!this.anchor) this.toPageClock(from);
 					this.resumeIfReady(run);
 					break;
 				}
@@ -354,15 +366,22 @@ export class MediabunnyEngine implements Engine {
 		} catch (error) {
 			if (run === this.run && !this.disposed) {
 				console.error('[player] audio decoding failed', error);
-				// Pictures go on in silence on the page clock.
+				// Pictures go on in silence on the page clock, from where the sound had got to: read
+				// before the sound stops keeping the time.
+				const at = this.time();
 				this.audioSink = null;
-				this.pageAnchor = { page: performance.now(), media: this.time() };
-				this.waiting = false;
-				this.emit();
+				this.toPageClock(at);
 			}
 		} finally {
 			await buffers.return().catch(() => undefined);
 		}
+	}
+
+	private toPageClock(at: number) {
+		this.audioClock = false;
+		this.pageAnchor = { page: performance.now(), media: at };
+		this.waiting = false;
+		this.emit();
 	}
 
 	private resumeIfReady(run: number) {
@@ -412,6 +431,7 @@ export class MediabunnyEngine implements Engine {
 				next.close();
 				next = null;
 			}
+			if (run === this.run && !behind) this.picturesDone = true;
 		} catch (error) {
 			if (this.fallBack(error) && run === this.run) void this.pumpPictures(run, this.time());
 		} finally {

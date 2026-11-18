@@ -35,5 +35,14 @@ export function useRouteParams(): { login: string; id: string } {
 
 export function routeParams(pathname: string): { login: string; id: string } {
 	const [, login = '', id = ''] = pathname.split('/');
-	return { login: decodeURIComponent(login).toLowerCase(), id };
+	return { login: decode(login).toLowerCase(), id };
+}
+
+/** A typed or pasted address may hold a stray `%`: read as it is rather than stop the app. */
+function decode(part: string): string {
+	try {
+		return decodeURIComponent(part);
+	} catch {
+		return part;
+	}
 }

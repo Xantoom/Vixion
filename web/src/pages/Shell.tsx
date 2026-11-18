@@ -4,7 +4,7 @@ import { Check, KeyRound, Languages, LogOut, Monitor, Moon, Search, ShieldCheck,
 import { type FormEvent, Suspense, useEffect, useRef, useState } from 'react';
 import { LOCALES, type Locale, useLocale, useT } from '@/i18n';
 import { useAction } from '@/lib/action';
-import { type Alert, api } from '@/lib/api';
+import { type Alert, ApiError, api } from '@/lib/api';
 import { meQuery, useCan, useMe } from '@/lib/session';
 import { type Theme, usePrefs } from '@/stores/prefs';
 import { Avatar } from '@/ui/Avatar';
@@ -235,7 +235,16 @@ function AccountMenu({ admin, alerts }: { admin: AdminPath | null; alerts: numbe
 	const [password, setPassword] = useState(false);
 
 	const signOut = async () => {
-		await api.post('/auth/logout').catch(() => undefined);
+		try {
+			await api.post('/auth/logout');
+		} catch (error) {
+			// Signed out already: done. Otherwise the session still holds on the server, and showing
+			// the sign-in page would only hide that until the next refresh signs back in.
+			if (!(error instanceof ApiError && error.status === 401)) {
+				toast.error(error);
+				return;
+			}
+		}
 		client.clear();
 		client.setQueryData(['setup'], { needed: false });
 		client.setQueryData(meQuery.queryKey, null);
