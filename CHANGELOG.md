@@ -9,6 +9,11 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Fixed
+
+- A new recording could take the id of a deleted one, and the place a browser remembered for the old video applied to it. Recordings now get random ids that are never reused; existing ones are renumbered once, so where each was left is forgotten one time.
+- Deleting a recording, or a streamer with their recordings, forgets where they were left in this browser.
+
 ## [0.3.1] - 2026-11-18
 
 ### Changed

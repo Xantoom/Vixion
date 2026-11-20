@@ -18,6 +18,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/002_channel_art.sql"),
     include_str!("../migrations/003_lookup_indexes.sql"),
     include_str!("../migrations/004_stopped_by_hand.sql"),
+    include_str!("../migrations/005_random_stream_ids.sql"),
 ];
 
 const READERS: usize = 3;
@@ -149,6 +150,13 @@ fn backup(conn: &Connection, version: usize) {
     }
 }
 
+/// A fresh id for a recording: random, so one never takes the id of a deleted one, and below
+/// 2^53 so that JavaScript reads it exactly.
+pub fn random_id() -> i64 {
+    let id = u64::from_le_bytes(crate::crypto::random_bytes::<8>()) & ((1 << 53) - 1);
+    i64::try_from(id.max(1)).unwrap_or(1)
+}
+
 /// Milliseconds since the Unix epoch: the only time format stored.
 pub fn now_ms() -> i64 {
     std::time::SystemTime::now()
@@ -168,6 +176,45 @@ mod tests {
         assert_eq!(version, i64::try_from(MIGRATIONS.len()).unwrap());
         // Starting again changes nothing.
         migrate(&conn).unwrap();
+    }
+
+    #[test]
+    fn recordings_are_renumbered_with_their_chapters() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        for sql in &MIGRATIONS[..4] {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.execute_batch(
+            "PRAGMA user_version = 4;
+             INSERT INTO streamers (id, twitch_id, login, display_name, created_at) VALUES (1, 't', 'a', 'A', 0);
+             INSERT INTO streams (id, streamer_id, twitch_stream_id, status, started_at, dir)
+                 VALUES (1, 1, 's1', 'done', 0, 'd1'), (2, 1, 's2', 'done', 0, 'd2');
+             INSERT INTO stream_chapters (stream_id, at_ms, title) VALUES (1, 0, 'one'), (2, 0, 'two');",
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        let small: i64 = conn.query_row("SELECT COUNT(*) FROM streams WHERE id <= 2", [], |row| row.get(0)).unwrap();
+        assert_eq!(small, 0);
+        let joined: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM streams s JOIN stream_chapters c ON c.stream_id = s.id
+                 WHERE (s.dir = 'd1' AND c.title = 'one') OR (s.dir = 'd2' AND c.title = 'two')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(joined, 2);
+        let max: i64 = conn.query_row("SELECT MAX(id) FROM streams", [], |row| row.get(0)).unwrap();
+        assert!(max < 1 << 53);
+    }
+
+    #[test]
+    fn random_ids_fit_javascript() {
+        for _ in 0..1000 {
+            let id = random_id();
+            assert!((1..1 << 53).contains(&id));
+        }
     }
 
     #[test]

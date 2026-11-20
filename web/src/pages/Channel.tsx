@@ -39,7 +39,7 @@ import {
 	formatRelative,
 } from '@/lib/format';
 import { useNow } from '@/lib/now';
-import { watched } from '@/lib/progress';
+import { forgetProgress, watched } from '@/lib/progress';
 import { channelQuery, streamersQuery } from '@/lib/queries';
 import { useCan, useRouteParams } from '@/lib/session';
 import { Avatar } from '@/ui/Avatar';
@@ -602,6 +602,7 @@ const StreamCard = memo(function StreamCard({
 				onConfirm={async () => {
 					try {
 						await api.delete(`/streams/${stream.id}`);
+						forgetProgress([stream.id]);
 						toast.ok(t.stream.deleted);
 						await Promise.all([refresh(), client.invalidateQueries({ queryKey: streamersQuery.queryKey })]);
 					} catch (error) {
@@ -789,6 +790,9 @@ function RemoveDialog({ streamer, open, onClose }: { streamer: Streamer; open: b
 			onConfirm={async () => {
 				try {
 					await api.delete(`/streamers/${streamer.id}?recordings=true`);
+					const pages = client.getQueriesData<Page>({ queryKey: ['channel'] });
+					const page = pages.find(([, data]) => data?.streamer?.id === streamer.id)?.[1];
+					forgetProgress(page?.streams.map((stream) => stream.id) ?? []);
 					await client.invalidateQueries({ queryKey: streamersQuery.queryKey });
 					await navigate({ to: '/' });
 				} catch (error) {

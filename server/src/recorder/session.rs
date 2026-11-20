@@ -765,27 +765,44 @@ impl Session<'_> {
             .db
             .write(move |conn| {
                 let now = now_ms();
-                conn.execute(
-                    "INSERT INTO streams (streamer_id, twitch_stream_id, part, title, game, status, started_at,
+                // Random, never reused: what browsers remember by id stays with this recording.
+                // Another recording drawing the same id is retried, however unlikely.
+                let mut tries = 0;
+                let row = loop {
+                    let id = crate::db::random_id();
+                    let inserted = conn.execute(
+                        "INSERT INTO streams (id, streamer_id, twitch_stream_id, part, title, game, status, started_at,
                      video_start_at, dir, video_codec, audio_codec, width, height, has_thumbnail)
-                     VALUES (?1, ?2, ?3, ?4, ?5, 'recording', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-                    rusqlite::params![
-                        values.0,
-                        values.1,
-                        values.2,
-                        values.3,
-                        values.4,
-                        now,
-                        values.5.unwrap_or(now),
-                        values.6,
-                        values.7,
-                        values.8,
-                        values.9,
-                        values.10,
-                        has_thumbnail
-                    ],
-                )?;
-                let row = conn.last_insert_rowid();
+                     VALUES (?14, ?1, ?2, ?3, ?4, ?5, 'recording', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                        rusqlite::params![
+                            values.0,
+                            values.1,
+                            values.2,
+                            values.3,
+                            values.4,
+                            now,
+                            values.5.unwrap_or(now),
+                            values.6,
+                            values.7,
+                            values.8,
+                            values.9,
+                            values.10,
+                            has_thumbnail,
+                            id
+                        ],
+                    );
+                    match inserted {
+                        Err(rusqlite::Error::SqliteFailure(error, _))
+                            if error.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_PRIMARYKEY && tries < 5 =>
+                        {
+                            tries += 1;
+                        }
+                        result => {
+                            result?;
+                            break id;
+                        }
+                    }
+                };
                 conn.execute(
                     "INSERT OR IGNORE INTO stream_chapters (stream_id, at_ms, title, game) VALUES (?1, 0, ?2, ?3)",
                     rusqlite::params![row, values.3, values.4],

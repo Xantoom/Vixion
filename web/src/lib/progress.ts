@@ -79,6 +79,15 @@ export function saveProgress(id: number, at: number, of: number) {
 	write(entries);
 }
 
+/** Forgets where these recordings were left: they were deleted. */
+export function forgetProgress(ids: readonly number[]) {
+	const entries = read();
+	if (!ids.some((id) => id in entries)) return;
+	const kept = { ...entries };
+	for (const id of ids) delete kept[id];
+	write(kept);
+}
+
 /** Where to start: where it was left, unless that was the very start or the very end. */
 export function resumeAt(id: number): number {
 	const entry = read()[id];
