@@ -301,7 +301,11 @@ pub async fn thumbnail(State(app): State<AppState>, user: CurrentUser, Path(id):
     user.require("streams.view")?;
     let located = locate(&app, id).await?;
     let bytes = tokio::fs::read(located.dir.join(storage::THUMBNAIL_FILE)).await?;
-    Ok(([(header::CONTENT_TYPE, "image/jpeg"), (header::CACHE_CONTROL, "private, max-age=300")], bytes).into_response())
+    // A recording's picture is replaced once a few minutes in, then never again: a finished one
+    // is kept by the browser for good, since its id never goes to another recording.
+    let cache =
+        if located.status == "recording" { "private, max-age=300" } else { "private, max-age=31536000, immutable" };
+    Ok(([(header::CONTENT_TYPE, "image/jpeg"), (header::CACHE_CONTROL, cache)], bytes).into_response())
 }
 
 /// Where one chat line sits in `chat.ndjson`, and its time in the video. The lines themselves

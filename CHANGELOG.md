@@ -9,6 +9,10 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Changed
+
+- A finished recording's thumbnail is kept by the browser instead of being asked for again every five minutes.
+
 ### Fixed
 
 - A new recording could take the id of a deleted one, and the place a browser remembered for the old video applied to it. Recordings now get random ids that are never reused; existing ones are renumbered once, so where each was left is forgotten one time.
