@@ -67,12 +67,15 @@ function Emote({
 	srcSet,
 	big,
 	from,
+	square = false,
 }: {
 	name: string;
 	src: string;
 	srcSet: string;
 	big: string;
 	from: string;
+	/** Twitch's emotes are all square: their room is kept before they load, so lines don't move. */
+	square?: boolean;
 }) {
 	return (
 		<img
@@ -82,11 +85,12 @@ function Emote({
 			data-tip={name}
 			data-tip-sub={from}
 			data-tip-img={big}
-			loading="lazy"
+			// Not lazy: only the lines at the playhead are drawn, and an emote showing up a frame
+			// after its line pushes the lines around on every jump.
 			referrerPolicy="no-referrer"
 			// Sized by the text around it and overflowing the line a little, as on Twitch: the lines
 			// keep their spacing whether or not they hold an emote.
-			className="-my-[0.3em] inline-block h-[1.75em] w-auto max-w-full align-middle"
+			className={`-my-[0.3em] inline-block h-[1.75em] max-w-full align-middle ${square ? 'w-[1.75em]' : 'w-auto'}`}
 		/>
 	);
 }
@@ -107,6 +111,7 @@ function Message({ text, emotes, assets }: { text: string; emotes: string | unde
 						src={`${TWITCH_EMOTES}/${part.emote}/default/dark/1.0`}
 						srcSet={`${TWITCH_EMOTES}/${part.emote}/default/dark/2.0 2x`}
 						big={`${TWITCH_EMOTES}/${part.emote}/default/dark/3.0`}
+						square
 						from="Twitch"
 					/>
 				) : words ? (
@@ -300,13 +305,15 @@ export function ChatPanel({
 		if (element && following) element.scrollTop = element.scrollHeight;
 	}, [visible, following]);
 
-	// Read on scroll without re-subscribing on every line.
+	// Read on scroll and resize without re-subscribing on every line; kept before paint, so that a
+	// resize in the same frame as a jump already knows the panel follows again.
 	const latest = useRef({ lines, following, pin, showOlder });
-	useEffect(() => {
+	useLayoutEffect(() => {
 		latest.current = { lines, following, pin, showOlder };
 	});
 
-	// Emotes and badges load after their lines and make them taller: the panel stays at the bottom.
+	// Emotes and badges load after their lines and make them taller, and the panel itself changes
+	// height (full screen, a phone turned, the window resized): it stays at the bottom.
 	const content = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		const element = scroller.current;
@@ -316,6 +323,7 @@ export function ChatPanel({
 			if (latest.current.following) element.scrollTop = element.scrollHeight;
 		});
 		observer.observe(inner);
+		observer.observe(element);
 		return () => {
 			observer.disconnect();
 		};

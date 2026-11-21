@@ -120,29 +120,54 @@ export function useChat(streamId: number, timeMs: number): Chat {
 		generation.current += 1;
 		const run = generation.current;
 		pending.current = timeMs;
-		ahead.current = false;
 		older.current = false;
 		const at = Math.floor(timeMs) + 1;
 		setFrozen(loaded ? shownAt.current : null);
-		Promise.all([
-			api.get<ChatLine[]>(`${url}?before=${at}&limit=${SHOWN}`),
-			api.get<ChatLine[]>(`${url}?from=${at}&to=${at + AHEAD_MS}`),
-		])
-			.then(([past, next]) => {
-				if (run !== generation.current) return;
-				failures.current = 0;
-				const atStart = past.length < SHOWN;
-				const start = atStart ? 0 : (past[0]?.o ?? at);
-				setLoaded(trim({ from: start, to: at + AHEAD_MS, atStart, lines: [...past, ...next] }, start, at));
-				setAnchor(null);
-				setFrozen(null);
-				setEpoch(run);
-			})
+		// The lines before the new time are all the panel needs to show it: they go up as soon as
+		// they come, without waiting for the five minutes ahead, which can be thousands of lines.
+		ahead.current = true;
+		// Whichever comes second joins the first: the five minutes ahead wait for the lines before.
+		let waitingAhead: ChatLine[] | null = null;
+		let pastShown = false;
+		const past = api.get<ChatLine[]>(`${url}?before=${at}&limit=${SHOWN}`).then((lines) => {
+			if (run !== generation.current) return;
+			failures.current = 0;
+			const atStart = lines.length < SHOWN;
+			const start = atStart ? 0 : (lines[0]?.o ?? at);
+			const next = waitingAhead;
+			setLoaded(
+				trim(
+					{ from: start, to: next ? at + AHEAD_MS : at, atStart, lines: next ? [...lines, ...next] : lines },
+					start,
+					at,
+				),
+			);
+			pastShown = true;
+			setAnchor(null);
+			setFrozen(null);
+			setEpoch(run);
+		});
+		const next = api.get<ChatLine[]>(`${url}?from=${at}&to=${at + AHEAD_MS}`).then((lines) => {
+			if (run !== generation.current) return;
+			if (!pastShown) {
+				waitingAhead = lines;
+				return;
+			}
+			setLoaded((current) =>
+				current?.to === at
+					? trim({ ...current, to: at + AHEAD_MS, lines: [...current.lines, ...lines] }, current.from, at)
+					: current,
+			);
+		});
+		Promise.all([past, next])
 			.catch(() => {
 				if (run === generation.current) failed();
 			})
 			.finally(() => {
-				if (run === generation.current) pending.current = null;
+				if (run === generation.current) {
+					pending.current = null;
+					ahead.current = false;
+				}
 			});
 	}, [url, timeMs, loaded, retry, failed]);
 
@@ -210,7 +235,9 @@ export function useChat(streamId: number, timeMs: number): Chat {
 		setAnchor(from?.o ?? null);
 	}, []);
 
-	const at = frozen ?? timeMs;
+	// Just past the loaded lines, the next ones on their way: the last ones stay rather than none.
+	const wanted = frozen ?? timeMs;
+	const at = loaded && wanted > loaded.to && wanted - loaded.to < 20_000 ? loaded.to : wanted;
 	let start = 0;
 	let end = 0;
 	if (covers(loaded, at)) {

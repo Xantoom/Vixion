@@ -13,6 +13,12 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 - Chat emotes are sized by the text around them, as on Twitch, instead of standing out at twice its height.
 
+### Fixed
+
+- After a jump in the video, the chat shows the lines before the new time as soon as they come, instead of waiting for the next five minutes of chat: clicking quickly around the timeline no longer leaves the old chat (or an empty one) on screen.
+- Chat emotes no longer appear a moment after their line and push the lines around on every jump.
+- The chat stays on its last line when its panel changes height (full screen, a phone turned, the window resized).
+
 ## [0.4.0] - 2026-11-21
 
 ### Added
