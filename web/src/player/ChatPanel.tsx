@@ -84,7 +84,9 @@ function Emote({
 			data-tip-img={big}
 			loading="lazy"
 			referrerPolicy="no-referrer"
-			className="-my-1.5 inline-block h-8 w-auto max-w-full align-middle"
+			// Sized by the text around it and overflowing the line a little, as on Twitch: the lines
+			// keep their spacing whether or not they hold an emote.
+			className="-my-[0.3em] inline-block h-[1.75em] w-auto max-w-full align-middle"
 		/>
 	);
 }

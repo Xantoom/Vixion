@@ -9,6 +9,10 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Changed
+
+- Chat emotes are sized by the text around them, as on Twitch, instead of standing out at twice its height.
+
 ## [0.4.0] - 2026-11-21
 
 ### Added
