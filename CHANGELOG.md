@@ -19,7 +19,7 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - Cutting a recording moved from the streamer's settings to the button on the stream being recorded.
 - A recording in progress is marked with a red recording icon instead of a sentence.
 - The channel page puts the picture beside the name, the settings button in the top corner under the banner (filled with the accent under the pointer), and a proper « Live » label beside the name.
-- In French, a streamer's broadcasts are called « streams » (« Conserver le stream », « Supprimer le stream »…), and « Réglages » became « Paramètres ».
+- In French, a streamer's broadcasts are called « streams » instead of « enregistrements » or « lives » (« Conserver le stream », « Enregistrer ses streams »…), and « Réglages » became « Paramètres ».
 
 ### Fixed
 

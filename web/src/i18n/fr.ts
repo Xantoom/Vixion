@@ -2,7 +2,7 @@ import type { Messages } from './en';
 
 export const fr: Messages = {
 	common: {
-		// Not « Enregistrer »: here that word means recording a live.
+		// Not « Enregistrer »: here that word means recording a stream.
 		save: 'Valider',
 		saved: 'Modifications appliquées',
 		cancel: 'Annuler',
@@ -75,7 +75,7 @@ export const fr: Messages = {
 		ad: 'Pub évitée',
 		offline: 'Hors ligne',
 		paused: 'Non enregistré',
-		lastLiveTip: 'Dernier live',
+		lastLiveTip: 'Dernier stream',
 		streams: (n) => (n <= 1 ? `${n} stream` : `${n} streams`),
 	},
 	search: {
@@ -90,7 +90,7 @@ export const fr: Messages = {
 	channel: {
 		views: (n: string) => `${n} vues`,
 		add: 'Enregistrer',
-		addHint: 'Enregistrer chaque live de cette chaîne',
+		addHint: 'Enregistrer chaque stream de cette chaîne',
 		watched: 'Enregistrée',
 		followers: (n) => `${n} followers`,
 		partner: 'Partenaire Twitch',
@@ -99,7 +99,7 @@ export const fr: Messages = {
 		twitchVideos: 'Sur Twitch',
 		noVideos: 'Aucune rediffusion sur Twitch',
 		notWatched: 'Aucun stream',
-		lastLive: (when) => `Dernier live ${when}`,
+		lastLive: (when) => `Dernier stream ${when}`,
 		beingRecorded: 'Enregistrement en cours',
 		stoppedByHand: 'Enregistrement coupé',
 		watchOnTwitch: 'Regarder sur Twitch',
@@ -110,13 +110,13 @@ export const fr: Messages = {
 		keepGeneral: (length) => `Par défaut (${length})`,
 		keepPresets: { 7: '1 semaine', 30: '1 mois', 90: '3 mois', 365: '1 an' },
 		recordSection: 'Enregistrement',
-		recordLives: 'Enregistrer ses lives',
+		recordLives: 'Enregistrer ses streams',
 		cut: 'Couper',
 		keepSection: 'Conservation',
-		removeKeep: 'Pour les garder, coupez plutôt « Enregistrer ses lives » dans ses paramètres',
+		removeKeep: 'Pour les garder, coupez plutôt « Enregistrer ses streams » dans ses paramètres',
 		settings: 'Paramètres',
 		settingsTitle: (name) => `Paramètres de ${name}`,
-		liveNow: 'Live en cours',
+		liveNow: 'Stream en cours',
 		recordings: 'Streams',
 		empty: 'Aucun stream',
 		emptyPaused: 'Enregistrement désactivé',
@@ -127,7 +127,7 @@ export const fr: Messages = {
 		removeRecordings: (n) => (n <= 1 ? 'Son stream aussi.' : `Ses ${n} streams aussi, y compris ceux conservés.`),
 		stop: 'Couper l’enregistrement',
 		stopTitle: 'Couper l’enregistrement ?',
-		stopLead: 'Ce qui est enregistré est gardé. Vous pourrez reprendre tant que le live dure.',
+		stopLead: 'Ce qui est enregistré est gardé. Vous pourrez reprendre tant que le stream dure.',
 		resume: 'Reprendre l’enregistrement',
 		resumed: 'Enregistrement repris',
 		openTwitch: 'Ouvrir sur Twitch',
@@ -142,10 +142,10 @@ export const fr: Messages = {
 		deleteLead: 'Vidéo et chat effacés définitivement.',
 		deleted: 'Stream supprimé',
 		recordingNow: 'Enregistrement en cours',
-		recordingLead: 'Lisible à la fin du live.',
+		recordingLead: 'Lisible à la fin du stream.',
 		recording: 'Enregistrement',
 		failed: 'Échec',
-		untitled: 'Live sans titre',
+		untitled: 'Stream sans titre',
 		error: 'Erreur',
 	},
 	player: {
@@ -354,7 +354,7 @@ export const fr: Messages = {
 		ddns: 'DNS dynamique',
 		storage: 'Dossier d’enregistrement impossible à créer',
 		upnp: 'Port non ouvert par UPnP',
-		liveChecks: 'Vérification des lives arrêtée',
+		liveChecks: 'Vérification des streams arrêtée',
 		recordingFailed: (login) => `Échec de l’enregistrement de ${login}`,
 		recordingCrashed: (login) => `Enregistrement de ${login} planté`,
 	},
