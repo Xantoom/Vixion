@@ -9,6 +9,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-21
+
 ### Changed
 
 - Chat emotes are sized by the text around them, as on Twitch, instead of standing out at twice its height.
@@ -248,7 +250,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - The release workflow's write access is limited to its last step, and actions are pinned by commit.
 - The compose file runs the container read-only, without capabilities or privilege escalation.
 
-[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/Xantoom/Vixion/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Xantoom/Vixion/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Xantoom/Vixion/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Xantoom/Vixion/compare/v0.3.0...v0.3.1
