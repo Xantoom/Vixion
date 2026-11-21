@@ -264,8 +264,7 @@ function Hero({ data, name }: { data: Page; name: string }) {
 				) : null}
 				<div className="from-bg via-bg/25 absolute inset-0 bg-gradient-to-t from-0% via-35% to-transparent to-70%" />
 			</div>
-			{/* The picture beside the name, the actions in the corner under the banner, and the
-			    description below the whole width. */}
+			{/* The picture beside the name, the actions in the corner under the banner. */}
 			<div className="mx-auto flex max-w-[120rem] flex-col gap-4 px-4 pt-5 sm:px-6">
 				<div className="flex flex-wrap items-start justify-between gap-4 sm:flex-nowrap sm:gap-6">
 					<div className="flex min-w-0 flex-1 items-center gap-4 sm:gap-6">
@@ -321,7 +320,6 @@ function Hero({ data, name }: { data: Page; name: string }) {
 						{streamer ? <StreamerActions streamer={streamer} /> : <AddButton login={login} name={name} />}
 					</div>
 				</div>
-				{profile?.description ? <p className="text-body text-ink-2 max-w-3xl">{profile.description}</p> : null}
 			</div>
 		</header>
 	);

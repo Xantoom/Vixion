@@ -9,6 +9,10 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Removed
+
+- The streamer's Twitch bio on their channel page.
+
 ## [0.4.1] - 2026-11-21
 
 ### Changed

@@ -290,7 +290,6 @@ pub struct Profile {
     pub display_name: String,
     pub avatar_url: Option<String>,
     pub banner_url: Option<String>,
-    pub description: Option<String>,
     pub followers: i64,
     pub partner: bool,
     pub created_at: Option<i64>,
@@ -363,7 +362,7 @@ impl TwitchApi {
     /// A channel's public page: who they are, whether they are live, their recent broadcasts.
     pub async fn profile(&self, login: &str) -> Result<Option<Profile>, TwitchError> {
         let body = json!({
-            "query": "query($login: String!) { user(login: $login) { id login displayName description \
+            "query": "query($login: String!) { user(login: $login) { id login displayName \
                 profileImageURL(width: 300) bannerImageURL createdAt followers { totalCount } roles { isPartner } \
                 lastBroadcast { startedAt } \
                 stream { id title createdAt type viewersCount game { name boxArtURL(width: 144, height: 192) } \
@@ -389,7 +388,6 @@ impl TwitchApi {
             display_name,
             avatar_url: text(user, "/profileImageURL"),
             banner_url: text(user, "/bannerImageURL"),
-            description: text(user, "/description"),
             followers: number(user, "/followers/totalCount"),
             partner: user.pointer("/roles/isPartner").and_then(Value::as_bool).unwrap_or(false),
             created_at: time(user, "/createdAt"),

@@ -140,7 +140,6 @@ export interface Profile {
 	display_name: string;
 	avatar_url: string | null;
 	banner_url: string | null;
-	description: string | null;
 	followers: number;
 	partner: boolean;
 	created_at: number | null;
