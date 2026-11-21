@@ -9,6 +9,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-21
+
 ### Added
 
 - A recording cut by hand can be resumed from the live card while the broadcast lasts; it carries on in the same stream.
@@ -236,7 +238,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - The release workflow's write access is limited to its last step, and actions are pinned by commit.
 - The compose file runs the container read-only, without capabilities or privilege escalation.
 
-[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Xantoom/Vixion/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Xantoom/Vixion/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Xantoom/Vixion/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Xantoom/Vixion/compare/v0.2.2...v0.3.0
