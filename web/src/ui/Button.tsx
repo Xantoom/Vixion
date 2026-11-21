@@ -1,12 +1,15 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { Spinner } from './Spinner';
 
-type Variant = 'accent' | 'secondary' | 'ghost' | 'danger' | 'danger-ghost';
+type Variant = 'accent' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'danger-ghost';
 
 const VARIANTS: Record<Variant, string> = {
 	accent: 'bg-accent-fill text-accent-ink font-semibold hover:brightness-[1.07] disabled:opacity-45',
 	// Edged like the fields it often sits beside.
 	secondary: 'text-ink font-medium shadow-[inset_0_0_0_1px_var(--field-line)] hover:bg-surface disabled:opacity-45',
+	// Edged at rest, filled with the accent under the pointer: a main action that shouldn't shout.
+	outline:
+		'text-ink font-medium shadow-[inset_0_0_0_1px_var(--field-line)] hover:bg-accent-fill hover:text-accent-ink hover:shadow-none disabled:opacity-45',
 	ghost: 'text-ink-2 font-medium hover:bg-surface hover:text-ink disabled:opacity-45',
 	danger: 'bg-danger-fill text-white font-semibold hover:brightness-[1.07] disabled:opacity-45',
 	// A destructive action that is not the point of where it sits: red words, no fill.

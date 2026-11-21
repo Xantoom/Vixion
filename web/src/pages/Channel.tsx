@@ -4,6 +4,7 @@ import {
 	BadgeCheck,
 	Bookmark,
 	CalendarDays,
+	CircleDot,
 	CirclePause,
 	CircleStop,
 	ExternalLink,
@@ -50,7 +51,6 @@ import { RetentionMenu } from '@/ui/Retention';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
-import { LiveDot } from './Streamers';
 
 function Meta({ icon, children, className = '' }: { icon: ReactNode; children: ReactNode; className?: string }) {
 	return (
@@ -67,12 +67,13 @@ const OFFSCREEN_FROM = 12;
 export function ChannelPage() {
 	const { login } = useRouteParams();
 	const t = useT();
-	const { data, isPending, error } = useQuery(channelQuery(login));
+	const { data, isPending, error, refetch } = useQuery(channelQuery(login));
 	const [tab, setTab] = useState<'recordings' | 'twitch' | null>(null);
 	const tabs = useId();
 	// Asked once here rather than by every card.
 	const canKeep = useCan('streams.keep');
 	const canDelete = useCan('streams.delete');
+	const canManage = useCan('streamers.manage');
 
 	if (isPending) return <PageLoading />;
 	if (error) return error instanceof ApiError && error.status === 404 ? <NotFound /> : <NotFound forbidden />;
@@ -135,6 +136,10 @@ export function ChannelPage() {
 							selected={shown === 'twitch'}
 							onSelect={() => {
 								setTab('twitch');
+								// Twitch shows the running broadcast's picture only after a while: asked
+								// again on each visit until it has one.
+								if (profile.live && profile.videos.some((video) => !video.thumbnail_url))
+									void refetch();
 							}}
 							count={profile.videos.length}
 						>
@@ -161,6 +166,7 @@ export function ChannelPage() {
 											login={login}
 											canKeep={canKeep}
 											canDelete={canDelete}
+											streamerId={canManage ? streamer.id : null}
 										/>
 									</li>
 								))}
@@ -174,7 +180,11 @@ export function ChannelPage() {
 									style={{ '--i': index } as React.CSSProperties}
 									className={index >= OFFSCREEN_FROM ? 'render-when-seen' : undefined}
 								>
-									<VideoCard video={video} />
+									<VideoCard
+										video={video}
+										// The broadcast on air has no picture yet: the live one stands in.
+										fallback={index === 0 && profile.live ? profile.live.preview_url : null}
+									/>
 								</li>
 							))}
 						</ul>
@@ -254,81 +264,119 @@ function Hero({ data, name }: { data: Page; name: string }) {
 				) : null}
 				<div className="from-bg via-bg/25 absolute inset-0 bg-gradient-to-t from-0% via-35% to-transparent to-70%" />
 			</div>
-			{/* Side by side once there is room for all three; before that, one under the other, so the
-			    picture doesn't float halfway down a long description with the actions stranded below it. */}
-			<div className="mx-auto flex max-w-[120rem] flex-col items-start gap-x-6 gap-y-4 px-4 sm:px-6 md:flex-row md:items-end">
-				<span className="bg-bg relative -mt-14 flex-none rounded-full p-1.5 sm:-mt-20">
-					<Avatar src={avatar} name={name} size={128} live={live} className="max-sm:!size-24" />
-				</span>
-				<div className="flex w-full min-w-0 flex-col gap-2 pb-1 md:flex-1">
-					<h1 className="text-heading sm:text-display flex items-center gap-3 font-bold tracking-tight">
-						<a
-							href={`https://www.twitch.tv/${login}`}
-							target="_blank"
-							rel="noreferrer"
-							data-tip={t.streamer.openTwitch}
-							className="hover:text-accent-text flex min-w-0 items-center transition-colors"
-						>
-							<span className="truncate">{name}</span>
-						</a>
-						{profile?.partner ? (
-							<span data-tip={t.channel.partner} className="flex-none">
-								<BadgeCheck size={28} className="text-accent-text" aria-label={t.channel.partner} />
-							</span>
-						) : null}
-						{live ? <LiveDot size={12} /> : null}
-					</h1>
-					<div className="text-small text-muted flex flex-wrap items-center gap-x-6 gap-y-1.5">
-						{profile ? (
-							<Meta icon={<Users size={16} />}>
-								{t.channel.followers(formatNumber(profile.followers))}
-							</Meta>
-						) : null}
-						{streamer ? (
-							<Meta icon={<Film size={16} />}>{t.streamers.streams(streamer.stream_count)}</Meta>
-						) : null}
-						{streamer && !streamer.monitored ? (
-							<Meta icon={<CirclePause size={16} />}>{t.streamers.paused}</Meta>
-						) : null}
-						{!live && (profile?.last_broadcast ?? streamer?.last_stream_at) ? (
-							<Meta icon={<CalendarDays size={16} />}>
-								{t.channel.lastLive(
-									formatRelative(profile?.last_broadcast ?? streamer?.last_stream_at ?? 0),
-								)}
-							</Meta>
-						) : null}
+			{/* The picture beside the name, the actions in the corner under the banner, and the
+			    description below the whole width. */}
+			<div className="mx-auto flex max-w-[120rem] flex-col gap-4 px-4 pt-5 sm:px-6">
+				<div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+					<div className="flex min-w-0 flex-1 basis-80 items-center gap-4 sm:gap-6">
+						<Avatar src={avatar} name={name} size={112} live={live} className="max-sm:!size-20" />
+						<div className="flex min-w-0 flex-col gap-2">
+							<h1 className="text-heading sm:text-display flex items-center gap-3 leading-tight font-bold tracking-tight">
+								<a
+									href={`https://www.twitch.tv/${login}`}
+									target="_blank"
+									rel="noreferrer"
+									data-tip={t.streamer.openTwitch}
+									className="hover:text-accent-text flex min-w-0 items-center transition-colors"
+								>
+									<span className="truncate">{name}</span>
+								</a>
+								{profile?.partner ? (
+									<span data-tip={t.channel.partner} className="flex-none">
+										<BadgeCheck
+											size={28}
+											className="text-accent-text"
+											aria-label={t.channel.partner}
+										/>
+									</span>
+								) : null}
+								{live ? <LivePill /> : null}
+							</h1>
+							<div className="text-small text-muted flex flex-wrap items-center gap-x-6 gap-y-1.5">
+								{profile ? (
+									<Meta icon={<Users size={16} />}>
+										{t.channel.followers(formatNumber(profile.followers))}
+									</Meta>
+								) : null}
+								{streamer ? (
+									<Meta icon={<Film size={16} />}>{t.streamers.streams(streamer.stream_count)}</Meta>
+								) : null}
+								{streamer && !streamer.monitored ? (
+									<Meta icon={<CirclePause size={16} />}>{t.streamers.paused}</Meta>
+								) : null}
+								{!live && (profile?.last_broadcast ?? streamer?.last_stream_at) ? (
+									<Meta icon={<CalendarDays size={16} />}>
+										{t.channel.lastLive(
+											formatRelative(profile?.last_broadcast ?? streamer?.last_stream_at ?? 0),
+										)}
+									</Meta>
+								) : null}
+							</div>
+						</div>
 					</div>
-					{profile?.description ? (
-						<p className="text-body text-ink-2 mt-1 max-w-3xl">{profile.description}</p>
-					) : null}
+					<div className="flex flex-none items-center gap-1.5">
+						{streamer ? <StreamerActions streamer={streamer} /> : <AddButton login={login} name={name} />}
+					</div>
 				</div>
-				<div className="flex items-center gap-1.5 pb-1">
-					{streamer ? <StreamerActions streamer={streamer} /> : <AddButton login={login} name={name} />}
-				</div>
+				{profile?.description ? <p className="text-body text-ink-2 max-w-3xl">{profile.description}</p> : null}
 			</div>
 		</header>
 	);
 }
 
-/** The broadcast on air: what it is, and a way to watch it on Twitch. Recordings open once finished. */
+/** The red « Live » label: a dot and the word, centred together on the line they sit in. */
+function LivePill({ className = '' }: { className?: string }) {
+	const t = useT();
+	return (
+		<span
+			className={`bg-live text-caption inline-flex h-5 flex-none items-center gap-1.5 rounded-xs px-1.5 leading-none font-bold tracking-wide text-white uppercase ${className}`}
+		>
+			<span className="live-dot size-1.5 rounded-full bg-white" aria-hidden />
+			{t.streamers.live}
+		</span>
+	);
+}
+
+/** A broadcast being recorded right now: the recorder's red mark, named by its tooltip. */
+function RecordingMark({ size = 16 }: { size?: number }) {
+	const t = useT();
+	return (
+		<span role="img" aria-label={t.channel.beingRecorded} data-tip={t.channel.beingRecorded} className="flex-none">
+			<CircleDot size={size} strokeWidth={2.4} className="live-dot text-live" />
+		</span>
+	);
+}
+
+/** The broadcast on air: what it is, a way to watch it on Twitch, and whether it is being recorded. */
 function LiveNow({ data }: { data: Page }) {
 	const t = useT();
 	const now = useNow();
+	const client = useQueryClient();
+	const canManage = useCan('streamers.manage');
+	const { busy, run } = useAction('toast');
 	const { profile, streamer } = data;
 	const live = profile?.live;
 	if (!live && !streamer?.live) return null;
 	const title = live?.title ?? streamer?.live?.title ?? null;
 	const game = live?.game ?? streamer?.live?.game ?? null;
+	const viewers = live?.viewers ?? streamer?.live?.viewers ?? null;
 	const since = live?.since ?? streamer?.live?.since ?? null;
 	const login = streamer?.login ?? profile?.login ?? '';
+	const href = `https://www.twitch.tv/${login}`;
+	// Cut by hand while still on air: it can be taken up again, in the same stream.
+	const resumable = canManage && streamer?.monitored && streamer.stopped && !streamer.recording;
+
+	const resume = async () => {
+		if (!streamer) return;
+		await run(async () => {
+			await api.post(`/streamers/${streamer.id}/resume`);
+			await client.invalidateQueries({ queryKey: ['channel'] });
+			toast.ok(t.streamer.resumed);
+		});
+	};
 
 	return (
-		<a
-			href={`https://www.twitch.tv/${login}`}
-			target="_blank"
-			rel="noreferrer"
-			className="group bg-card ring-line mt-8 mb-10 flex flex-col overflow-hidden rounded-md shadow-(--shadow-card) ring-1 transition-shadow hover:shadow-(--shadow-lift) sm:flex-row"
-		>
+		<article className="group bg-card ring-line relative mt-8 mb-10 flex flex-col overflow-hidden rounded-md shadow-(--shadow-card) ring-1 transition-shadow hover:shadow-(--shadow-lift) sm:flex-row">
 			<div className="bg-surface-2 relative aspect-video flex-none sm:w-96">
 				{live?.preview_url ? (
 					<img
@@ -338,29 +386,75 @@ function LiveNow({ data }: { data: Page }) {
 						className="size-full object-cover"
 					/>
 				) : null}
-			</div>
-			<div className="flex min-w-0 flex-1 flex-col gap-3 p-5">
-				<span className="text-small text-live flex items-center gap-2 font-semibold">
-					<LiveDot />
-					{t.streamers.live}
+				<span className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+					<LivePill />
 					{streamer?.recording ? (
-						<span className="text-muted font-medium">{t.channel.beingRecorded}</span>
+						<span className="grid size-5 place-items-center rounded-xs bg-black/70 backdrop-blur-sm">
+							<RecordingMark size={13} />
+						</span>
 					) : null}
 				</span>
-				<h2 className="text-lead line-clamp-2 font-semibold">{title ?? t.stream.untitled}</h2>
-				<div className="text-small text-muted flex flex-wrap gap-x-5 gap-y-1">
-					{game ? <Meta icon={<Gamepad2 size={16} />}>{game}</Meta> : null}
-					{live ? (
-						<Meta icon={<Eye size={16} />}>{t.channel.viewers(formatNumber(live.viewers))}</Meta>
+				<span className="pointer-events-none absolute inset-x-2.5 bottom-2.5 flex items-end justify-between gap-2">
+					{viewers != null ? (
+						<Pill>
+							<Eye size={13} />
+							{t.channel.viewers(formatNumber(viewers))}
+						</Pill>
+					) : (
+						<span />
+					)}
+					{since ? (
+						<Pill>
+							<Timer size={13} />
+							{formatDuration(now - since)}
+						</Pill>
 					) : null}
-					{since ? <Meta icon={<Timer size={16} />}>{formatDuration(now - since)}</Meta> : null}
-				</div>
-				<span className="text-small text-accent-text mt-auto inline-flex items-center gap-1.5 font-semibold">
-					<ExternalLink size={16} />
-					{t.channel.watchOnTwitch}
 				</span>
 			</div>
-		</a>
+			<div className="flex min-w-0 flex-1 flex-col gap-4 p-5">
+				<div className="flex min-w-0 items-start gap-4">
+					{live?.game_art_url ? (
+						<img
+							src={live.game_art_url}
+							alt=""
+							referrerPolicy="no-referrer"
+							className="bg-surface-2 aspect-[3/4] w-14 flex-none rounded-xs object-cover shadow-(--shadow-card) sm:w-16"
+						/>
+					) : null}
+					<div className="flex min-w-0 flex-col gap-1.5">
+						<h2 className="text-lead line-clamp-2 font-semibold">
+							{/* The whole card opens the broadcast; the buttons in it stay their own. */}
+							<a
+								href={href}
+								target="_blank"
+								rel="noreferrer"
+								className="hover:text-accent-text transition-colors after:absolute after:inset-0"
+							>
+								{title ?? t.stream.untitled}
+							</a>
+						</h2>
+						{game ? (
+							<span className="text-small text-muted flex items-center gap-1.5">
+								<Gamepad2 size={16} className="flex-none opacity-80" />
+								<span className="truncate">{game}</span>
+							</span>
+						) : null}
+					</div>
+				</div>
+				<div className="mt-auto flex flex-wrap items-center justify-between gap-3">
+					<span className="text-small text-accent-text inline-flex items-center gap-1.5 font-semibold">
+						<ExternalLink size={16} />
+						{t.channel.watchOnTwitch}
+					</span>
+					{resumable ? (
+						<Button size="sm" variant="outline" busy={busy} className="z-10" onClick={() => void resume()}>
+							<CircleDot size={15} />
+							{t.streamer.resume}
+						</Button>
+					) : null}
+				</div>
+			</div>
+		</article>
 	);
 }
 
@@ -396,6 +490,7 @@ function StreamerActions({ streamer }: { streamer: Streamer }) {
 	return (
 		<>
 			<Button
+				variant="outline"
 				onClick={() => {
 					setSettings(true);
 				}}
@@ -463,15 +558,19 @@ const StreamCard = memo(function StreamCard({
 	login,
 	canKeep,
 	canDelete,
+	streamerId,
 }: {
 	stream: StreamSummary;
 	login: string;
 	canKeep: boolean;
 	canDelete: boolean;
+	/** Set when the recording in progress may be cut. */
+	streamerId: number | null;
 }) {
 	const t = useT();
 	const client = useQueryClient();
 	const [deleting, setDeleting] = useState(false);
+	const [stopping, setStopping] = useState(false);
 	const { busy: keeping, run } = useAction('toast');
 	const recording = stream.status === 'recording';
 	const refresh = async () => client.invalidateQueries({ queryKey: ['channel', login] });
@@ -513,7 +612,7 @@ const StreamCard = memo(function StreamCard({
 				{recording ? (
 					<span className="text-small absolute inset-0 grid place-items-center font-semibold text-white">
 						<span className="flex items-center gap-2 rounded-sm bg-black/70 px-3 py-1.5">
-							<LiveDot size={8} />
+							<RecordingMark size={15} />
 							{t.stream.recordingNow}
 						</span>
 					</span>
@@ -531,6 +630,19 @@ const StreamCard = memo(function StreamCard({
 						<Pill className="bg-danger-fill text-white">{t.stream.failed}</Pill>
 					) : null}
 				</span>
+				{recording && streamerId != null ? (
+					<span className="absolute top-2.5 right-2.5 z-10">
+						<OverlayButton
+							label={t.streamer.stop}
+							danger
+							onClick={() => {
+								setStopping(true);
+							}}
+						>
+							<CircleStop size={16} />
+						</OverlayButton>
+					</span>
+				) : null}
 				{!recording && (canKeep || canDelete) ? (
 					<span className="absolute top-2.5 right-2.5 flex gap-1.5">
 						{canDelete ? (
@@ -614,13 +726,23 @@ const StreamCard = memo(function StreamCard({
 				<p>{t.stream.deleteLead}</p>
 				{stream.keep_forever ? <p className="text-accent-text mt-2 font-medium">{t.stream.kept}</p> : null}
 			</Confirm>
+			{streamerId != null ? (
+				<StopDialog
+					streamerId={streamerId}
+					open={stopping}
+					onClose={() => {
+						setStopping(false);
+					}}
+				/>
+			) : null}
 		</article>
 	);
 });
 
 /** A past broadcast still on Twitch: opens there. */
-const VideoCard = memo(function VideoCard({ video }: { video: TwitchVideo }) {
+const VideoCard = memo(function VideoCard({ video, fallback }: { video: TwitchVideo; fallback: string | null }) {
 	const t = useT();
+	const thumbnail = video.thumbnail_url ?? fallback;
 	const href = `https://www.twitch.tv/videos/${video.id}`;
 	return (
 		<article className="group flex flex-col gap-3">
@@ -631,9 +753,9 @@ const VideoCard = memo(function VideoCard({ video }: { video: TwitchVideo }) {
 				className="bg-surface-2 relative block aspect-video overflow-hidden rounded-md"
 				aria-label={video.title || t.stream.untitled}
 			>
-				{video.thumbnail_url ? (
+				{thumbnail ? (
 					<img
-						src={video.thumbnail_url}
+						src={thumbnail}
 						alt=""
 						loading="lazy"
 						referrerPolicy="no-referrer"
@@ -674,7 +796,7 @@ const VideoCard = memo(function VideoCard({ video }: { video: TwitchVideo }) {
 	);
 });
 
-/** Whether to record, how long recordings stay, cutting the broadcast on air, and deleting the streamer. */
+/** Whether to record, how long streams stay, and deleting the streamer. */
 function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: () => void }) {
 	const t = useT();
 	const client = useQueryClient();
@@ -683,7 +805,6 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 	const [retention, setRetention] = useState<number | null>(streamer.retention_days);
 	const { busy, run } = useAction('toast');
 	const [removing, setRemoving] = useState(false);
-	const [stopping, setStopping] = useState(false);
 	const fallback = streamer.default_retention_days;
 
 	const save = async () => {
@@ -717,24 +838,6 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 			<div className="flex flex-col gap-8">
 				<Group title={t.streamer.recordSection}>
 					<SwitchRow label={t.streamer.recordLives} checked={monitored} onChange={setMonitored} />
-					{streamer.recording ? (
-						<li className="reveal flex min-h-14 items-center justify-between gap-3 py-2 pr-2 pl-5">
-							<span className="text-ui text-live flex items-center gap-2 font-medium">
-								<LiveDot size={8} />
-								{t.streamer.liveNow}
-							</span>
-							<Button
-								size="sm"
-								variant="danger-ghost"
-								onClick={() => {
-									setStopping(true);
-								}}
-							>
-								<CircleStop size={15} />
-								{t.streamer.cut}
-							</Button>
-						</li>
-					) : null}
 				</Group>
 				<Group title={t.streamer.keepSection}>
 					<li className="flex min-h-14 items-center justify-between gap-4 py-2 pr-2 pl-5">
@@ -764,13 +867,6 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 				open={removing}
 				onClose={() => {
 					setRemoving(false);
-				}}
-			/>
-			<StopDialog
-				streamer={streamer}
-				open={stopping}
-				onClose={() => {
-					setStopping(false);
 				}}
 			/>
 		</Dialog>
@@ -813,7 +909,7 @@ function RemoveDialog({ streamer, open, onClose }: { streamer: Streamer; open: b
 	);
 }
 
-function StopDialog({ streamer, open, onClose }: { streamer: Streamer; open: boolean; onClose: () => void }) {
+function StopDialog({ streamerId, open, onClose }: { streamerId: number; open: boolean; onClose: () => void }) {
 	const t = useT();
 	const client = useQueryClient();
 	return (
@@ -825,7 +921,7 @@ function StopDialog({ streamer, open, onClose }: { streamer: Streamer; open: boo
 			onConfirm={async () => {
 				try {
 					// Answers once the recording is closed, so the pages show it stopped.
-					await api.post(`/streamers/${streamer.id}/stop`);
+					await api.post(`/streamers/${streamerId}/stop`);
 					await Promise.all([
 						client.invalidateQueries({ queryKey: ['channel'] }),
 						client.invalidateQueries({ queryKey: streamersQuery.queryKey }),

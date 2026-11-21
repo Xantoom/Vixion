@@ -304,6 +304,8 @@ pub struct Profile {
 pub struct ProfileLive {
     pub title: Option<String>,
     pub game: Option<String>,
+    /// The category's cover art.
+    pub game_art_url: Option<String>,
     pub viewers: i64,
     pub since: Option<i64>,
     pub preview_url: Option<String>,
@@ -364,7 +366,8 @@ impl TwitchApi {
             "query": "query($login: String!) { user(login: $login) { id login displayName description \
                 profileImageURL(width: 300) bannerImageURL createdAt followers { totalCount } roles { isPartner } \
                 lastBroadcast { startedAt } \
-                stream { id title createdAt type viewersCount game { name } previewImageURL(width: 640, height: 360) } \
+                stream { id title createdAt type viewersCount game { name boxArtURL(width: 144, height: 192) } \
+                previewImageURL(width: 640, height: 360) } \
                 videos(first: 12, type: ARCHIVE, sort: TIME) { edges { node { id title lengthSeconds createdAt \
                 viewCount previewThumbnailURL(width: 640, height: 360) game { name } } } } } }",
             "variables": { "login": login },
@@ -393,6 +396,7 @@ impl TwitchApi {
             live: live.map(|stream| ProfileLive {
                 title: text(stream, "/title"),
                 game: text(stream, "/game/name"),
+                game_art_url: text(stream, "/game/boxArtURL"),
                 viewers: number(stream, "/viewersCount"),
                 since: time(stream, "/createdAt"),
                 preview_url: text(stream, "/previewImageURL"),

@@ -32,6 +32,8 @@ pub struct Streamer {
     default_retention_days: i64,
     live: Option<LiveInfo>,
     recording: Option<LiveProgress>,
+    /// The broadcast on air was stopped by hand: it can be recorded again.
+    stopped: bool,
     stream_count: i64,
     total_bytes: i64,
     total_duration_ms: i64,
@@ -51,7 +53,8 @@ const STREAMER_QUERY: &str = "SELECT st.id, st.twitch_id, st.login, st.display_n
     st.retention_days, st.live_title, st.live_game, st.live_since, st.created_at,
     COUNT(s.id), COALESCE(SUM(s.size_bytes), 0), COALESCE(SUM(s.duration_ms), 0), MAX(s.started_at),
     st.banner_url, st.live_viewers,
-    (SELECT c.id FROM streams c WHERE c.streamer_id = st.id AND c.has_thumbnail ORDER BY c.started_at DESC LIMIT 1)
+    (SELECT c.id FROM streams c WHERE c.streamer_id = st.id AND c.has_thumbnail ORDER BY c.started_at DESC LIMIT 1),
+    st.stopped_stream_id IS NOT NULL
     FROM streamers st LEFT JOIN streams s ON s.streamer_id = st.id";
 
 fn streamer_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Streamer> {
@@ -74,6 +77,8 @@ fn streamer_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Streamer> {
             since,
         }),
         recording: None,
+        // Only the broadcast on air counts; an older one stopped by hand is over.
+        stopped: live_since.is_some() && row.get::<_, bool>(18)?,
         created_at: row.get(10)?,
         stream_count: row.get(11)?,
         total_bytes: row.get(12)?,
@@ -388,6 +393,23 @@ pub async fn remove(
     tracing::info!(id, by = %user.username, "streamer removed");
     crate::audit::record(&app, &user, "streamer.remove", id.to_string()).await;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Records again the broadcast on air that was stopped by hand: it carries on in the same stream.
+pub async fn resume(State(app): State<AppState>, user: CurrentUser, Path(id): Path<i64>) -> AppResult<StatusCode> {
+    user.require("streamers.manage")?;
+    app.recorder.resume(&app.db, id).await;
+    app.recorder.check_now();
+    tracing::info!(id, by = %user.username, "recording resumed by hand");
+    crate::audit::record(&app, &user, "recording.resume", id.to_string()).await;
+    // The answer waits for the recording to start, so that the page shows it running.
+    let started = async {
+        while !app.recorder.is_recording(id) {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+    };
+    let started = tokio::time::timeout(std::time::Duration::from_secs(10), started).await.is_ok();
+    Ok(if started { StatusCode::NO_CONTENT } else { StatusCode::ACCEPTED })
 }
 
 /// Stops the recording in progress, keeping what was recorded.

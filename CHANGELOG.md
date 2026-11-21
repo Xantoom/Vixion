@@ -9,6 +9,22 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Added
+
+- A recording cut by hand can be resumed from the live card while the broadcast lasts; it carries on in the same stream.
+- The live card shows the category's cover art, with the viewer count and the broadcast's length on its picture.
+
+### Changed
+
+- Cutting a recording moved from the streamer's settings to the button on the stream being recorded.
+- A recording in progress is marked with a red recording icon instead of a sentence.
+- The channel page puts the picture beside the name, the settings button in the top corner under the banner (filled with the accent under the pointer), and a proper « Live » label beside the name.
+- In French, a streamer's broadcasts are called « streams » (« Conserver le stream », « Supprimer le stream »…), and « Réglages » became « Paramètres ».
+
+### Fixed
+
+- The broadcast on air, in the « On Twitch » tab, shows the live picture until Twitch has one, and the tab asks Twitch again each time it is opened.
+
 ## [0.3.2] - 2026-11-20
 
 ### Changed

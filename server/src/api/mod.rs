@@ -25,6 +25,7 @@ pub fn router() -> Router<AppState> {
         .route("/channels/{login}", get(streamers::channel))
         .route("/twitch/search", get(streamers::search))
         .route("/streamers/{id}/stop", post(streamers::stop))
+        .route("/streamers/{id}/resume", post(streamers::resume))
         .route("/streams/{id}", get(streams::detail).patch(streams::update).delete(streams::remove))
         .route("/streams/{id}/chat", get(streams::chat_window))
         .route("/streams/{id}/chat-assets", get(streamers::chat_assets))

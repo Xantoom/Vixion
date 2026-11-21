@@ -105,6 +105,8 @@ export interface Streamer {
 	default_retention_days: number;
 	live: { title: string | null; game: string | null; viewers: number | null; since: number } | null;
 	recording: LiveProgress | null;
+	/** The broadcast on air was stopped by hand and can be recorded again. */
+	stopped: boolean;
 	stream_count: number;
 	total_bytes: number;
 	total_duration_ms: number;
@@ -145,6 +147,8 @@ export interface Profile {
 	live: {
 		title: string | null;
 		game: string | null;
+		/** The category's cover art. */
+		game_art_url: string | null;
 		viewers: number;
 		since: number | null;
 		preview_url: string | null;
