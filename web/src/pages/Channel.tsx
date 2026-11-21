@@ -267,17 +267,17 @@ function Hero({ data, name }: { data: Page; name: string }) {
 			{/* The picture beside the name, the actions in the corner under the banner, and the
 			    description below the whole width. */}
 			<div className="mx-auto flex max-w-[120rem] flex-col gap-4 px-4 pt-5 sm:px-6">
-				<div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-					<div className="flex min-w-0 flex-1 basis-80 items-center gap-4 sm:gap-6">
+				<div className="flex flex-wrap items-start justify-between gap-4 sm:flex-nowrap sm:gap-6">
+					<div className="flex min-w-0 flex-1 items-center gap-4 sm:gap-6">
 						<Avatar src={avatar} name={name} size={112} live={live} className="max-sm:!size-20" />
 						<div className="flex min-w-0 flex-col gap-2">
-							<h1 className="text-heading sm:text-display flex items-center gap-3 leading-tight font-bold tracking-tight">
+							<h1 className="text-heading sm:text-display flex flex-wrap items-center gap-x-3 gap-y-1 leading-tight font-bold tracking-tight">
 								<a
 									href={`https://www.twitch.tv/${login}`}
 									target="_blank"
 									rel="noreferrer"
 									data-tip={t.streamer.openTwitch}
-									className="hover:text-accent-text flex min-w-0 items-center transition-colors"
+									className="hover:text-accent-text flex max-w-full min-w-0 items-center transition-colors"
 								>
 									<span className="truncate">{name}</span>
 								</a>
@@ -314,7 +314,10 @@ function Hero({ data, name }: { data: Page; name: string }) {
 							</div>
 						</div>
 					</div>
-					<div className="flex flex-none items-center gap-1.5">
+					{/* The settings stay in the corner; adding a channel takes its own row on a phone. */}
+					<div
+						className={`flex flex-none items-center gap-1.5 ${streamer ? '' : 'max-sm:w-full max-sm:*:flex-1'}`}
+					>
 						{streamer ? <StreamerActions streamer={streamer} /> : <AddButton login={login} name={name} />}
 					</div>
 				</div>
@@ -389,7 +392,7 @@ function LiveNow({ data }: { data: Page }) {
 				<span className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
 					<LivePill />
 					{streamer?.recording ? (
-						<span className="grid size-5 place-items-center rounded-xs bg-black/70 backdrop-blur-sm">
+						<span className="grid size-5 place-items-center rounded-xs bg-white shadow-sm">
 							<RecordingMark size={13} />
 						</span>
 					) : null}
@@ -491,12 +494,14 @@ function StreamerActions({ streamer }: { streamer: Streamer }) {
 		<>
 			<Button
 				variant="outline"
+				className="max-sm:w-10 max-sm:px-0"
 				onClick={() => {
 					setSettings(true);
 				}}
 			>
 				<Settings2 size={17} />
-				{t.streamer.settings}
+				{/* On a phone the icon alone, so the button keeps its corner beside the name. */}
+				<span className="max-sm:sr-only">{t.streamer.settings}</span>
 			</Button>
 			{settings ? (
 				<SettingsDialog
@@ -840,8 +845,9 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 					<SwitchRow label={t.streamer.recordLives} checked={monitored} onChange={setMonitored} />
 				</Group>
 				<Group title={t.streamer.keepSection}>
-					<li className="flex min-h-14 items-center justify-between gap-4 py-2 pr-2 pl-5">
-						<span className="text-ui text-ink min-w-0">{t.streamer.keepRow}</span>
+					{/* The menu goes under the label when both don't fit on one line. */}
+					<li className="flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 pr-2 pl-5">
+						<span className="text-ui text-ink whitespace-nowrap">{t.streamer.keepRow}</span>
 						<RetentionMenu
 							label={t.streamer.keepRow}
 							value={retention}

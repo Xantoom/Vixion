@@ -71,7 +71,11 @@ export function Dialog({
 			ref={ref}
 			aria-labelledby={titleId}
 			closedby="any"
-			onClose={onClose}
+			// The close event comes a moment after close(): when the dialog was shown again in between
+			// (React's development mode unmounts and mounts it once), it is stale.
+			onClose={() => {
+				if (!ref.current?.open) onClose();
+			}}
 			onCancel={(event) => {
 				event.preventDefault();
 				onClose();
@@ -104,8 +108,10 @@ export function Dialog({
 						{children}
 					</div>
 				) : null}
+				{/* On a phone the buttons share the width; when they don't fit side by side, the main
+				    one (last) goes on top. */}
 				{footer ? (
-					<footer className="border-line bg-surface flex flex-wrap justify-end gap-2 border-t px-6 py-4 sm:px-7">
+					<footer className="border-line bg-surface flex flex-wrap justify-end gap-2 border-t px-6 py-4 max-sm:flex-wrap-reverse max-sm:*:flex-auto sm:px-7">
 						{footer}
 					</footer>
 				) : null}

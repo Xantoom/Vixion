@@ -23,6 +23,9 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ### Fixed
 
+- On a phone, the channel page keeps the name whole (the live label and badge go under it), the settings button stays in its corner as an icon, and « Record » takes its own row.
+- On a phone, dialog buttons share the width and stack with the main one on top when they don't fit side by side; the retention menu goes under its label.
+- In development, dialogs opened straight away (a streamer's settings) closed at once.
 - The broadcast on air, in the « On Twitch » tab, shows the live picture until Twitch has one, and the tab asks Twitch again each time it is opened.
 
 ## [0.3.2] - 2026-11-20
