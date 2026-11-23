@@ -9,6 +9,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-23
+
 ### Changed
 
 - The player's chat column is wider on desktop, matching Twitch's theatre mode (around 340 px, expanding into spare
@@ -287,7 +289,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - The release workflow's write access is limited to its last step, and actions are pinned by commit.
 - The compose file runs the container read-only, without capabilities or privilege escalation.
 
-[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/Xantoom/Vixion/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/Xantoom/Vixion/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/Xantoom/Vixion/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/Xantoom/Vixion/compare/v0.4.1...v0.4.2
