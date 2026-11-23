@@ -9,6 +9,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-23
+
 ### Added
 
 - The player saves the frame on screen as a PNG, at the video's own size.
@@ -274,7 +276,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - The release workflow's write access is limited to its last step, and actions are pinned by commit.
 - The compose file runs the container read-only, without capabilities or privilege escalation.
 
-[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/Xantoom/Vixion/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/Xantoom/Vixion/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Xantoom/Vixion/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Xantoom/Vixion/compare/v0.3.2...v0.4.0
