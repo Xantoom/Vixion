@@ -9,6 +9,10 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Security
+
+- Updated the `url` library past RUSTSEC-2026-0592 (a crash on nested `blob:` addresses).
+
 ## [0.4.3] - 2026-11-23
 
 ### Added
