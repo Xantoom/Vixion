@@ -7,6 +7,8 @@ interface Tip {
 	sub: string | undefined;
 	/** A larger picture of what is hovered (`data-tip-img`): an emote, a badge. */
 	img: string | undefined;
+	/** A cover drawn larger (`data-tip-poster`): a game's box art. */
+	poster: boolean;
 	x: number;
 	y: number;
 	below: boolean;
@@ -22,8 +24,8 @@ const CONTROL =
 /**
  * One tooltip for the whole app: any element with `data-tip` shows its text when the mouse rests
  * on it or the keyboard focuses it. It is drawn inside the full-screen element when there is one,
- * so the player's buttons keep theirs in full screen. `data-tip-sub` adds a quieter second line and
- * `data-tip-img` a picture above the text.
+ * so the player's buttons keep theirs in full screen. `data-tip-sub` adds a quieter second line,
+ * `data-tip-img` a picture above the text and `data-tip-poster` a larger cover in its place.
  */
 export function Tooltips() {
 	const [tip, setTip] = useState<Tip | null>(null);
@@ -41,7 +43,8 @@ export function Tooltips() {
 			setTip({
 				text,
 				sub: element.dataset.tipSub,
-				img: element.dataset.tipImg,
+				img: element.dataset.tipPoster ?? element.dataset.tipImg,
+				poster: element.dataset.tipPoster !== undefined,
 				x: rect.left + rect.width / 2,
 				y: below ? rect.bottom + MARGIN : rect.top - MARGIN,
 				below,
@@ -137,7 +140,11 @@ export function Tooltips() {
 					onLoad={() => {
 						place(tip.x);
 					}}
-					className="mx-auto mb-1 block h-14 w-auto max-w-full object-contain"
+					className={
+						tip.poster
+							? 'bg-surface-2 mx-auto mt-1 mb-1.5 block aspect-[3/4] h-40 w-auto rounded-xs object-cover'
+							: 'mx-auto mb-1 block h-14 w-auto max-w-full object-contain'
+					}
 				/>
 			) : null}
 			<div className={tip.img ? 'text-center' : undefined}>{tip.text}</div>

@@ -160,6 +160,8 @@ export const en = {
 		compressorOff: 'Compressor off',
 		fullscreen: 'Full screen',
 		exitFullscreen: 'Exit full screen',
+		snapshot: 'Save this frame',
+		snapshotFailed: 'No frame to save yet',
 		showChat: 'Show chat',
 		hideChat: 'Hide chat',
 		chapters: 'Chapters',

@@ -161,6 +161,8 @@ export const fr: Messages = {
 		compressorOff: 'Compresseur désactivé',
 		fullscreen: 'Plein écran',
 		exitFullscreen: 'Quitter le plein écran',
+		snapshot: 'Enregistrer cette image',
+		snapshotFailed: 'Aucune image à enregistrer pour l’instant',
 		showChat: 'Afficher le chat',
 		hideChat: 'Masquer le chat',
 		chapters: 'Chapitres',

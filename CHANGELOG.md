@@ -9,6 +9,24 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Added
+
+- The player saves the frame on screen as a PNG, at the video's own size.
+- Hovering a game's name on a channel's cards shows its box art; hovering the date shows it in full.
+
+### Changed
+
+- Channel cards always show their delete and keep buttons, give the date as day, month, year and time, and all have
+  the same size whatever their title.
+- On a desktop the video fills the player's height and the chat takes the width left; showing or hiding the chat
+  slides it.
+
+### Fixed
+
+- Chat emotes look sharp on scaled screens and are never stretched.
+- A click just above the player's timeline or below its title pauses the video again.
+- The player's controls fade out after a shortcut key, even when a button was clicked just before.
+
 ## [0.4.2] - 2026-11-21
 
 ### Removed

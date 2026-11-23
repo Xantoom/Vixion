@@ -33,7 +33,8 @@ import {
 import {
 	formatBytes,
 	formatClock,
-	formatDate,
+	formatDateFull,
+	formatDateTime,
 	formatDuration,
 	formatNumber,
 	formatQuality,
@@ -43,6 +44,7 @@ import { useNow } from '@/lib/now';
 import { forgetProgress, watched } from '@/lib/progress';
 import { channelQuery, streamersQuery } from '@/lib/queries';
 import { useCan, useRouteParams } from '@/lib/session';
+import { boxArt } from '@/lib/twitch';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { Confirm, Dialog } from '@/ui/Dialog';
@@ -555,6 +557,31 @@ function OverlayButton({
 	);
 }
 
+/** Two lines of title at most, and always the room of two: every card has the same height. */
+const CARD_TITLE = 'text-body line-clamp-2 min-h-[2lh] leading-snug font-semibold';
+
+/**
+ * The line under a card's title, never wrapped: when (the full date on hover), the game (its box
+ * art on hover, the name cut first when room runs out), and one more fact.
+ */
+function CardMeta({ at, game, extra }: { at: number | null; game: string | null; extra: string | null }) {
+	return (
+		<p className="text-small text-muted tabular flex min-w-0 items-baseline gap-1.5 whitespace-nowrap [&>*+*]:before:mr-1.5 [&>*+*]:before:content-['·']">
+			{at == null ? null : (
+				<span data-tip={formatDateFull(at)} className="flex-none">
+					{formatDateTime(at)}
+				</span>
+			)}
+			{game ? (
+				<span data-tip={game} data-tip-poster={boxArt(game, 144)} className="min-w-0 truncate">
+					{game}
+				</span>
+			) : null}
+			{extra ? <span className="flex-none">{extra}</span> : null}
+		</p>
+	);
+}
+
 /** Drawn again only when its recording changed: the page's refresh keeps the others as they were. */
 const StreamCard = memo(function StreamCard({
 	stream,
@@ -589,9 +616,6 @@ const StreamCard = memo(function StreamCard({
 	const quality = formatQuality(stream.height, stream.fps, stream.video_codec);
 	const title = stream.title || t.stream.untitled;
 	const progress = recording ? null : watched(stream.id);
-	// Kept recordings show their mark at all times; the other buttons come with the pointer.
-	const reveal =
-		'opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100';
 
 	return (
 		<article className="group flex flex-col gap-3">
@@ -649,29 +673,25 @@ const StreamCard = memo(function StreamCard({
 				{!recording && (canKeep || canDelete) ? (
 					<span className="absolute top-2.5 right-2.5 flex gap-1.5">
 						{canDelete ? (
-							<span className={reveal}>
-								<OverlayButton
-									label={t.stream.delete}
-									danger
-									onClick={() => {
-										setDeleting(true);
-									}}
-								>
-									<Trash2 size={16} />
-								</OverlayButton>
-							</span>
+							<OverlayButton
+								label={t.stream.delete}
+								danger
+								onClick={() => {
+									setDeleting(true);
+								}}
+							>
+								<Trash2 size={16} />
+							</OverlayButton>
 						) : null}
 						{canKeep ? (
-							<span className={stream.keep_forever ? '' : reveal}>
-								<OverlayButton
-									label={stream.keep_forever ? t.stream.unkeep : t.stream.keep}
-									pressed={stream.keep_forever}
-									disabled={keeping}
-									onClick={() => void toggleKeep()}
-								>
-									<Bookmark size={16} fill={stream.keep_forever ? 'currentColor' : 'none'} />
-								</OverlayButton>
-							</span>
+							<OverlayButton
+								label={stream.keep_forever ? t.stream.unkeep : t.stream.keep}
+								pressed={stream.keep_forever}
+								disabled={keeping}
+								onClick={() => void toggleKeep()}
+							>
+								<Bookmark size={16} fill={stream.keep_forever ? 'currentColor' : 'none'} />
+							</OverlayButton>
 						) : null}
 					</span>
 				) : null}
@@ -687,25 +707,22 @@ const StreamCard = memo(function StreamCard({
 			</div>
 			<div className="flex min-w-0 flex-col gap-1.5">
 				{recording ? (
-					<span className="text-body line-clamp-2 leading-snug font-semibold">{title}</span>
+					<span className={CARD_TITLE}>{title}</span>
 				) : (
 					<Link
 						to="/$login/$id"
 						params={params}
-						className="text-body hover:text-accent-text line-clamp-2 leading-snug font-semibold transition-colors"
+						title={title}
+						className={`${CARD_TITLE} hover:text-accent-text transition-colors`}
 					>
 						{title}
 					</Link>
 				)}
-				<p className="text-small text-muted tabular">
-					{[
-						formatDate(stream.started_at),
-						stream.game,
-						stream.size_bytes > 0 ? formatBytes(stream.size_bytes) : null,
-					]
-						.filter(Boolean)
-						.join(' · ')}
-				</p>
+				<CardMeta
+					at={stream.started_at}
+					game={stream.game}
+					extra={stream.size_bytes > 0 ? formatBytes(stream.size_bytes) : null}
+				/>
 			</div>
 			<Confirm
 				open={deleting}
@@ -780,20 +797,12 @@ const VideoCard = memo(function VideoCard({ video, fallback }: { video: TwitchVi
 					href={href}
 					target="_blank"
 					rel="noreferrer"
-					className="text-body hover:text-accent-text line-clamp-2 leading-snug font-semibold transition-colors"
+					className={`${CARD_TITLE} hover:text-accent-text transition-colors`}
 					title={video.title}
 				>
 					{video.title || t.stream.untitled}
 				</a>
-				<p className="text-small text-muted tabular">
-					{[
-						video.created_at ? formatDate(video.created_at) : null,
-						video.game,
-						t.channel.views(formatNumber(video.views)),
-					]
-						.filter(Boolean)
-						.join(' · ')}
-				</p>
+				<CardMeta at={video.created_at} game={video.game} extra={t.channel.views(formatNumber(video.views))} />
 			</div>
 		</article>
 	);

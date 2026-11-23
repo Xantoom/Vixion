@@ -33,7 +33,19 @@ export interface Engine {
 	seek(time: number): void;
 	setVolume(level: number, muted: boolean): void;
 	setCompressor(enabled: boolean): void;
+	/** The picture on screen, at the video's own size, as a PNG; null before the first one. */
+	snapshot(): Promise<Blob | null>;
 	dispose(): void;
+}
+
+async function canvasPng(canvas: HTMLCanvasElement): Promise<Blob | null> {
+	return new Promise((resolve) => {
+		try {
+			canvas.toBlob(resolve, 'image/png');
+		} catch {
+			resolve(null);
+		}
+	});
 }
 
 /** Mediabunny needs WebCodecs, which browsers only give secure pages (HTTPS or localhost). */
@@ -188,6 +200,11 @@ export class MediabunnyEngine implements Engine {
 
 	attach(container: HTMLElement) {
 		container.replaceChildren(this.canvas);
+	}
+
+	async snapshot() {
+		if (!this.videoTrack) return null;
+		return canvasPng(this.canvas);
 	}
 
 	time(): number {
@@ -553,6 +570,16 @@ export class ElementEngine implements Engine {
 
 	attach(container: HTMLElement) {
 		container.replaceChildren(this.video);
+	}
+
+	async snapshot() {
+		const { video } = this;
+		if (video.readyState < 2 || !video.videoWidth) return null;
+		const canvas = document.createElement('canvas');
+		canvas.width = video.videoWidth;
+		canvas.height = video.videoHeight;
+		canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+		return canvasPng(canvas);
 	}
 
 	time(): number {

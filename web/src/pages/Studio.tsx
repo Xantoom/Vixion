@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
+	Camera,
 	MessageSquareOff,
 	MessageSquareText,
 	AudioLines,
@@ -30,16 +31,18 @@ import { formatClock, formatDate, formatDuration, formatQuality } from '@/lib/fo
 import { resumeAt, saveProgress } from '@/lib/progress';
 import { streamQuery } from '@/lib/queries';
 import { useCan, useRouteParams } from '@/lib/session';
+import { boxArt } from '@/lib/twitch';
 import { ChatPanel } from '@/player/ChatPanel';
 import { type Clock, createClock, useClock } from '@/player/clock';
 import { type Engine, type EngineError, type PlaybackState, createEngine } from '@/player/engine';
 import { createPreview } from '@/player/preview';
-import { Timeline, boxArt } from '@/player/Timeline';
+import { Timeline } from '@/player/Timeline';
 import { usePrefs } from '@/stores/prefs';
 import { Avatar } from '@/ui/Avatar';
 import { Button, buttonClass } from '@/ui/Button';
 import { Menu, MenuDivider, MenuItem, type MenuTriggerProps } from '@/ui/Menu';
 import { PageLoading, Spinner } from '@/ui/Spinner';
+import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
 import { LiveDot } from './Streamers';
 
@@ -430,6 +433,26 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 		[seekTo],
 	);
 
+	// The frame on screen, saved as a PNG at the video's own size, named after the channel and the time.
+	const snapshot = async () => {
+		const current = engine.current;
+		const blob = current ? await current.snapshot() : null;
+		if (!current || !blob) {
+			toast.error(t.player.snapshotFailed);
+			return;
+		}
+		const at = formatClock(current.time()).replaceAll(':', '-');
+		const link = document.createElement('a');
+		link.href = URL.createObjectURL(blob);
+		link.download = `${stream.streamer_login}-${stream.id}-${at}.png`;
+		document.body.append(link);
+		link.click();
+		link.remove();
+		setTimeout(() => {
+			URL.revokeObjectURL(link.href);
+		}, 10_000);
+	};
+
 	const refresh = async () => {
 		const fresh = await reload();
 		if (!fresh) return;
@@ -504,6 +527,10 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 		}
 		if (handled) {
 			event.preventDefault();
+			// A button clicked before the key would turn keyboard-focused and keep the bar shown
+			// for good: the shortcut leaves the focus on the page instead.
+			const focused = document.activeElement;
+			if (focused instanceof HTMLElement && stage.current?.contains(focused)) focused.blur();
 			poke();
 		}
 	});
@@ -532,19 +559,16 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 	return (
 		<div
 			ref={root}
-			// Side by side on wide screens and on any screen held sideways: the video takes the full
-			// height and the chat what is left of the width, within bounds. Stacked when held upright.
-			style={
-				{
-					'--chat-width': 'clamp(min(20rem, 32vw), calc(100vw - 100dvh * 16 / 9), 36rem)',
-				} as React.CSSProperties
-			}
-			className={`bg-bg flex h-dvh flex-col ${chatHidden ? '' : 'landscape:grid landscape:grid-cols-[minmax(0,1fr)_var(--chat-width)] lg:grid lg:grid-cols-[minmax(0,1fr)_var(--chat-width)]'} ${pseudoFullscreen ? 'fixed inset-0 z-[60]' : ''}`}
+			// Side by side on wide screens and on any screen held sideways (`.studio` in app.css sets
+			// the chat's width: what the video leaves); stacked when held upright. The chat column
+			// slides shut rather than vanishing.
+			style={{ '--chat-track': chatHidden ? '0px' : 'var(--chat-width)' } as React.CSSProperties}
+			className={`studio bg-bg flex h-dvh flex-col landscape:grid landscape:grid-cols-[minmax(0,1fr)_var(--chat-track)] lg:grid lg:grid-cols-[minmax(0,1fr)_var(--chat-track)] ${pseudoFullscreen ? 'fixed inset-0 z-[60]' : ''}`}
 		>
 			<section
 				ref={stage}
 				aria-label={stream.title || t.stream.untitled}
-				className={`@container relative bg-black select-none ${chatHidden ? 'min-h-0 flex-1' : 'flex-none landscape:h-full landscape:min-h-0 lg:h-full lg:min-h-0 max-lg:portrait:aspect-video max-lg:portrait:max-h-[60dvh]'} ${overlay ? '' : 'cursor-none'}`}
+				className={`@container relative min-h-0 bg-black select-none landscape:h-full lg:h-full ${chatHidden ? 'flex-1' : 'flex-none max-lg:portrait:aspect-video max-lg:portrait:max-h-[60dvh]'} ${overlay ? '' : 'cursor-none'}`}
 				onPointerMove={() => {
 					setHovering(true);
 					poke();
@@ -636,8 +660,9 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 				<StreamOverlay stream={stream} visible={overlay} />
 
 				{/* Controls */}
+				{/* The shade itself lets clicks through to the picture: only the bar and its buttons take them. */}
 				<div
-					className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-2 pt-8 pb-1 text-white transition-opacity duration-300 @md:px-3 @md:pt-14 @md:pb-2 @2xl:px-5 @2xl:pb-3 ${overlay ? 'opacity-100' : 'pointer-events-none opacity-0 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100'}`}
+					className={`pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-2 pt-8 pb-1 text-white transition-opacity duration-300 @md:px-3 @md:pt-14 @md:pb-2 @2xl:px-5 @2xl:pb-3 ${overlay ? 'opacity-100 *:pointer-events-auto' : 'opacity-0 has-[:focus-visible]:opacity-100 has-[:focus-visible]:*:pointer-events-auto'}`}
 				>
 					<PlayheadTimeline
 						clock={clock}
@@ -755,6 +780,13 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 							</Menu>
 						) : null}
 						<PlayerButton
+							label={t.player.snapshot}
+							className="@max-sm:hidden"
+							onClick={() => void snapshot()}
+						>
+							<Camera size={21} />
+						</PlayerButton>
+						<PlayerButton
 							label={chatHidden ? t.player.showChat : t.player.hideChat}
 							pressed={!chatHidden}
 							onClick={toggleChat}
@@ -772,14 +804,19 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 			</section>
 
 			<aside
-				className={`border-line relative min-h-0 flex-1 flex-col border-t landscape:border-t-0 landscape:border-l lg:border-t-0 lg:border-l ${chatHidden ? 'hidden' : 'flex'}`}
+				inert={chatHidden}
+				aria-hidden={chatHidden || undefined}
+				className={`relative min-h-0 min-w-0 flex-1 overflow-hidden ${chatHidden ? 'max-lg:portrait:hidden' : ''}`}
 			>
-				<ChatAtPlayhead
-					clock={clock}
-					streamId={stream.id}
-					hasChat={stream.chat_messages > 0}
-					onSeek={seekToMs}
-				/>
+				{/* Its own width while the column slides: the lines don't wrap again at every step. */}
+				<div className="border-line flex h-full min-h-0 flex-col border-t landscape:w-(--chat-width) landscape:border-t-0 landscape:border-l lg:w-(--chat-width) lg:border-t-0 lg:border-l">
+					<ChatAtPlayhead
+						clock={clock}
+						streamId={stream.id}
+						hasChat={stream.chat_messages > 0}
+						onSeek={seekToMs}
+					/>
+				</div>
 			</aside>
 		</div>
 	);
@@ -853,7 +890,8 @@ function StreamOverlay({ stream, visible }: { stream: StreamDetail; visible: boo
 	const quality = formatQuality(stream.height, stream.fps, stream.video_codec);
 	return (
 		<div
-			className={`absolute inset-x-0 top-0 bg-gradient-to-b from-black/85 via-black/45 to-transparent px-2.5 pt-2 pb-8 text-white transition-opacity duration-300 @md:px-3 @md:pt-3 @md:pb-16 @2xl:px-5 @2xl:pt-4 ${visible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+			// Only its links take clicks: anywhere else, a click goes to the picture and pauses.
+			className={`pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/85 via-black/45 to-transparent px-2.5 pt-2 pb-8 text-white transition-opacity duration-300 @md:px-3 @md:pt-3 @md:pb-16 @2xl:px-5 @2xl:pt-4 ${visible ? 'opacity-100 [&_a]:pointer-events-auto' : 'opacity-0'}`}
 		>
 			{/* On a small player: the title and who; the rest waits for room. */}
 			<div className="flex items-center gap-3.5">

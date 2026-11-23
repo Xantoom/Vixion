@@ -399,6 +399,20 @@ dialog::backdrop {
 	animation: live-pulse 2.4s ease-in-out infinite;
 }
 
+/*
+ * The player beside its chat. On a desktop the video fills the height (16:9) and the chat takes
+ * what width is left, never less than a narrow column; a phone held sideways keeps a fair share
+ * for the chat. Showing or hiding the chat slides its column.
+ */
+.studio {
+	--chat-width: clamp(min(20rem, 32vw), calc(100vw - 100dvh * 16 / 9), 36rem);
+	transition: grid-template-columns 300ms var(--ease-out-soft);
+
+	@media (width >= 64rem) {
+		--chat-width: max(12rem, calc(100vw - 100dvh * 16 / 9));
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	*,
 	*::before,

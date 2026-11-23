@@ -71,7 +71,7 @@ function Emote({
 }: {
 	name: string;
 	src: string;
-	srcSet: string;
+	srcSet?: string;
 	big: string;
 	from: string;
 	/** Twitch's emotes are all square: their room is kept before they load, so lines don't move. */
@@ -89,8 +89,9 @@ function Emote({
 			// after its line pushes the lines around on every jump.
 			referrerPolicy="no-referrer"
 			// Sized by the text around it and overflowing the line a little, as on Twitch: the lines
-			// keep their spacing whether or not they hold an emote.
-			className={`-my-[0.3em] inline-block h-[1.75em] max-w-full align-middle ${square ? 'w-[1.75em]' : 'w-auto'}`}
+			// keep their spacing whether or not they hold an emote. Never stretched, whatever room
+			// it is given.
+			className={`-my-[0.3em] inline-block h-[1.75em] max-w-full object-contain align-middle ${square ? 'w-[1.75em]' : 'w-auto'}`}
 		/>
 	);
 }
@@ -108,8 +109,10 @@ function Message({ text, emotes, assets }: { text: string; emotes: string | unde
 						// oxlint-disable-next-line no-array-index-key
 						key={index}
 						name={part.name}
-						src={`${TWITCH_EMOTES}/${part.emote}/default/dark/1.0`}
-						srcSet={`${TWITCH_EMOTES}/${part.emote}/default/dark/2.0 2x`}
+						// Drawn smaller than its larger files, never larger than its smallest: the 1x file
+						// blown up on a screen scaled 125 % (most Windows laptops) is what looked blurry.
+						src={`${TWITCH_EMOTES}/${part.emote}/default/dark/2.0`}
+						srcSet={`${TWITCH_EMOTES}/${part.emote}/default/dark/2.0 1x, ${TWITCH_EMOTES}/${part.emote}/default/dark/3.0 2x`}
 						big={`${TWITCH_EMOTES}/${part.emote}/default/dark/3.0`}
 						square
 						from="Twitch"
@@ -124,8 +127,7 @@ function Message({ text, emotes, assets }: { text: string; emotes: string | unde
 									// oxlint-disable-next-line no-array-index-key
 									key={at}
 									name={word}
-									src={emote[0]}
-									srcSet={`${emote[1]} 2x`}
+									src={emote[1]}
 									big={emote[1]}
 									from={emote[2]}
 								/>

@@ -9,6 +9,7 @@ import {
 import { useT } from '@/i18n';
 import type { StreamDetail } from '@/lib/api';
 import { formatClock, formatDuration } from '@/lib/format';
+import { boxArt } from '@/lib/twitch';
 import type { Preview } from './preview';
 
 type Chapter = StreamDetail['chapters'][number];
@@ -17,11 +18,6 @@ interface Segment {
 	start: number;
 	end: number;
 	chapter: Chapter | null;
-}
-
-/** Box art of a Twitch category, from its name. */
-export function boxArt(game: string): string {
-	return `https://static-cdn.jtvnw.net/ttv-boxart/${encodeURIComponent(game)}-72x96.jpg`;
 }
 
 /**

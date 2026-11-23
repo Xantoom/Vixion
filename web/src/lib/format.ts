@@ -97,6 +97,24 @@ export function formatDate(at: number, withTime = true): string {
 	return cached('date', options, (locale) => new Intl.DateTimeFormat(locale, options)).format(at);
 }
 
+/** 23/11/2026 14:05, in the reader's own order: short enough for a card. */
+export function formatDateTime(at: number): string {
+	const options: Intl.DateTimeFormatOptions = {
+		day: '2-digit',
+		month: '2-digit',
+		year: 'numeric',
+		hour: 'numeric',
+		minute: '2-digit',
+	};
+	return cached('date', options, (locale) => new Intl.DateTimeFormat(locale, options)).format(at);
+}
+
+/** Monday 23 November 2026 at 14:05: the whole date, for a tooltip. */
+export function formatDateFull(at: number): string {
+	const options: Intl.DateTimeFormatOptions = { dateStyle: 'full', timeStyle: 'short' };
+	return cached('date', options, (locale) => new Intl.DateTimeFormat(locale, options)).format(at);
+}
+
 export function formatNumber(value: number): string {
 	return numberFormat({ notation: value >= 100_000 ? 'compact' : 'standard' }).format(value);
 }
