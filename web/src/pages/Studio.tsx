@@ -560,8 +560,8 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 		<div
 			ref={root}
 			// Side by side on wide screens and on any screen held sideways (`.studio` in app.css sets
-			// the chat's width: what the video leaves); stacked when held upright. The chat column
-			// slides shut rather than vanishing.
+			// the chat's width); stacked when held upright. The chat column slides shut rather than
+			// vanishing.
 			style={{ '--chat-track': chatHidden ? '0px' : 'var(--chat-width)' } as React.CSSProperties}
 			className={`studio bg-bg flex h-dvh flex-col landscape:grid landscape:grid-cols-[minmax(0,1fr)_var(--chat-track)] lg:grid lg:grid-cols-[minmax(0,1fr)_var(--chat-track)] ${pseudoFullscreen ? 'fixed inset-0 z-[60]' : ''}`}
 		>

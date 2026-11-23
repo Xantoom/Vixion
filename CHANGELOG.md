@@ -9,6 +9,11 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Changed
+
+- The player's chat column is wider on desktop, matching Twitch's theatre mode (around 340 px, expanding into spare
+  width on ultrawide screens).
+
 ## [0.4.4] - 2026-11-23
 
 ### Security
