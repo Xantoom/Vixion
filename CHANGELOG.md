@@ -12,6 +12,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 ### Changed
 
 - Scrollbars are rounded and thicken under the pointer, without the arrow buttons Windows draws (xantoom-design 0.2.1).
+- The stylesheet only loads the design system's foundation (tokens, reset, base, motion, utilities), not its unused
+  components, so it is lighter (xantoom-design 0.2.2).
 
 ### Fixed
 
@@ -224,7 +226,7 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
   `VIXION_MEDIA_DOMAIN` with a Cloudflare token or certificate files turns HTTPS on by itself.
 - The Twitch token is required: Vixion doesn't start without `VIXION_TWITCH_TOKEN`. One saved from the interface by
   an earlier version still works, with a warning in the log.
-- *Settings* no longer reveals or copies the Twitch token.
+- _Settings_ no longer reveals or copies the Twitch token.
 
 ### Fixed
 
