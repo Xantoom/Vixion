@@ -22,7 +22,7 @@ const VARIANTS: Record<Variant, string> = {
  */
 export function buttonClass(variant: Variant = 'secondary', size: 'sm' | 'md' = 'md'): string {
 	const height = size === 'sm' ? 'h-8 px-3 text-small rounded-xs' : 'h-10 px-4.5 text-ui rounded-sm';
-	return `relative inline-flex items-center justify-center gap-2 whitespace-nowrap transition-[filter,background-color,opacity] duration-150 active:scale-[0.98] ${height} ${VARIANTS[variant]}`;
+	return `relative inline-flex items-center justify-center gap-2 whitespace-nowrap transition-[filter,background-color,opacity] duration-150 motion-safe:active:scale-[0.98] ${height} ${VARIANTS[variant]}`;
 }
 
 export function Button({

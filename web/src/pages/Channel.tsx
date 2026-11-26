@@ -628,7 +628,7 @@ const StreamCard = memo(function StreamCard({
 						alt=""
 						loading="lazy"
 						decoding="async"
-						className={`size-full object-cover transition-transform duration-500 ease-(--ease-out-soft) ${recording ? 'opacity-50' : 'group-hover:scale-[1.03]'}`}
+						className={`size-full object-cover transition-transform duration-500 ease-(--ease-out-soft) ${recording ? 'opacity-50' : 'motion-safe:group-hover:scale-[1.03]'}`}
 					/>
 				) : recording ? null : (
 					// No picture yet (or none could be taken): a quiet mark rather than an empty box.
@@ -779,7 +779,7 @@ const VideoCard = memo(function VideoCard({ video, fallback }: { video: TwitchVi
 						alt=""
 						loading="lazy"
 						referrerPolicy="no-referrer"
-						className="size-full object-cover transition-transform duration-500 ease-(--ease-out-soft) group-hover:scale-[1.03]"
+						className="size-full object-cover transition-transform duration-500 ease-(--ease-out-soft) motion-safe:group-hover:scale-[1.03]"
 					/>
 				) : null}
 				<span className="absolute top-2.5 right-2.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">

@@ -11,7 +11,8 @@
 		"lint": "oxlint src --type-aware --type-check",
 		"fmt": "oxfmt src --write",
 		"fmt:check": "oxfmt src --check",
-		"test": "bun test src"
+		"test": "bun test src",
+		"postinstall": "cd .. && xantoom-design sync"
 	},
 	"dependencies": {
 		"@fontsource-variable/inter": "^5.3.0",
@@ -22,6 +23,7 @@
 		"mediabunny": "^1.66.0",
 		"react": "^19.3.1",
 		"react-dom": "^19.3.1",
+		"xantoom-design": "github:Xantoom/xantoom-design#v0.1.2",
 		"zustand": "^5.1.0"
 	},
 	"devDependencies": {

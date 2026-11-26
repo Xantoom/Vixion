@@ -619,7 +619,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						type="button"
 						aria-label={t.player.play}
 						onClick={togglePlay}
-						className="absolute top-1/2 left-1/2 grid size-14 -translate-x-1/2 @max-md:hidden -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition-transform duration-150 hover:scale-105 @md:size-20"
+						className="absolute top-1/2 left-1/2 grid size-14 -translate-x-1/2 @max-md:hidden -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition-transform duration-150 motion-safe:hover:scale-105 @md:size-20"
 					>
 						<Play fill="currentColor" className="ml-1 size-6 @md:size-[34px]" />
 					</button>

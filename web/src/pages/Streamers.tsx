@@ -137,7 +137,7 @@ const StreamerCard = memo(function StreamerCard({ streamer, priority }: { stream
 		<Link
 			to="/$login"
 			params={{ login: streamer.login }}
-			className={`group bg-card ring-line flex h-full flex-col overflow-hidden rounded-md shadow-(--shadow-card) ring-1 transition-[box-shadow,translate] duration-200 hover:-translate-y-0.5 hover:shadow-(--shadow-lift)`}
+			className={`group bg-card ring-line flex h-full flex-col overflow-hidden rounded-md shadow-(--shadow-card) ring-1 transition-[box-shadow,translate] duration-200 motion-safe:hover:-translate-y-0.5 hover:shadow-(--shadow-lift)`}
 		>
 			{/* Not recorded: the pictures fade, the words stay readable and say so. */}
 			<div
@@ -146,7 +146,7 @@ const StreamerCard = memo(function StreamerCard({ streamer, priority }: { stream
 				<Banner
 					streamer={streamer}
 					priority={priority}
-					className="transition-transform duration-500 ease-(--ease-out-soft) group-hover:scale-[1.04]"
+					className="transition-transform duration-500 ease-(--ease-out-soft) motion-safe:group-hover:scale-[1.04]"
 				/>
 			</div>
 			<div className="flex items-center gap-4 px-5 pt-0 pb-5">

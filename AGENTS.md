@@ -54,3 +54,11 @@ cargo test --profile ci --locked
   marketing copy, `cursor: pointer` on everything clickable, in-app dialogs only, both themes and both languages
   checked.
 - AGPL-3.0: new dependencies must have a compatible licence.
+
+<!-- xantoom-design:start -->
+
+## Design system
+
+This project uses the Xantoom design system. Before any UI work (pages, components, styles, motion, icons,
+layout), read `.agents/skills/xantoom-design/SKILL.md` and follow it.
+<!-- xantoom-design:end -->
