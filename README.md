@@ -1,9 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.svg" />
-  <img alt="Vixion" src=".github/logo-light.svg" width="72" height="72" />
-</picture>
+<img alt="Vixion" src=".github/logo.svg" width="72" height="72" />
 
 # Vixion
 

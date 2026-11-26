@@ -9,6 +9,10 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Changed
+
+- New logo: the same ring, V and live dot on a warm gradient tile, one drawing for both themes.
+
 ## [0.4.5] - 2026-11-23
 
 ### Changed

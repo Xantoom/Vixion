@@ -52,9 +52,6 @@
 	/* 3:1 against every surface it crosses, so how far a page has scrolled can be seen. */
 	--scroll-thumb: light-dark(rgb(17 17 19 / 0.48), rgb(243 243 245 / 0.4));
 	--scroll-thumb-hover: light-dark(rgb(17 17 19 / 0.62), rgb(243 243 245 / 0.55));
-	/* The logo: Vixeeny's near-black tile, turned light on a dark page. */
-	--logo-tile: light-dark(#131416, #f3f3f5);
-	--logo-mark: light-dark(#ffffff, #131416);
 }
 
 :root[data-theme='light'] {
