@@ -9,6 +9,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-11-26
+
 ### Changed
 
 - Scrollbars are rounded and thicken under the pointer, without the arrow buttons Windows draws (xantoom-design 0.2.1).
@@ -313,7 +315,8 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 - The release workflow's write access is limited to its last step, and actions are pinned by commit.
 - The compose file runs the container read-only, without capabilities or privilege escalation.
 
-[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/Xantoom/Vixion/compare/v0.4.7...HEAD
+[0.4.7]: https://github.com/Xantoom/Vixion/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/Xantoom/Vixion/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/Xantoom/Vixion/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/Xantoom/Vixion/compare/v0.4.3...v0.4.4
