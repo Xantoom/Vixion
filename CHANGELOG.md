@@ -9,6 +9,14 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Changed
+
+- Scrollbars are rounded and thicken under the pointer, without the arrow buttons Windows draws (xantoom-design 0.2.1).
+
+### Fixed
+
+- The stage behind a recording is darker than the page in both themes again.
+
 ## [0.4.6] - 2026-11-26
 
 ### Changed

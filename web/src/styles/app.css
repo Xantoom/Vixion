@@ -15,7 +15,7 @@
 :root {
 	--bg: var(--x-bg);
 	/* Behind the recordings and the player: a step below the ground. */
-	--canvas: color-mix(in oklab, var(--x-bg) 88%, var(--x-fg));
+	--canvas: light-dark(color-mix(in oklab, var(--x-bg) 97%, black), color-mix(in oklab, var(--x-bg) 55%, black));
 	--surface: var(--x-raised);
 	--card: var(--x-raised);
 	--surface-2: color-mix(in oklab, var(--x-raised) 92%, var(--x-fg));
@@ -154,36 +154,12 @@
 	}
 
 	body {
-		background: var(--bg);
-		color: var(--ink);
-		font-family: var(--font-sans);
-		font-size: 1rem;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 		-webkit-tap-highlight-color: transparent;
 	}
 
-	a[href],
-	button:not(:disabled),
-	[role='button']:not([aria-disabled='true']),
-	[role='tab'],
-	[role='switch'],
-	[role='menuitem'],
-	[role='menuitemradio'],
-	input[type='checkbox'],
-	input[type='radio'],
-	input[type='range'],
-	select:not(:disabled),
-	label[for],
-	label:has(input[type='checkbox'], input[type='radio']),
-	summary {
-		cursor: pointer;
-	}
-
-	button:disabled {
-		cursor: not-allowed;
-	}
-
+	/* A button busy with its own work. */
 	button[aria-disabled='true'] {
 		cursor: progress;
 	}
