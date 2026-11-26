@@ -45,9 +45,6 @@
 	--on-dark-danger: #ff6b57;
 	--shadow-card: var(--x-shadow-sm);
 	--shadow-lift: var(--x-shadow-md);
-	/* 3:1 against every surface it crosses, so how far a page has scrolled can be seen. */
-	--scroll-thumb: light-dark(rgb(17 17 19 / 0.48), rgb(243 243 245 / 0.4));
-	--scroll-thumb-hover: light-dark(rgb(17 17 19 / 0.62), rgb(243 243 245 / 0.55));
 }
 
 @theme inline {
@@ -190,59 +187,12 @@
 	button[aria-disabled='true'] {
 		cursor: progress;
 	}
-
-	/* The standard properties; the old WebKit pseudo-elements only where they are missing. */
-	* {
-		scrollbar-width: thin;
-		scrollbar-color: var(--scroll-thumb) transparent;
-	}
-
-	@supports not (scrollbar-color: auto) {
-		::-webkit-scrollbar {
-			width: 12px;
-			height: 12px;
-		}
-
-		::-webkit-scrollbar-track,
-		::-webkit-scrollbar-corner {
-			background: transparent;
-		}
-
-		::-webkit-scrollbar-thumb {
-			min-width: 40px;
-			min-height: 40px;
-			border: 3.5px solid transparent;
-			border-radius: 99px;
-			background: var(--scroll-thumb) padding-box;
-		}
-
-		::-webkit-scrollbar-thumb:hover,
-		::-webkit-scrollbar-thumb:active {
-			border-width: 2px;
-			background-color: var(--scroll-thumb-hover);
-		}
-	}
 }
 
 /* What the accent fills: a button, a switch that is on, a bar. */
 @utility bg-accent-fill {
 	background-color: var(--accent);
 	background-image: var(--accent-gradient);
-}
-
-@utility tabular {
-	font-variant-numeric: tabular-nums;
-}
-
-/* On a touchscreen, a control smaller than a finger takes a 44 px band around it. */
-@utility touch-target {
-	@media (pointer: coarse) {
-		&::before {
-			content: '';
-			position: absolute;
-			inset: min(0px, calc((100% - 2.75rem) / 2));
-		}
-	}
 }
 
 /* Things that open (menus, lists, tooltips) grow out of what opened them. */
@@ -266,18 +216,6 @@
 .tooltip-in {
 	--from-y: 3px;
 	animation: menu-in 120ms var(--ease-out-soft);
-}
-
-@keyframes panel-in {
-	from {
-		opacity: 0;
-		transform: translateY(10px);
-	}
-}
-
-/* A page's content coming in. */
-.panel-in {
-	animation: panel-in 260ms var(--ease-out-soft) backwards;
 }
 
 @keyframes fade-in {
@@ -324,12 +262,6 @@ details.fold::details-content {
 details.fold[open]::details-content {
 	block-size: auto;
 	opacity: 1;
-}
-
-/* Cards in a grid come in one after the other, a beat apart. */
-.stagger > * {
-	animation: panel-in 320ms var(--ease-out-soft) backwards;
-	animation-delay: calc(min(var(--i, 0), 12) * 28ms);
 }
 
 @keyframes dialog-in {
@@ -383,7 +315,10 @@ dialog::backdrop {
 	transition: grid-template-columns 300ms var(--ease-out-soft);
 }
 
-/* Without motion, what moves only fades; hover lifts and zooms use Tailwind's motion-safe variant. */
+/*
+ * Without motion, what moves only fades. Hover lifts and zooms use Tailwind's motion-safe variant, and the design
+ * system's x-enter and x-stagger already only fade.
+ */
 @media (prefers-reduced-motion: reduce) {
 	.studio {
 		transition: none;
@@ -392,8 +327,6 @@ dialog::backdrop {
 	.reveal,
 	.menu-in,
 	.tooltip-in,
-	.panel-in,
-	.stagger > *,
 	dialog[open] {
 		animation: fade-in 120ms ease-out backwards !important;
 	}
@@ -437,21 +370,4 @@ dialog::backdrop {
 	border: 0;
 	border-radius: 50%;
 	background: #fff;
-}
-
-/* Chat lines: names keep their colour, readable on either theme. */
-.chat-name {
-	color: light-dark(color-mix(in oklab, var(--name) 70%, black), color-mix(in oklab, var(--name) 75%, white));
-}
-
-/*
- * A card far down a long list: skipped by layout and paint until it nears the screen. Its last
- * known size holds its place, so the scrollbar doesn't jump; it stays in the tab order and in
- * find in page. It clips its paint, so a margin of room keeps focus rings and the kept mark whole.
- */
-.render-when-seen {
-	content-visibility: auto;
-	contain-intrinsic-size: auto 22rem;
-	margin: -0.5rem;
-	padding: 0.5rem;
 }

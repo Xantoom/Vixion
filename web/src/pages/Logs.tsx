@@ -67,7 +67,7 @@ function AlertText({ alert }: { alert: Alert }) {
 const LogRow = memo(function LogRow({ line }: { line: LogEntry }) {
 	return (
 		<div className="hover:bg-surface flex flex-wrap gap-x-3 rounded-[3px] px-1 whitespace-pre-wrap sm:flex-nowrap">
-			<span className="text-muted flex-none tabular">{time(line.at)}</span>
+			<span className="text-muted flex-none x-tabular">{time(line.at)}</span>
 			<span className={`w-11 flex-none uppercase ${LEVEL_STYLE[line.level] ?? ''}`}>{line.level}</span>
 			<span className="min-w-0 break-words max-sm:basis-full max-sm:pb-1">
 				<span className="text-ink">{line.message}</span>
@@ -83,7 +83,7 @@ export function LogsPage() {
 	const can = useCan('logs.view');
 	if (!can) return <NotFound forbidden />;
 	return (
-		<div className="panel-in flex flex-col gap-8">
+		<div className="x-enter flex flex-col gap-8">
 			<Alerts />
 			<Console />
 		</div>

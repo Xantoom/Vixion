@@ -16,7 +16,7 @@ function AuthFrame({ title, lead, children }: { title: string; lead?: string; ch
 				<ThemeButton />
 				<LocaleMenu />
 			</div>
-			<div className="panel-in w-full max-w-sm">
+			<div className="x-enter w-full max-w-sm">
 				<div className="mb-8 flex flex-col items-center gap-4 text-center">
 					<Logo size={44} />
 					<div>

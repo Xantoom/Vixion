@@ -128,7 +128,7 @@ export function UsersPage() {
 	const roleById = new Map(roles.data.roles.map((role) => [role.id, role]));
 
 	return (
-		<div className="panel-in flex flex-col gap-8">
+		<div className="x-enter flex flex-col gap-8">
 			<Section
 				title={t.users.accounts}
 				count={users.data.length}

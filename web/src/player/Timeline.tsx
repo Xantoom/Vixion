@@ -230,7 +230,7 @@ export function Timeline({
 									{t.player.cut(formatDuration(nearCut[1]))}
 								</span>
 							) : null}
-							<span className="text-small tabular text-white/80">{formatClock(hover.at)}</span>
+							<span className="text-small x-tabular text-white/80">{formatClock(hover.at)}</span>
 						</span>
 					</div>
 				</div>

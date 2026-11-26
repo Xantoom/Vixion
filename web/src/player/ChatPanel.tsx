@@ -150,20 +150,20 @@ function Name({ line }: { line: ChatLine }) {
 	const name = line.n || line.u || '';
 	// Names in another script (日本語) or spelled differently: the login is what Twitch's URL uses.
 	const shown = line.n && line.u && line.n.toLowerCase() !== line.u ? `${line.n} (${line.u})` : name;
-	const style = { '--name': nameColor(line) } as React.CSSProperties;
+	const style = { '--x-color': nameColor(line) } as React.CSSProperties;
 	return line.u ? (
 		<a
 			href={`https://www.twitch.tv/${line.u}`}
 			target="_blank"
 			rel="noreferrer"
 			data-tip={t.player.openOnTwitch(shown)}
-			className="chat-name font-bold"
+			className="x-readable font-bold"
 			style={style}
 		>
 			{name}
 		</a>
 	) : (
-		<span className="chat-name font-bold" style={style}>
+		<span className="x-readable font-bold" style={style}>
 			{name}
 		</span>
 	);
@@ -191,7 +191,7 @@ const Line = memo(function Line({
 			}}
 			data-tip={t.player.seekHere}
 			data-tip-sub={formatDate(line.t)}
-			className="text-caption text-muted hover:text-accent-text tabular mr-2 rounded-xs align-baseline transition-colors pointer-coarse:-mx-1 pointer-coarse:px-1 pointer-coarse:py-1.5"
+			className="text-caption text-muted hover:text-accent-text x-tabular mr-2 rounded-xs align-baseline transition-colors pointer-coarse:-mx-1 pointer-coarse:px-1 pointer-coarse:py-1.5"
 		>
 			{formatClock(line.o / 1000)}
 		</button>

@@ -6,7 +6,7 @@ export function NotFound({ forbidden = false }: { forbidden?: boolean }) {
 	const t = useT();
 	const Icon = forbidden ? Lock : Compass;
 	return (
-		<div className="panel-in mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center gap-7 px-6 py-20 text-center">
+		<div className="x-enter mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center gap-7 px-6 py-20 text-center">
 			<span className="bg-surface text-muted grid size-16 place-items-center rounded-full">
 				<Icon size={28} />
 			</span>
@@ -30,7 +30,7 @@ export function NotFound({ forbidden = false }: { forbidden?: boolean }) {
 export function PageError({ error }: { error: unknown }) {
 	const t = useT();
 	return (
-		<div className="panel-in mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center gap-7 px-6 py-20 text-center">
+		<div className="x-enter mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center gap-7 px-6 py-20 text-center">
 			<span className="bg-surface text-muted grid size-16 place-items-center rounded-full">
 				<RotateCw size={28} />
 			</span>

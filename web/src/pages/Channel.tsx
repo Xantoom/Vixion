@@ -156,12 +156,12 @@ export function ChannelPage() {
 						) : streams.length === 0 ? (
 							<Empty>{streamer.monitored ? t.streamer.empty : t.streamer.emptyPaused}</Empty>
 						) : (
-							<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-6 gap-y-10">
+							<ul className="x-stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-6 gap-y-10">
 								{streams.map((stream, index) => (
 									<li
 										key={stream.id}
-										style={{ '--i': index } as React.CSSProperties}
-										className={index >= OFFSCREEN_FROM ? 'render-when-seen' : undefined}
+										style={{ '--x-index': index, '--x-lazy-size': '22rem' } as React.CSSProperties}
+										className={index >= OFFSCREEN_FROM ? 'x-lazy' : undefined}
 									>
 										<StreamCard
 											stream={stream}
@@ -175,12 +175,12 @@ export function ChannelPage() {
 							</ul>
 						)
 					) : profile && profile.videos.length > 0 ? (
-						<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-6 gap-y-10">
+						<ul className="x-stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-x-6 gap-y-10">
 							{profile.videos.map((video, index) => (
 								<li
 									key={video.id}
-									style={{ '--i': index } as React.CSSProperties}
-									className={index >= OFFSCREEN_FROM ? 'render-when-seen' : undefined}
+									style={{ '--x-index': index, '--x-lazy-size': '22rem' } as React.CSSProperties}
+									className={index >= OFFSCREEN_FROM ? 'x-lazy' : undefined}
 								>
 									<VideoCard
 										video={video}
@@ -231,7 +231,7 @@ function Tab({
 			className="text-ui text-muted hover:text-ink aria-selected:text-ink relative -mb-px flex h-12 items-center gap-2 px-3 font-semibold transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-transparent aria-selected:after:bg-accent-fill"
 		>
 			{children}
-			<span className="text-caption bg-surface tabular rounded-xs px-1.5 py-0.5 font-medium">{count}</span>
+			<span className="text-caption bg-surface x-tabular rounded-xs px-1.5 py-0.5 font-medium">{count}</span>
 		</button>
 	);
 }
@@ -246,7 +246,7 @@ function Hero({ data, name }: { data: Page; name: string }) {
 	const login = streamer?.login ?? profile?.login ?? '';
 
 	return (
-		<header className="panel-in">
+		<header className="x-enter">
 			<div className="bg-surface-2 relative h-36 overflow-hidden sm:h-52 lg:h-64">
 				{banner ? (
 					<img
@@ -519,7 +519,7 @@ function StreamerActions({ streamer }: { streamer: Streamer }) {
 function Pill({ children, className = '' }: { children: ReactNode; className?: string }) {
 	return (
 		<span
-			className={`text-caption tabular inline-flex items-center gap-1.5 rounded-xs px-1.5 py-0.5 font-semibold backdrop-blur-sm ${className || 'bg-black/70 text-white'}`}
+			className={`text-caption x-tabular inline-flex items-center gap-1.5 rounded-xs px-1.5 py-0.5 font-semibold backdrop-blur-sm ${className || 'bg-black/70 text-white'}`}
 		>
 			{children}
 		</span>
@@ -558,7 +558,7 @@ function OverlayButton({
 }
 
 /** Two lines of title at most, and always the room of two: every card has the same height. */
-const CARD_TITLE = 'text-body line-clamp-2 min-h-[2lh] leading-snug font-semibold';
+const CARD_TITLE = 'text-body line-clamp-2 leading-snug font-semibold';
 
 /**
  * The line under a card's title, never wrapped: when (the full date on hover), the game (its box
@@ -566,7 +566,7 @@ const CARD_TITLE = 'text-body line-clamp-2 min-h-[2lh] leading-snug font-semibol
  */
 function CardMeta({ at, game, extra }: { at: number | null; game: string | null; extra: string | null }) {
 	return (
-		<p className="text-small text-muted tabular flex min-w-0 items-baseline gap-1.5 whitespace-nowrap [&>*+*]:before:mr-1.5 [&>*+*]:before:content-['·']">
+		<p className="text-small text-muted x-tabular flex min-w-0 items-baseline gap-1.5 whitespace-nowrap [&>*+*]:before:mr-1.5 [&>*+*]:before:content-['·']">
 			{at == null ? null : (
 				<span data-tip={formatDateFull(at)} className="flex-none">
 					{formatDateTime(at)}

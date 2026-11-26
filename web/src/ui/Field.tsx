@@ -64,7 +64,7 @@ export function PasswordInput({ className = '', ...props }: Omit<InputHTMLAttrib
 				onClick={() => {
 					setShown((value) => !value);
 				}}
-				className="text-muted hover:text-ink touch-target absolute top-1/2 right-1 grid size-9 -translate-y-1/2 place-items-center rounded-xs transition-colors"
+				className="text-muted hover:text-ink x-touch-target absolute top-1/2 right-1 grid size-9 -translate-y-1/2 place-items-center rounded-xs transition-colors"
 			>
 				{shown ? <EyeOff size={18} /> : <Eye size={18} />}
 			</button>
@@ -153,7 +153,7 @@ export function NumberInput({
 						onChange(clamp(value + (event.key === 'ArrowUp' ? step : -step)));
 					}
 				}}
-				className="text-ui text-ink tabular h-full w-full min-w-0 bg-transparent text-right outline-none"
+				className="text-ui text-ink x-tabular h-full w-full min-w-0 bg-transparent text-right outline-none"
 				{...props}
 			/>
 			{unit ? <span className="text-small text-muted pl-1.5 whitespace-nowrap">{unit}</span> : null}

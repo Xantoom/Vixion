@@ -15,8 +15,8 @@ function Tile({ label, value, detail }: { label: string; value: string; detail?:
 		<div className="bg-card ring-line flex flex-col gap-4 rounded-md p-6 ring-1">
 			<span className="text-small text-muted font-medium">{label}</span>
 			<span className="flex flex-col gap-1">
-				<span className="text-heading tabular font-semibold tracking-tight">{value}</span>
-				{detail ? <span className="text-small text-muted tabular">{detail}</span> : null}
+				<span className="text-heading x-tabular font-semibold tracking-tight">{value}</span>
+				{detail ? <span className="text-small text-muted x-tabular">{detail}</span> : null}
 			</span>
 		</div>
 	);
@@ -49,7 +49,7 @@ export function StatsPage() {
 	];
 
 	return (
-		<div className="panel-in flex flex-col gap-8">
+		<div className="x-enter flex flex-col gap-8">
 			<div className="flex flex-col gap-4">
 				{/* The disk first: how much the recordings take, and how much room is left. Full width, so
 				    it is as tall as what it holds, not stretched to a column of tiles beside it. */}
@@ -57,12 +57,12 @@ export function StatsPage() {
 					<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
 						<div className="flex flex-col gap-2">
 							<h2 className="text-small text-muted font-medium">{t.stats.space}</h2>
-							<span className="text-display tabular font-semibold tracking-tight">
+							<span className="text-display x-tabular font-semibold tracking-tight">
 								{formatBytes(data.bytes)}
 							</span>
 						</div>
 						{disk.total > 0 ? (
-							<span className="text-small text-muted tabular pb-1">
+							<span className="text-small text-muted x-tabular pb-1">
 								{t.stats.diskFree(formatBytes(disk.free), formatBytes(disk.total))}
 							</span>
 						) : null}
@@ -90,13 +90,13 @@ export function StatsPage() {
 									<li key={segment.label} className="flex items-center gap-2">
 										<span className={`${segment.className} size-2.5 rounded-xs`} />
 										{segment.label}
-										<span className="text-muted tabular">{formatBytes(segment.value)}</span>
+										<span className="text-muted x-tabular">{formatBytes(segment.value)}</span>
 									</li>
 								))}
 								<li className="flex items-center gap-2">
 									<span className="bg-surface-2 ring-line-2 size-2.5 rounded-xs ring-1" />
 									{t.stats.free}
-									<span className="text-muted tabular">{formatBytes(disk.free)}</span>
+									<span className="text-muted x-tabular">{formatBytes(disk.free)}</span>
 								</li>
 							</ul>
 						</div>
@@ -131,7 +131,7 @@ export function StatsPage() {
 									<Avatar src={streamer.avatar_url} name={streamer.display_name} size={36} />
 									<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 										<span className="text-ui truncate font-semibold">{streamer.display_name}</span>
-										<span className="text-small text-muted tabular">
+										<span className="text-small text-muted x-tabular">
 											<span className="whitespace-nowrap">
 												{t.streamers.streams(streamer.streams)}
 											</span>
@@ -143,7 +143,7 @@ export function StatsPage() {
 									</span>
 									{/* The size, and a bar against the biggest streamer. */}
 									<span className="flex w-20 flex-none flex-col items-end gap-2 sm:w-48">
-										<span className="text-ui tabular font-medium">
+										<span className="text-ui x-tabular font-medium">
 											{formatBytes(streamer.bytes)}
 										</span>
 										<span className="bg-surface-2 h-1.5 w-full overflow-hidden rounded-xs">

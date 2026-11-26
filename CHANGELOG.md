@@ -12,6 +12,14 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 ### Changed
 
 - New logo: the same ring, V and live dot on a warm gradient tile, one drawing for both themes.
+- The interface is built on the Xantoom design system, shared with the other Xantoom apps: its grounds, text and
+  status colours, Inter first, softer corners, the accent as the focus ring, and two-layer shadows. The warm accent
+  gradient stays.
+- Under reduced motion, hover zooms and lifts no longer move, and the chat column no longer slides.
+
+### Fixed
+
+- A stream card whose title fits on one line no longer leaves an empty line before its date.
 
 ## [0.4.5] - 2026-11-23
 

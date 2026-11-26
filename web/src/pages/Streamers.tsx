@@ -34,7 +34,7 @@ export function StreamersPage() {
 					<>
 						{t.streamers.title}
 						{data && data.length > 0 ? (
-							<span className="text-muted ml-3 font-normal tabular">{data.length}</span>
+							<span className="text-muted ml-3 font-normal x-tabular">{data.length}</span>
 						) : null}
 					</>
 				}
@@ -44,7 +44,7 @@ export function StreamersPage() {
 			) : error ? (
 				<p className="text-ui text-danger py-10">{error.message}</p>
 			) : data.length === 0 ? (
-				<div className="panel-in border-line-2 flex flex-col items-center gap-3 rounded-lg border border-dashed px-6 py-20 text-center">
+				<div className="x-enter border-line-2 flex flex-col items-center gap-3 rounded-lg border border-dashed px-6 py-20 text-center">
 					<h2 className="text-title font-semibold">{t.streamers.emptyTitle}</h2>
 					{canManage ? (
 						<Button variant="accent" className="mt-3" onClick={focusChannelSearch}>
@@ -54,9 +54,9 @@ export function StreamersPage() {
 					) : null}
 				</div>
 			) : (
-				<ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,19rem),1fr))] gap-6 pb-12 2xl:grid-cols-[repeat(auto-fill,minmax(23rem,1fr))] 2xl:gap-7">
+				<ul className="x-stagger grid grid-cols-[repeat(auto-fill,minmax(min(100%,19rem),1fr))] gap-6 pb-12 2xl:grid-cols-[repeat(auto-fill,minmax(23rem,1fr))] 2xl:gap-7">
 					{sorted.map((streamer, index) => (
-						<li key={streamer.id} style={{ '--i': index } as React.CSSProperties}>
+						<li key={streamer.id} style={{ '--x-index': index } as React.CSSProperties}>
 							<StreamerCard
 								streamer={streamer}
 								priority={index < 6 ? (index === 0 ? 'high' : 'auto') : 'lazy'}

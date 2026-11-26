@@ -70,7 +70,7 @@ export function IconButton({
 			type={type}
 			aria-label={label}
 			data-tip={label}
-			className={`text-muted enabled:hover:bg-surface enabled:hover:text-ink aria-pressed:bg-accent-soft aria-pressed:text-accent-text touch-target relative grid flex-none place-items-center rounded-sm transition-colors duration-150 disabled:opacity-40 ${size === 'sm' ? 'size-8' : 'size-10'} ${className}`}
+			className={`text-muted enabled:hover:bg-surface enabled:hover:text-ink aria-pressed:bg-accent-soft aria-pressed:text-accent-text x-touch-target relative grid flex-none place-items-center rounded-sm transition-colors duration-150 disabled:opacity-40 ${size === 'sm' ? 'size-8' : 'size-10'} ${className}`}
 			{...props}
 		>
 			{children}

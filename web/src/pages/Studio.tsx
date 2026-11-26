@@ -733,7 +733,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						>
 							<AudioLines size={21} />
 						</PlayerButton>
-						<span className="text-ui tabular ml-2 whitespace-nowrap text-white">
+						<span className="text-ui x-tabular ml-2 whitespace-nowrap text-white">
 							<PlayheadTime clock={clock} scrub={scrub} />
 							<span className="text-white/55 @max-md:hidden"> / {formatClock(duration)}</span>
 						</span>
@@ -866,7 +866,7 @@ function PlayerButton({
 			data-tip={label}
 			aria-pressed={pressed}
 			onClick={onClick}
-			className={`touch-target relative grid size-10 flex-none place-items-center rounded-full text-white/90 transition-colors duration-150 hover:bg-white/15 hover:text-white aria-pressed:text-on-dark-accent sm:size-11 ${className}`}
+			className={`x-touch-target relative grid size-10 flex-none place-items-center rounded-full text-white/90 transition-colors duration-150 hover:bg-white/15 hover:text-white aria-pressed:text-on-dark-accent sm:size-11 ${className}`}
 		>
 			{children}
 			{pressed ? <span className="absolute bottom-1 size-1 rounded-full bg-current" /> : null}
@@ -1011,7 +1011,7 @@ function Chapters({
 				>
 					<div className="text-small flex flex-none items-center justify-between px-4 pt-3 pb-2 font-semibold text-white/60">
 						{t.player.chapters}
-						<span className="tabular">{chapters.length}</span>
+						<span className="x-tabular">{chapters.length}</span>
 					</div>
 					<ol ref={list} className="min-h-0 overflow-y-auto overscroll-contain px-1.5 pb-1.5">
 						{chapters.map((chapter, index) => {
@@ -1054,7 +1054,7 @@ function Chapters({
 												</span>
 											) : null}
 										</span>
-										<span className="text-small tabular flex flex-none flex-col items-end gap-0.5">
+										<span className="text-small x-tabular flex flex-none flex-col items-end gap-0.5">
 											<span className="font-semibold">{formatClock(chapter.at_ms / 1000)}</span>
 											<span className="text-white/60">
 												{formatDuration(Math.max(0, end - chapter.at_ms))}
@@ -1077,7 +1077,7 @@ function StillRecording({ stream }: { stream: StreamDetail }) {
 	const login = stream.streamer_login;
 	return (
 		<div className="grid min-h-dvh place-items-center px-4 py-20">
-			<div className="panel-in flex max-w-md flex-col items-center gap-4 text-center">
+			<div className="x-enter flex max-w-md flex-col items-center gap-4 text-center">
 				<Avatar src={stream.streamer_avatar} name={stream.streamer_name} size={72} live />
 				<p className="text-small text-live flex items-center gap-2 font-semibold">
 					<LiveDot size={8} />

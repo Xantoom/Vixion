@@ -24,7 +24,7 @@ export function Card({
 			<header className="border-line flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 border-b px-6 py-3">
 				<h2 className="text-ui flex items-center gap-2 font-semibold">
 					{title}
-					{count !== undefined ? <span className="text-muted tabular font-medium">{count}</span> : null}
+					{count !== undefined ? <span className="text-muted x-tabular font-medium">{count}</span> : null}
 				</h2>
 				{actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div> : null}
 			</header>
@@ -41,7 +41,7 @@ export function InfoTip({ text }: { text: string }) {
 			role="img"
 			aria-label={text}
 			data-tip={text}
-			className="text-muted hover:text-ink touch-target relative inline-grid size-5 flex-none cursor-help place-items-center rounded-full transition-colors"
+			className="text-muted hover:text-ink x-touch-target relative inline-grid size-5 flex-none cursor-help place-items-center rounded-full transition-colors"
 		>
 			<Info size={15} />
 		</span>
