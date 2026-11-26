@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type ChatLine, api } from '@/lib/api';
 
 /** Lines shown at the playhead; scrolling up reveals more, a hundred at a time. */
-export const SHOWN = 100;
+const SHOWN = 100;
 /** Chat is fetched five minutes ahead of the playhead as the video plays. */
 const AHEAD_MS = 5 * 60_000;
 /** Lines kept in memory at most: the oldest go first. Older ones come back from the server when scrolled to. */

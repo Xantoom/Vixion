@@ -77,7 +77,7 @@ export interface Me {
 	version: string;
 }
 
-export interface LiveProgress {
+interface LiveProgress {
 	stream_id: number;
 	duration_ms: number;
 	bytes: number;
@@ -134,7 +134,7 @@ export interface TwitchVideo {
 	game: string | null;
 }
 
-export interface Profile {
+interface Profile {
 	id: string;
 	login: string;
 	display_name: string;
@@ -171,7 +171,7 @@ export interface ChatAssets {
 	emotes: Record<string, [string, string, string]>;
 }
 
-export type StreamStatus = 'recording' | 'done' | 'failed';
+type StreamStatus = 'recording' | 'done' | 'failed';
 
 export interface StreamSummary {
 	id: number;

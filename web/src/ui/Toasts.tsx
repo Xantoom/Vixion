@@ -40,7 +40,7 @@ function announce(text: string): boolean {
 	return true;
 }
 
-export const useToasts = create<ToastState>((set, get) => {
+const useToasts = create<ToastState>((set, get) => {
 	const arm = (toast: Toast) => {
 		window.clearTimeout(timers.get(toast.id));
 		timers.set(

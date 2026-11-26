@@ -12,7 +12,7 @@ import { Button } from '@/ui/Button';
 import { PageLoading } from '@/ui/Spinner';
 import { focusChannelSearch } from './ChannelSearch';
 
-export function PageHeader({ title, children }: { title: ReactNode; children?: ReactNode }) {
+function PageHeader({ title, children }: { title: ReactNode; children?: ReactNode }) {
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-3 pt-8 pb-7 sm:pt-10 sm:pb-8">
 			<h1 className="text-heading font-semibold tracking-tight">{title}</h1>
@@ -84,7 +84,7 @@ export function LiveDot({ size = 10, className = '' }: { size?: number; classNam
 }
 
 /** A channel's Twitch banner, or its avatar blurred when it has none. */
-export function Banner({
+function Banner({
 	streamer,
 	priority = 'lazy',
 	className = '',

@@ -25,7 +25,7 @@ export function channelQuery(login: string) {
 }
 
 /** The media link lasts 12 h: one older than this is fetched again before the player opens. */
-export const LINK_FRESH_MS = 6 * 3600_000;
+const LINK_FRESH_MS = 6 * 3600_000;
 
 /** The media link changes on every answer: the page keeps the one it opened with. */
 export function streamQuery(id: string) {

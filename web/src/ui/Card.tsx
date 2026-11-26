@@ -34,7 +34,7 @@ export function Card({
 }
 
 /** An explanation kept out of the way: shown when the pointer rests on the icon. */
-export function InfoTip({ text }: { text: string }) {
+function InfoTip({ text }: { text: string }) {
 	return (
 		<span
 			tabIndex={0}

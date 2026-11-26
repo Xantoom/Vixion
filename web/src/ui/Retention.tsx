@@ -4,7 +4,7 @@ import { FRAME } from './Field';
 import { Menu, MenuDivider, MenuItem } from './Menu';
 
 /** How long recordings are kept, in words: a preset's name, a number of days, or forever (0). */
-export function useRetentionLabel(): (days: number) => string {
+function useRetentionLabel(): (days: number) => string {
 	const t = useT();
 	return (days) => (days === 0 ? t.streamer.retentionForever : (t.streamer.keepPresets[days] ?? t.common.days(days)));
 }

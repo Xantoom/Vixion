@@ -49,7 +49,7 @@ async function canvasPng(canvas: HTMLCanvasElement): Promise<Blob | null> {
 }
 
 /** Mediabunny needs WebCodecs, which browsers only give secure pages (HTTPS or localhost). */
-export function webCodecsAvailable(): boolean {
+function webCodecsAvailable(): boolean {
 	return typeof VideoDecoder !== 'undefined' && typeof AudioDecoder !== 'undefined';
 }
 
@@ -94,7 +94,7 @@ function schedule(callback: () => void): () => void {
  * Audio clock, which is also the clock the pictures follow. When the network falls behind, the
  * audio clock is suspended: pictures and sound stop together and pick up together.
  */
-export class MediabunnyEngine implements Engine {
+class MediabunnyEngine implements Engine {
 	onTime: (time: number) => void = () => {};
 	onState: (state: PlaybackState) => void = () => {};
 	onError: (error: EngineError) => void = () => {};
@@ -493,7 +493,7 @@ export class MediabunnyEngine implements Engine {
  * The browser's own <video>, for pages without WebCodecs (plain HTTP on a local network) or
  * formats WebCodecs refuses. Sound still goes through the compressor, by Web Audio.
  */
-export class ElementEngine implements Engine {
+class ElementEngine implements Engine {
 	onTime: (time: number) => void = () => {};
 	onState: (state: PlaybackState) => void = () => {};
 	onError: (error: EngineError) => void = () => {};
