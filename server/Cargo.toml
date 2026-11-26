@@ -20,7 +20,7 @@ hmac = "0.13.0"
 instant-acme = { version = "0.8.5", default-features = false, features = ["ring", "hyper-rustls", "rcgen"] }
 libc = "0.2.191"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json", "http2", "query"] }
-rusqlite = { version = "0.42.0", features = ["bundled"] }
+rusqlite = { version = "0.43.0", features = ["bundled"] }
 rust-embed = { version = "8.14.0", features = ["include-exclude", "mime-guess"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-pki-types = { version = "1.16.0", features = ["std"] }
