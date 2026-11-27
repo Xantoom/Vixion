@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Lock, Plus } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
+import { Select } from 'xantoom-design/react';
 import { useT } from '@/i18n';
 import { useAction } from '@/lib/action';
 import { type Permission, type Role, type User, api } from '@/lib/api';
@@ -10,7 +11,7 @@ import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { Card } from '@/ui/Card';
 import { Confirm, Dialog } from '@/ui/Dialog';
-import { Field, PasswordInput, Select, TextInput } from '@/ui/Field';
+import { Field, PasswordInput, TextInput } from '@/ui/Field';
 import { Group, SwitchRow } from '@/ui/Group';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
@@ -241,7 +242,7 @@ function PermissionSwitch({
 			onChange={onChange}
 			badge={
 				changed ? (
-					<span className="bg-fill-2 size-1.5 flex-none rounded-full" title={t.users.changed}>
+					<span className="bg-fill-2 size-1.5 flex-none rounded-full" data-tip={t.users.changed}>
 						<span className="sr-only">{t.users.changed}</span>
 					</span>
 				) : null
@@ -418,20 +419,15 @@ function UserDialog({
 					{(id) => (
 						<Select
 							id={id}
-							value={roleId}
+							value={String(roleId)}
 							disabled={self}
-							onChange={(event) => {
-								setRoleId(Number(event.target.value));
+							onChange={(next) => {
+								setRoleId(Number(next));
 							}}
-						>
-							{roles.roles
+							options={roles.roles
 								.filter((entry) => entry.builtin !== 'admin' || me.admin)
-								.map((entry) => (
-									<option key={entry.id} value={entry.id}>
-										{roleName(entry)}
-									</option>
-								))}
-						</Select>
+								.map((entry) => ({ value: String(entry.id), label: roleName(entry) }))}
+						/>
 					)}
 				</Field>
 				{user && !self ? (

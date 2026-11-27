@@ -245,7 +245,7 @@ function Console() {
 			title={
 				<>
 					{t.logs.console}
-					<span className="text-caption text-fg-faint inline-flex items-center gap-1.5 font-medium">
+					<span className="text-caption text-fg-faint ms-2 inline-flex items-center gap-1.5 font-medium">
 						<span
 							aria-hidden
 							className={`size-2 rounded-full ${connected && !paused ? 'bg-success live-dot' : 'bg-line-strong'}`}

@@ -1,14 +1,14 @@
-import { type ReactNode, useId } from 'react';
-import { Switch } from './Field';
+// Rows of settings in a frame, as dialogs lay out their choices: the design system's settings list.
+import type { ReactNode } from 'react';
+import { SettingRow, Switch } from 'xantoom-design/react';
+import { Button } from './Button';
 
-/** Rows of settings in a box, under a name in small capitals: how dialogs lay out their choices. */
+/** The frame of rows, under an optional name (the design system's `x-settings`). */
 export function Group({ title, children }: { title?: ReactNode; children: ReactNode }) {
 	return (
-		<section className="flex flex-col gap-2.5">
-			{title ? (
-				<h3 className="text-caption text-fg-muted px-1 font-semibold tracking-wider uppercase">{title}</h3>
-			) : null}
-			<ul className="bg-raised ring-line divide-line divide-y rounded-md ring-1">{children}</ul>
+		<section className="x-settings">
+			{title ? <h3>{title}</h3> : null}
+			<ul>{children}</ul>
 		</section>
 	);
 }
@@ -25,15 +25,17 @@ export function SwitchRow({
 	onChange: (checked: boolean) => void;
 	badge?: ReactNode;
 }) {
-	const id = useId();
 	return (
-		<li className="flex min-h-14 items-center justify-between gap-4 px-5">
-			<label htmlFor={id} className="text-ui text-fg flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-3">
-				{label}
-				{badge}
-			</label>
-			<Switch id={id} checked={checked} onChange={onChange} />
-		</li>
+		<SettingRow
+			label={
+				<span className="inline-flex items-center gap-2">
+					{label}
+					{badge}
+				</span>
+			}
+		>
+			{(control) => <Switch {...control} checked={checked} onChange={onChange} />}
+		</SettingRow>
 	);
 }
 
@@ -48,14 +50,10 @@ export function ActionRow({
 	danger?: boolean;
 }) {
 	return (
-		<li>
-			<button
-				type="button"
-				onClick={onClick}
-				className={`text-ui hover:bg-raised-2 flex min-h-14 w-full items-center justify-center gap-2 rounded-md px-4 font-medium transition-colors ${danger ? 'text-danger' : 'text-accent'}`}
-			>
+		<li className="justify-center">
+			<Button variant={danger ? 'danger-ghost' : 'ghost'} onClick={onClick}>
 				{children}
-			</button>
+			</Button>
 		</li>
 	);
 }

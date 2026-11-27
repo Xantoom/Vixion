@@ -1,18 +1,24 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TriangleAlert } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { NumberField, Select, SettingRow, Settings as SettingsList, Switch } from 'xantoom-design/react';
 import { useT } from '@/i18n';
 import { useAction } from '@/lib/action';
 import { type Folder, type Settings, type SettingsResponse, type Stats, api } from '@/lib/api';
 import { formatDuration } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import { Button } from '@/ui/Button';
-import { Card, Facts, SettingRow, Toggle } from '@/ui/Card';
-import { NumberInput, Select, TextInput } from '@/ui/Field';
+import { TextInput } from '@/ui/Field';
 import { RetentionMenu } from '@/ui/Retention';
 import { PageLoading } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
+
+const WEBHOOK_KINDS: { value: Settings['webhook_kind']; label: string }[] = [
+	{ value: 'discord', label: 'Discord' },
+	{ value: 'ntfy', label: 'ntfy' },
+	{ value: 'generic', label: 'JSON' },
+];
 
 export function SettingsPage() {
 	const t = useT();
@@ -47,106 +53,117 @@ export function SettingsPage() {
 
 	return (
 		<div className="x-enter flex flex-col gap-8 pb-24">
-			<Card title={t.settings.recording} flush>
-				<SettingRow label={t.settings.h264Only} tip={t.settings.h264OnlyHint}>
-					<Toggle
-						label={t.settings.h264Only}
-						checked={draft.h264_only}
-						onChange={(h264_only) => {
-							set({ h264_only });
-						}}
-					/>
+			<SettingsList title={t.settings.recording} level={2}>
+				<SettingRow label={t.settings.h264Only} description={t.settings.h264OnlyHint}>
+					{(control) => (
+						<Switch
+							{...control}
+							checked={draft.h264_only}
+							onChange={(h264_only) => {
+								set({ h264_only });
+							}}
+						/>
+					)}
 				</SettingRow>
 				<SettingRow label={t.settings.recordChat}>
-					<Toggle
-						label={t.settings.recordChat}
-						checked={draft.record_chat}
-						onChange={(record_chat) => {
-							set({ record_chat });
-						}}
-					/>
+					{(control) => (
+						<Switch
+							{...control}
+							checked={draft.record_chat}
+							onChange={(record_chat) => {
+								set({ record_chat });
+							}}
+						/>
+					)}
 				</SettingRow>
-			</Card>
+			</SettingsList>
 
-			<Card title={t.settings.retention} flush>
-				<SettingRow label={t.settings.retentionDays} tip={t.settings.retentionHint}>
+			<SettingsList title={t.settings.retention} level={2}>
+				<SettingRow label={t.settings.retentionDays} description={t.settings.retentionHint}>
 					{/* The same lengths as a streamer's own, picked the same way. */}
-					<RetentionMenu
-						label={t.settings.retentionDays}
-						value={draft.retention_days}
-						framed
-						onChange={(retention_days) => {
-							set({ retention_days: retention_days ?? 0 });
-						}}
-					/>
+					{(control) => (
+						<RetentionMenu
+							id={control.id}
+							describedBy={control['aria-describedby']}
+							label={t.settings.retentionDays}
+							value={draft.retention_days}
+							framed
+							onChange={(retention_days) => {
+								set({ retention_days: retention_days ?? 0 });
+							}}
+						/>
+					)}
 				</SettingRow>
 				<SettingRow label={t.settings.diskWarning}>
-					<NumberInput
-						aria-label={t.settings.diskWarning}
-						value={draft.disk_warning_gb}
-						min={0}
-						max={100_000}
-						unit={t.settings.gb}
-						onChange={(disk_warning_gb) => {
-							set({ disk_warning_gb });
-						}}
-					/>
+					{(control) => (
+						<NumberField
+							{...control}
+							value={draft.disk_warning_gb}
+							min={0}
+							max={100_000}
+							unit={t.settings.gb}
+							onChange={(disk_warning_gb) => {
+								set({ disk_warning_gb });
+							}}
+						/>
+					)}
 				</SettingRow>
-				<SettingRow label={t.settings.diskReserve} tip={t.settings.diskReserveHint}>
-					<NumberInput
-						aria-label={t.settings.diskReserve}
-						value={draft.disk_reserve_gb}
-						min={1}
-						max={100_000}
-						unit={t.settings.gb}
-						onChange={(disk_reserve_gb) => {
-							set({ disk_reserve_gb });
-						}}
-					/>
+				<SettingRow label={t.settings.diskReserve} description={t.settings.diskReserveHint}>
+					{(control) => (
+						<NumberField
+							{...control}
+							value={draft.disk_reserve_gb}
+							min={1}
+							max={100_000}
+							unit={t.settings.gb}
+							onChange={(disk_reserve_gb) => {
+								set({ disk_reserve_gb });
+							}}
+						/>
+					)}
 				</SettingRow>
-			</Card>
+			</SettingsList>
 
-			<Card title={t.settings.twitch} flush>
+			<SettingsList title={t.settings.twitch} level={2}>
 				<SettingRow
-					wide
 					label={t.settings.token}
-					tip={draft.twitch_token_source === 'stored' ? t.settings.tokenStoredHint : t.settings.tokenHint}
+					description={
+						draft.twitch_token_source === 'stored' ? t.settings.tokenStoredHint : t.settings.tokenHint
+					}
 				>
-					<span className="text-small bg-raised-2 text-fg-muted inline-flex h-8 items-center rounded-xs px-2.5 font-semibold">
-						{t.settings.tokenSet}
-					</span>
+					{() => <span className="x-badge">{t.settings.tokenSet}</span>}
 				</SettingRow>
-			</Card>
+			</SettingsList>
 
-			<Card title={t.settings.alerts} flush>
+			<SettingsList title={t.settings.alerts} level={2}>
 				<SettingRow label={t.settings.webhookKind}>
-					<Select
-						aria-label={t.settings.webhookKind}
-						value={draft.webhook_kind}
-						onChange={(event) => {
-							set({ webhook_kind: event.target.value as Settings['webhook_kind'] });
-						}}
-						className="w-44"
-					>
-						<option value="discord">Discord</option>
-						<option value="ntfy">ntfy</option>
-						<option value="generic">JSON</option>
-					</Select>
+					{(control) => (
+						<Select
+							{...control}
+							value={draft.webhook_kind}
+							onChange={(webhook_kind) => {
+								set({ webhook_kind });
+							}}
+							options={WEBHOOK_KINDS}
+							className="w-44"
+						/>
+					)}
 				</SettingRow>
-				<SettingRow label={t.settings.webhook} tip={t.settings.webhookHint} wide>
-					<div className="w-[26rem] max-w-full max-sm:w-full">
+				<SettingRow label={t.settings.webhook} description={t.settings.webhookHint}>
+					{(control) => (
 						<TextInput
+							{...control}
 							type="url"
-							aria-label={t.settings.webhook}
 							placeholder={t.settings.webhookPlaceholder}
 							value={draft.webhook_url}
 							onChange={(event) => {
 								set({ webhook_url: event.target.value });
 							}}
+							className="w-[26rem] max-w-full"
 						/>
-					</div>
+					)}
 				</SettingRow>
-			</Card>
+			</SettingsList>
 
 			<ServerCard />
 
@@ -182,24 +199,31 @@ function ServerCard() {
 	const can = useCan('stats.view');
 	const { data } = useQuery({ queryKey: ['stats'], queryFn: async () => api.get<Stats>('/stats'), enabled: can });
 	if (!data) return null;
+	const facts: [string, ReactNode][] = [
+		[t.settings.version, data.version],
+		[t.settings.uptime, formatDuration(data.uptime_ms)],
+		...(data.folders
+			? ([
+					[t.settings.configFolder, <FolderFact key="config" folder={data.folders.config} />],
+					[t.settings.recordingsFolder, <FolderFact key="recordings" folder={data.folders.recordings} />],
+				] as [string, ReactNode][])
+			: []),
+	];
 	return (
-		<Card title={t.settings.server} flush className="reveal">
-			<Facts
-				items={[
-					[t.settings.version, data.version],
-					[t.settings.uptime, formatDuration(data.uptime_ms)],
-					...(data.folders
-						? ([
-								[t.settings.configFolder, <FolderFact key="config" folder={data.folders.config} />],
-								[
-									t.settings.recordingsFolder,
-									<FolderFact key="recordings" folder={data.folders.recordings} />,
-								],
-							] as [string, ReactNode][])
-						: []),
-				]}
-			/>
-		</Card>
+		<section className="x-settings reveal" aria-labelledby="server-facts">
+			<h2 id="server-facts">{t.settings.server}</h2>
+			{/* Read, not changed: laid out like the setting rows above. */}
+			<ul>
+				{facts.map(([label, value]) => (
+					<li key={label}>
+						<span className="x-setting-text">
+							<span>{label}</span>
+						</span>
+						<span className="text-fg-muted min-w-0 flex-[1_1_16rem] text-end break-all">{value}</span>
+					</li>
+				))}
+			</ul>
+		</section>
 	);
 }
 

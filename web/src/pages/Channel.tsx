@@ -20,6 +20,7 @@ import {
 	Users,
 } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, memo, useId, useState } from 'react';
+import { SettingRow } from 'xantoom-design/react';
 import { useT } from '@/i18n';
 import { useAction } from '@/lib/action';
 import {
@@ -848,16 +849,17 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 					<SwitchRow label={t.streamer.recordLives} checked={monitored} onChange={setMonitored} />
 				</Group>
 				<Group title={t.streamer.keepSection}>
-					{/* The menu goes under the label when both don't fit on one line. */}
-					<li className="flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 pr-2 pl-5">
-						<span className="text-ui text-fg whitespace-nowrap">{t.streamer.keepRow}</span>
-						<RetentionMenu
-							label={t.streamer.keepRow}
-							value={retention}
-							fallback={fallback}
-							onChange={setRetention}
-						/>
-					</li>
+					<SettingRow label={t.streamer.keepRow}>
+						{(control) => (
+							<RetentionMenu
+								id={control.id}
+								label={t.streamer.keepRow}
+								value={retention}
+								fallback={fallback}
+								onChange={setRetention}
+							/>
+						)}
+					</SettingRow>
 				</Group>
 				<Group>
 					<ActionRow
