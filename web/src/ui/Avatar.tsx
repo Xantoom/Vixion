@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { Avatar as DsAvatar } from 'xantoom-design/react';
 
-/** A channel's picture, or its initial on a tint picked from its name when there is none. */
+/** A channel's picture, or its initial when there is none (the design system's avatar). */
 export function Avatar({
 	src,
 	name,
@@ -10,37 +10,18 @@ export function Avatar({
 }: {
 	src: string | null | undefined;
 	name: string;
+	/** In CSS pixels; follows the text size. */
 	size?: number;
 	/** A red ring around it. */
 	live?: boolean;
 	className?: string;
 }) {
-	const [failed, setFailed] = useState(false);
-	let hue = 0;
-	for (let i = 0; i < name.length; i++) hue = (hue + name.charCodeAt(i)) % 360;
-	const ring = live ? 'ring-2 ring-live ring-offset-2 ring-offset-bg' : '';
-	return src && !failed ? (
-		<img
+	return (
+		<DsAvatar
 			src={src}
-			alt=""
-			width={size}
-			height={size}
-			loading="lazy"
-			decoding="async"
-			referrerPolicy="no-referrer"
-			onError={() => {
-				setFailed(true);
-			}}
-			className={`bg-surface flex-none rounded-full object-cover ${ring} ${className}`}
-			style={{ width: size, height: size }}
+			name={name}
+			size={`${size / 16}rem`}
+			className={`${live ? 'ring-live ring-offset-bg ring-2 ring-offset-2' : ''} ${className}`}
 		/>
-	) : (
-		<span
-			aria-hidden="true"
-			className={`grid flex-none place-items-center rounded-full font-semibold text-white ${ring} ${className}`}
-			style={{ width: size, height: size, fontSize: size * 0.42, background: `oklch(0.55 0.12 ${hue})` }}
-		>
-			{name.slice(0, 1).toUpperCase()}
-		</span>
 	);
 }

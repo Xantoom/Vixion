@@ -135,7 +135,10 @@ export function ChannelSearch({ onDone }: { onDone?: () => void }) {
 
 	return (
 		<div className="relative w-full">
-			<Search size={18} className="text-muted pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2" />
+			<Search
+				size={18}
+				className="text-fg-faint pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2"
+			/>
 			<input
 				ref={input}
 				id="channel-search"
@@ -166,7 +169,7 @@ export function ChannelSearch({ onDone }: { onDone?: () => void }) {
 					}, 120);
 				}}
 				onKeyDown={onKeyDown}
-				className="bg-surface text-ui placeholder:text-muted focus:bg-bg focus:shadow-[inset_0_0_0_1px_var(--field-line)] h-11 w-full rounded-sm pr-16 pl-11 transition-[background-color,box-shadow] duration-150 outline-none [&::-webkit-search-cancel-button]:hidden"
+				className="bg-raised text-ui placeholder:text-fg-faint focus:bg-bg focus:shadow-[inset_0_0_0_1px_var(--x-control-border)] h-11 w-full rounded-sm pr-16 pl-11 transition-[background-color,box-shadow] duration-150 outline-none [&::-webkit-search-cancel-button]:hidden"
 			/>
 			{text ? (
 				<button
@@ -176,18 +179,18 @@ export function ChannelSearch({ onDone }: { onDone?: () => void }) {
 						setText('');
 						input.current?.focus();
 					}}
-					className="text-muted hover:text-ink absolute top-1/2 right-2 grid size-8 -translate-y-1/2 place-items-center rounded-xs"
+					className="text-fg-faint hover:text-fg absolute top-1/2 right-2 grid size-8 -translate-y-1/2 place-items-center rounded-xs"
 				>
 					<X size={16} />
 				</button>
 			) : (
-				<kbd className="text-caption text-muted border-line-2 pointer-events-none absolute top-1/2 right-3.5 hidden -translate-y-1/2 rounded-xs border px-1.5 font-sans leading-5 lg:block">
+				<kbd className="text-caption text-fg-faint border-line-strong pointer-events-none absolute top-1/2 right-3.5 hidden -translate-y-1/2 rounded-xs border px-1.5 font-sans leading-5 lg:block">
 					/
 				</kbd>
 			)}
 			{showList ? (
 				<div
-					className="menu-in bg-bg border-line absolute inset-x-0 top-full z-50 mt-2 overflow-hidden rounded-md border shadow-(--shadow-lift)"
+					className="menu-in bg-bg border-line absolute inset-x-0 top-full z-50 mt-2 overflow-hidden rounded-md border shadow-md"
 					onPointerDown={(event) => {
 						// Keeps the focus in the field, so the list stays open.
 						event.preventDefault();
@@ -211,7 +214,7 @@ export function ChannelSearch({ onDone }: { onDone?: () => void }) {
 								onClick={() => {
 									go(suggestion.login);
 								}}
-								className="aria-selected:bg-surface flex cursor-pointer items-center gap-3 rounded-sm px-2.5 py-2"
+								className="aria-selected:bg-raised flex cursor-pointer items-center gap-3 rounded-sm px-2.5 py-2"
 							>
 								<Avatar
 									src={suggestion.avatar}
@@ -222,11 +225,11 @@ export function ChannelSearch({ onDone }: { onDone?: () => void }) {
 								<span className="flex min-w-0 flex-1 flex-col">
 									<span className="text-ui truncate font-semibold">{suggestion.name}</span>
 									{suggestion.detail ? (
-										<span className="text-caption text-muted truncate">{suggestion.detail}</span>
+										<span className="text-caption text-fg-faint truncate">{suggestion.detail}</span>
 									) : null}
 								</span>
 								{suggestion.watched ? (
-									<span className="text-caption bg-accent-soft text-accent-text flex-none rounded-xs px-1.5 py-0.5 font-medium">
+									<span className="text-caption bg-accent-soft text-accent flex-none rounded-xs px-1.5 py-0.5 font-medium">
 										{t.channel.watched}
 									</span>
 								) : null}
@@ -234,7 +237,7 @@ export function ChannelSearch({ onDone }: { onDone?: () => void }) {
 						))}
 					</ul>
 					{suggestions.length === 0 ? (
-						<p className="text-small text-muted flex items-center justify-center gap-2 px-4 py-5">
+						<p className="text-small text-fg-faint flex items-center justify-center gap-2 px-4 py-5">
 							{searching ? <Spinner /> : remote.isError ? t.search.failed : t.search.none}
 						</p>
 					) : null}

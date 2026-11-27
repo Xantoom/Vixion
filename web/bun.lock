@@ -13,7 +13,7 @@
         "mediabunny": "^1.66.0",
         "react": "^19.3.1",
         "react-dom": "^19.3.1",
-        "xantoom-design": "github:Xantoom/xantoom-design#v0.2.2",
+        "xantoom-design": "github:Xantoom/xantoom-design#v0.4.2",
         "zustand": "^5.1.0",
       },
       "devDependencies": {
@@ -374,7 +374,7 @@
 
     "vite": ["vite@8.3.8", "", { "dependencies": { "lightningcss": "^1.33.0", "picomatch": "^4.0.7", "postcss": "^8.5.32", "rolldown": "~1.2.18", "tinyglobby": "^0.2.17" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "@vitejs/devtools": "^0.7.1 || ^0.8.0", "esbuild": "^0.27.0 || ^0.28.0", "jiti": ">=1.21.0", "less": "^4.0.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "@vitejs/devtools", "esbuild", "jiti", "less", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-LzOn3h9rG/0vhLdXrV4yJ4QFA9eEoqCl+Yx+kGJd7aB9w6nfNgVHKSYwLPZUHrz4ZGa+t+kXjV9itvcHDLQouA=="],
 
-    "xantoom-design": ["xantoom-design@github:Xantoom/xantoom-design#b2069aa", { "bin": { "xantoom-design": "./scripts/sync.ts" } }, "Xantoom-xantoom-design-b2069aa", "sha512-Y8Kr5Xy5A56MdYkHskCZRYOZBZrnV5Pcq9ssf2RRdImONl7b8zhKXD4c3OzYRsSnOF+eY/loBH8oVLV0WYuImw=="],
+    "xantoom-design": ["xantoom-design@github:Xantoom/xantoom-design#3c9924f", { "peerDependencies": { "react": ">=19.2" }, "optionalPeers": ["react"], "bin": { "xantoom-design": "./scripts/sync.ts" } }, "Xantoom-xantoom-design-3c9924f", "sha512-RJVxoYeunv22+VrNXNhP2F1XGhgzZuHhuXlpbuXxTm83ov+tYpBitm/lVebhjTegdeSlO7aLvQwvnXft1YXKzQ=="],
 
     "zustand": ["zustand@5.1.0", "", { "peerDependencies": { "@types/react": ">=18.0.0", "immer": ">=9.0.6", "react": ">=18.0.0", "use-sync-external-store": ">=1.2.0" }, "optionalPeers": ["@types/react", "immer", "react", "use-sync-external-store"] }, "sha512-ciJZlP48M1PTQbVQq81CGVFxHTLpZNrFjKqwjtCU34AWuXTZT/jrF3p9+fI84Cf1eSCMLapxqBy/SNTfwOBuqA=="],
 

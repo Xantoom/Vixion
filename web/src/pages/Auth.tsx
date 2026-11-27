@@ -21,10 +21,10 @@ function AuthFrame({ title, lead, children }: { title: string; lead?: string; ch
 					<Logo size={44} />
 					<div>
 						<h1 className="text-heading font-semibold tracking-tight">{title}</h1>
-						{lead ? <p className="text-ui text-ink-2 mt-2">{lead}</p> : null}
+						{lead ? <p className="text-ui text-fg-muted mt-2">{lead}</p> : null}
 					</div>
 				</div>
-				<div className="bg-card ring-line rounded-md p-6 shadow-(--shadow-card) ring-1">{children}</div>
+				<div className="bg-raised ring-line rounded-md p-6 shadow-sm ring-1">{children}</div>
 			</div>
 		</main>
 	);

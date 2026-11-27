@@ -39,7 +39,7 @@ import { createPreview } from '@/player/preview';
 import { Timeline } from '@/player/Timeline';
 import { usePrefs } from '@/stores/prefs';
 import { Avatar } from '@/ui/Avatar';
-import { Button, buttonClass } from '@/ui/Button';
+import { Button, buttonProps } from '@/ui/Button';
 import { Menu, MenuDivider, MenuItem, type MenuTriggerProps } from '@/ui/Menu';
 import { PageLoading, Spinner } from '@/ui/Spinner';
 import { toast } from '@/ui/Toasts';
@@ -636,10 +636,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 										: t.player.cantOpen}
 							</p>
 							{error === 'decode' && downloads.video ? (
-								<a
-									href={downloads.video}
-									className={`${buttonClass('accent')} @max-md:text-small @max-md:h-8 @max-md:px-3`}
-								>
+								<a href={downloads.video} {...buttonProps('accent')}>
 									<Download size={16} />
 									{t.player.downloadVideo}
 								</a>
@@ -752,7 +749,7 @@ function Studio({ stream: initial, reload }: { stream: StreamDetail; reload: () 
 						{canDownload && downloads.video ? (
 							<Menu
 								label={t.player.download}
-								panelClassName="text-ink"
+								panelClassName="text-fg"
 								trigger={(_open, props) => (
 									<PlayerButton label={t.player.download} {...props}>
 										<Download size={21} />
@@ -1007,7 +1004,7 @@ function Chapters({
 				<div
 					role="dialog"
 					aria-label={t.player.chapters}
-					className="menu-in absolute right-0 bottom-full mb-3 flex max-h-[min(34rem,60dvh)] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-md bg-neutral-950/90 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-md"
+					className="menu-in absolute right-0 bottom-full mb-3 flex max-h-[min(34rem,60dvh)] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-md bg-[oklch(0.145_0_0)]/90 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-md"
 				>
 					<div className="text-small flex flex-none items-center justify-between px-4 pt-3 pb-2 font-semibold text-white/60">
 						{t.player.chapters}
@@ -1029,7 +1026,7 @@ function Chapters({
 										className="group/chapter relative flex w-full items-center gap-3 rounded-sm p-2 text-left transition-colors hover:bg-white/10 aria-[current=true]:bg-white/12"
 									>
 										{current ? (
-											<span className="absolute inset-y-2 left-0 w-0.5 rounded-xs bg-[var(--accent)]" />
+											<span className="absolute inset-y-2 left-0 w-0.5 rounded-xs bg-[var(--x-fill-2)]" />
 										) : null}
 										{chapter.game ? (
 											<img
@@ -1084,17 +1081,17 @@ function StillRecording({ stream }: { stream: StreamDetail }) {
 					{t.stream.recordingNow}
 				</p>
 				<h1 className="text-title font-semibold tracking-tight">{stream.title || t.stream.untitled}</h1>
-				<p className="text-body text-muted">{t.stream.recordingLead}</p>
+				<p className="text-body text-fg-faint">{t.stream.recordingLead}</p>
 				<div className="mt-2 flex flex-wrap justify-center gap-2">
 					<a
 						href={`https://www.twitch.tv/${login}`}
 						target="_blank"
 						rel="noreferrer"
-						className={buttonClass('accent')}
+						{...buttonProps('accent')}
 					>
 						{t.channel.watchOnTwitch}
 					</a>
-					<Link to="/$login" params={{ login }} className={buttonClass()}>
+					<Link to="/$login" params={{ login }} {...buttonProps()}>
 						{stream.streamer_name}
 					</Link>
 				</div>

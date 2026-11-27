@@ -83,7 +83,7 @@ function Row({ onClick, children, aside }: { onClick?: () => void; children: Rea
 	const content = (
 		<>
 			{children}
-			<span className="text-small text-muted ml-auto flex flex-none items-center gap-1.5 pl-2">{aside}</span>
+			<span className="text-small text-fg-faint ml-auto flex flex-none items-center gap-1.5 pl-2">{aside}</span>
 		</>
 	);
 	if (!onClick) return <li className={inner}>{content}</li>;
@@ -92,10 +92,10 @@ function Row({ onClick, children, aside }: { onClick?: () => void; children: Rea
 			<button
 				type="button"
 				onClick={onClick}
-				className={`${inner} hover:bg-surface focus-visible:bg-surface transition-colors duration-100 outline-none`}
+				className={`${inner} hover:bg-raised focus-visible:bg-raised transition-colors duration-100 outline-none`}
 			>
 				{content}
-				<ChevronRight size={18} className="text-muted -mr-1 flex-none" />
+				<ChevronRight size={18} className="text-fg-faint -mr-1 flex-none" />
 			</button>
 		</li>
 	);
@@ -148,10 +148,12 @@ export function UsersPage() {
 						<span className={`flex-none ${user.disabled ? 'opacity-40 grayscale' : ''}`}>
 							<Avatar src={null} name={user.username} size={32} />
 						</span>
-						<span className={`text-ui min-w-0 truncate font-medium ${user.disabled ? 'text-muted' : ''}`}>
+						<span
+							className={`text-ui min-w-0 truncate font-medium ${user.disabled ? 'text-fg-faint' : ''}`}
+						>
 							{user.username}
 							{user.id === me.id ? (
-								<span className="text-muted font-normal"> · {t.users.you}</span>
+								<span className="text-fg-faint font-normal"> · {t.users.you}</span>
 							) : null}
 						</span>
 					</Row>
@@ -239,7 +241,7 @@ function PermissionSwitch({
 			onChange={onChange}
 			badge={
 				changed ? (
-					<span className="bg-accent size-1.5 flex-none rounded-full" title={t.users.changed}>
+					<span className="bg-fill-2 size-1.5 flex-none rounded-full" title={t.users.changed}>
 						<span className="sr-only">{t.users.changed}</span>
 					</span>
 				) : null
@@ -372,7 +374,7 @@ function UserDialog({
 		>
 			<form id={formId} className="flex flex-col gap-7" onSubmit={(event) => void submit(event)}>
 				{user ? (
-					<p className="text-small text-muted -mt-1 -mb-1">
+					<p className="text-small text-fg-faint -mt-1 -mb-1">
 						{user.last_login_at
 							? t.users.lastLoginAt(formatRelative(user.last_login_at))
 							: t.users.neverSignedIn}
@@ -439,16 +441,16 @@ function UserDialog({
 				) : null}
 				{user && role?.builtin !== 'admin' ? (
 					<details className="group fold" open={exceptions > 0 || undefined}>
-						<summary className="text-ui text-ink bg-surface ring-line hover:bg-surface-2 flex min-h-12 cursor-pointer list-none items-center gap-2 rounded-md px-4 font-medium ring-1 transition-colors [&::-webkit-details-marker]:hidden">
+						<summary className="text-ui text-fg bg-raised ring-line hover:bg-raised-2 flex min-h-12 cursor-pointer list-none items-center gap-2 rounded-md px-4 font-medium ring-1 transition-colors [&::-webkit-details-marker]:hidden">
 							{t.users.customPermissions}
 							{exceptions > 0 ? (
-								<span className="text-small text-accent-text font-normal">
+								<span className="text-small text-accent font-normal">
 									{t.users.exceptions(exceptions)}
 								</span>
 							) : null}
 							<ChevronDown
 								size={18}
-								className="text-muted ml-auto transition-transform duration-150 group-open:rotate-180"
+								className="text-fg-faint ml-auto transition-transform duration-150 group-open:rotate-180"
 							/>
 						</summary>
 						<div className="flex flex-col gap-4 pt-5">
@@ -476,7 +478,7 @@ function UserDialog({
 							{exceptions > 0 ? (
 								<button
 									type="button"
-									className="reveal text-small text-accent-text w-fit font-medium hover:underline"
+									className="reveal text-small text-accent w-fit font-medium hover:underline"
 									onClick={() => {
 										setOverrides({});
 									}}

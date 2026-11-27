@@ -62,7 +62,7 @@ export function App() {
 		page = (
 			<div className="grid min-h-dvh place-items-center p-6 text-center">
 				<div className="flex flex-col items-center gap-4">
-					<p className="text-ui text-ink-2">{t.common.offline}</p>
+					<p className="text-ui text-fg-muted">{t.common.offline}</p>
 					<Button onClick={() => void setup.refetch()}>{t.common.retry}</Button>
 				</div>
 			</div>

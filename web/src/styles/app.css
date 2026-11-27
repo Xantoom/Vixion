@@ -3,54 +3,37 @@
  * the grounds, text, status colours, type, radii, motion, focus ring and selection; the Vixion theme brings the
  * accent (a warm pastel sunset, butter yellow to apricot to candy pink).
  *
- * The names below are Vixion's own, mapped onto the design-system tokens, so the components keep their classes.
+ * Colours go by the design system's names (`bg-raised`, `text-fg-muted`, `border-line`) through its Tailwind bridge;
+ * below are only the colours Vixion adds.
  * The interface stays neutral and flat; colour only carries meaning: the accent marks what is active or primary,
  * red means live (and only live), amber means a recording will expire soon.
  */
-@layer x;
+@layer theme, base, x, components, utilities;
 @import 'tailwindcss';
 @import 'xantoom-design/foundation';
+@import 'xantoom-design/components/actions.css';
+@import 'xantoom-design/components/forms.css';
+@import 'xantoom-design/components/content.css';
+@import 'xantoom-design/components/feedback.css';
+@import 'xantoom-design/components/overlays.css';
 @import 'xantoom-design/themes/vixion.css';
+@import 'xantoom-design/tailwind.css';
 
 :root {
-	--bg: var(--x-bg);
 	/* Behind the recordings and the player: a step below the ground. */
 	--canvas: light-dark(color-mix(in oklab, var(--x-bg) 97%, black), color-mix(in oklab, var(--x-bg) 55%, black));
-	--surface: var(--x-raised);
-	--card: var(--x-raised);
-	--surface-2: color-mix(in oklab, var(--x-raised) 92%, var(--x-fg));
-	--line: var(--x-line);
-	--line-2: var(--x-line-strong);
-	--field-line: var(--x-control-border);
-	--ink: var(--x-fg);
-	--ink-2: var(--x-fg-muted);
-	--muted: var(--x-fg-faint);
-	/* Fills wear the gradient with dark ink; the solid accent is its apricot middle, for thin marks only. */
-	--accent-gradient: var(--x-fill);
-	--accent: var(--x-fill-2);
-	--accent-ink: var(--x-on-fill);
-	--accent-text: var(--x-accent);
 	--live: light-dark(#e5262f, #ff4d55);
-	--warn: var(--x-warning);
-	--ok: var(--x-success);
-	--danger: var(--x-danger);
 	/* Under white words (a delete button, a failed mark): the light red is too pale for them in the dark. */
 	--danger-fill: light-dark(#c4321f, #d0392a);
-	--focus: var(--x-accent);
 	--tip-bg: light-dark(#1d1d20, #0b0b0c);
 	--tip-ink: #f3f3f5;
 	/* On what is dark in either theme (the player, tooltips, toasts): the dark theme's values. */
 	--on-dark-accent: #ffb08f;
 	--on-dark-ok: #63dda3;
 	--on-dark-danger: #ff6b57;
-	--shadow-card: var(--x-shadow-sm);
-	--shadow-lift: var(--x-shadow-md);
 }
 
 @theme inline {
-	--font-sans: var(--x-font-sans);
-	--font-mono: var(--x-font-mono);
-
 	/*
 	 * Type scale in rem, so the interface follows the browser's text size. Body text is 16 px at the
 	 * smallest; nothing a person has to read goes under 14 px.
@@ -74,41 +57,23 @@
 
 	/* The design system's radii, set by the Vixion theme's knob. */
 	--radius-xs: calc(var(--x-radius-sm) / 2);
-	--radius-sm: var(--x-radius-sm);
-	--radius-md: var(--x-radius-md);
-	--radius-lg: var(--x-radius-lg);
 
-	--ease-out-soft: var(--x-ease-out);
 	--ease-spring: cubic-bezier(0.3, 1.35, 0.45, 1);
 
-	--color-bg: var(--bg);
 	--color-canvas: var(--canvas);
-	--color-surface: var(--surface);
-	--color-card: var(--card);
-	--color-surface-2: var(--surface-2);
-	--color-line: var(--line);
-	--color-line-2: var(--line-2);
-	--color-field: var(--field-line);
-	--color-ink: var(--ink);
-	--color-ink-2: var(--ink-2);
-	--color-muted: var(--muted);
-	--color-accent: var(--accent);
-	--color-accent-ink: var(--accent-ink);
-	--color-accent-text: var(--accent-text);
-	--color-accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
+	--color-raised-2: color-mix(in oklab, var(--x-raised) 92%, var(--x-fg));
+	--color-accent-soft: color-mix(in srgb, var(--x-fill-2) 20%, transparent);
 	--color-live: var(--live);
-	--color-warn: var(--warn);
-	--color-ok: var(--ok);
-	--color-danger: var(--danger);
 	--color-danger-fill: var(--danger-fill);
-	--color-danger-soft: color-mix(in srgb, var(--danger) 12%, transparent);
-	--color-warn-soft: color-mix(in srgb, var(--warn) 12%, transparent);
+	--color-danger-soft: color-mix(in srgb, var(--x-danger) 12%, transparent);
+	--color-warn-soft: color-mix(in srgb, var(--x-warning) 12%, transparent);
 	--color-tip: var(--tip-bg);
 	--color-tip-ink: var(--tip-ink);
 	--color-on-dark-accent: var(--on-dark-accent);
 	--color-on-dark-ok: var(--on-dark-ok);
 	--color-on-dark-danger: var(--on-dark-danger);
-	--color-focus: var(--focus);
+	--color-white: #fff;
+	--color-black: #000;
 }
 
 @layer base {
@@ -167,8 +132,8 @@
 
 /* What the accent fills: a button, a switch that is on, a bar. */
 @utility bg-accent-fill {
-	background-color: var(--accent);
-	background-image: var(--accent-gradient);
+	background-color: var(--x-fill-2);
+	background-image: var(--x-fill);
 }
 
 /* Things that open (menus, lists, tooltips) grow out of what opened them. */
@@ -181,7 +146,7 @@
 
 .menu-in {
 	transform-origin: top center;
-	animation: menu-in 150ms var(--ease-out-soft);
+	animation: menu-in 150ms var(--x-ease-out);
 }
 
 .menu-in[data-up='true'] {
@@ -191,7 +156,7 @@
 
 .tooltip-in {
 	--from-y: 3px;
-	animation: menu-in 120ms var(--ease-out-soft);
+	animation: menu-in 120ms var(--x-ease-out);
 }
 
 @keyframes fade-in {
@@ -221,7 +186,7 @@
 
 .reveal {
 	overflow: clip;
-	animation: reveal 260ms var(--ease-out-soft);
+	animation: reveal 260ms var(--x-ease-out);
 }
 
 /* Folding panels open and close at the same pace. */
@@ -230,7 +195,7 @@ details.fold::details-content {
 	overflow: clip;
 	opacity: 0;
 	transition:
-		block-size 280ms var(--ease-out-soft),
+		block-size 280ms var(--x-ease-out),
 		opacity 220ms ease,
 		content-visibility 280ms allow-discrete;
 }
@@ -248,7 +213,7 @@ details.fold[open]::details-content {
 }
 
 dialog[open] {
-	animation: dialog-in 220ms var(--ease-out-soft);
+	animation: dialog-in 220ms var(--x-ease-out);
 }
 
 /*
@@ -288,7 +253,7 @@ dialog::backdrop {
  */
 .studio {
 	--chat-width: clamp(min(21.25rem, 32vw), calc(100vw - 100dvh * 16 / 9), 36rem);
-	transition: grid-template-columns 300ms var(--ease-out-soft);
+	transition: grid-template-columns 300ms var(--x-ease-out);
 }
 
 /*

@@ -45,12 +45,12 @@ export function RetentionMenu({
 					{...props}
 					className={`text-ui inline-flex h-10 flex-none items-center gap-1.5 whitespace-nowrap ${
 						framed
-							? `${FRAME} text-ink min-w-44 justify-between px-3.5 pointer-coarse:h-11`
-							: 'text-ink-2 hover:text-ink hover:bg-surface-2 rounded-sm px-3 font-medium transition-colors'
+							? `${FRAME} text-fg min-w-44 justify-between px-3.5 pointer-coarse:h-11`
+							: 'text-fg-muted hover:text-fg hover:bg-raised-2 rounded-sm px-3 font-medium transition-colors'
 					}`}
 				>
 					{current}
-					<ChevronDown size={16} className="text-muted" />
+					<ChevronDown size={16} className="text-fg-faint" />
 				</button>
 			)}
 		>

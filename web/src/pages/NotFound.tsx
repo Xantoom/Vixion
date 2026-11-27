@@ -7,18 +7,18 @@ export function NotFound({ forbidden = false }: { forbidden?: boolean }) {
 	const Icon = forbidden ? Lock : Compass;
 	return (
 		<div className="x-enter mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center gap-7 px-6 py-20 text-center">
-			<span className="bg-surface text-muted grid size-16 place-items-center rounded-full">
+			<span className="bg-raised text-fg-faint grid size-16 place-items-center rounded-full">
 				<Icon size={28} />
 			</span>
 			<div className="flex flex-col gap-3">
 				<h1 className="text-title font-semibold tracking-tight">
 					{forbidden ? t.errors.forbidden : t.errors.notFound}
 				</h1>
-				{forbidden ? <p className="text-body text-muted">{t.errors.forbiddenLead}</p> : null}
+				{forbidden ? <p className="text-body text-fg-faint">{t.errors.forbiddenLead}</p> : null}
 			</div>
 			<Link
 				to="/"
-				className="text-ui bg-accent-fill text-accent-ink inline-flex h-11 items-center rounded-sm px-5 font-semibold transition-[filter] hover:brightness-[1.07]"
+				className="text-ui bg-accent-fill text-on-fill inline-flex h-11 items-center rounded-sm px-5 font-semibold transition-[filter] hover:brightness-[1.07]"
 			>
 				{t.errors.home}
 			</Link>
@@ -31,13 +31,13 @@ export function PageError({ error }: { error: unknown }) {
 	const t = useT();
 	return (
 		<div className="x-enter mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center gap-7 px-6 py-20 text-center">
-			<span className="bg-surface text-muted grid size-16 place-items-center rounded-full">
+			<span className="bg-raised text-fg-faint grid size-16 place-items-center rounded-full">
 				<RotateCw size={28} />
 			</span>
 			<div className="flex flex-col gap-3">
 				<h1 className="text-title font-semibold tracking-tight">{t.errors.crashed}</h1>
 				{error instanceof Error && error.message ? (
-					<p className="text-small text-muted font-mono break-words">{error.message}</p>
+					<p className="text-small text-fg-faint font-mono break-words">{error.message}</p>
 				) : null}
 			</div>
 			<button
@@ -45,7 +45,7 @@ export function PageError({ error }: { error: unknown }) {
 				onClick={() => {
 					window.location.reload();
 				}}
-				className="text-ui bg-accent-fill text-accent-ink inline-flex h-11 items-center rounded-sm px-5 font-semibold transition-[filter] hover:brightness-[1.07]"
+				className="text-ui bg-accent-fill text-on-fill inline-flex h-11 items-center rounded-sm px-5 font-semibold transition-[filter] hover:brightness-[1.07]"
 			>
 				{t.errors.reload}
 			</button>

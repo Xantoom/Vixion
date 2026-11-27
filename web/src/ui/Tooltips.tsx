@@ -142,7 +142,7 @@ export function Tooltips() {
 					}}
 					className={
 						tip.poster
-							? 'bg-surface-2 mx-auto mt-1 mb-1.5 block aspect-[3/4] h-40 w-auto rounded-xs object-cover'
+							? 'bg-raised-2 mx-auto mt-1 mb-1.5 block aspect-[3/4] h-40 w-auto rounded-xs object-cover'
 							: 'mx-auto mb-1 block h-14 w-auto max-w-full object-contain'
 					}
 				/>

@@ -68,7 +68,7 @@ export function Shell() {
 					event.preventDefault();
 					document.getElementById('main')?.focus();
 				}}
-				className="bg-accent-fill text-accent-ink text-ui sr-only z-[70] rounded-sm px-4 py-2 font-semibold focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+				className="bg-accent-fill text-on-fill text-ui sr-only z-[70] rounded-sm px-4 py-2 font-semibold focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
 			>
 				{t.common.skipToContent}
 			</a>
@@ -136,7 +136,7 @@ export function Shell() {
 										aria-label={alerts > 0 ? t.nav.adminAlerts(alerts) : t.nav.admin}
 										data-tip={t.nav.admin}
 										aria-current={inAdmin ? 'page' : undefined}
-										className="text-muted hover:text-ink hover:bg-surface aria-[current=page]:text-ink aria-[current=page]:bg-surface relative grid size-10 place-items-center rounded-sm transition-colors"
+										className="text-fg-faint hover:text-fg hover:bg-raised aria-[current=page]:text-fg aria-[current=page]:bg-raised relative grid size-10 place-items-center rounded-sm transition-colors"
 									>
 										<ShieldCheck size={20} />
 										{alerts > 0 ? (
@@ -260,7 +260,7 @@ function AccountMenu({ admin, alerts }: { admin: AdminPath | null; alerts: numbe
 						{...props}
 						aria-label={t.nav.account}
 						data-tip={t.nav.account}
-						className={`hover:bg-surface flex h-10 flex-none items-center gap-2.5 rounded-sm px-1.5 transition-colors lg:pr-3 ${open ? 'bg-surface' : ''}`}
+						className={`hover:bg-raised flex h-10 flex-none items-center gap-2.5 rounded-sm px-1.5 transition-colors lg:pr-3 ${open ? 'bg-raised' : ''}`}
 					>
 						<span className="relative flex-none">
 							<Avatar src={null} name={me.username} size={30} />
@@ -277,7 +277,7 @@ function AccountMenu({ admin, alerts }: { admin: AdminPath | null; alerts: numbe
 			>
 				<div className="px-2.5 pt-2 pb-2">
 					<div className="text-ui font-semibold">{me.username}</div>
-					<div className="text-caption text-muted">{t.users.roleNames[me.role] ?? me.role}</div>
+					<div className="text-caption text-fg-faint">{t.users.roleNames[me.role] ?? me.role}</div>
 				</div>
 				<MenuDivider />
 				<div className="lg:hidden">

@@ -9,6 +9,11 @@ Fixed, Removed, Security. `bun scripts/release.ts` turns that section into the n
 
 ## [Unreleased]
 
+### Changed
+
+- The interface uses the Xantoom design system's components (xantoom-design 0.4.2): buttons, menus, dialogs,
+  fields, switches, selects, avatars, flags and spinners look and behave like in the other Xantoom apps.
+
 ## [0.4.7] - 2026-11-26
 
 ### Changed

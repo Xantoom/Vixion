@@ -13,7 +13,7 @@ const FALLBACK: Record<string, { icon: ReactNode; className: string }> = {
 	broadcaster: { icon: <Video size={12} strokeWidth={2.6} />, className: 'bg-live text-white' },
 	moderator: { icon: <Sword size={12} strokeWidth={2.6} />, className: 'bg-[#00ad03] text-white' },
 	vip: { icon: <Gem size={12} strokeWidth={2.6} />, className: 'bg-[#e005b9] text-white' },
-	subscriber: { icon: <Star size={12} strokeWidth={2.6} />, className: 'bg-accent text-accent-ink' },
+	subscriber: { icon: <Star size={12} strokeWidth={2.6} />, className: 'bg-fill-2 text-on-fill' },
 };
 
 type Assets = ChatAssets | undefined;
@@ -191,7 +191,7 @@ const Line = memo(function Line({
 			}}
 			data-tip={t.player.seekHere}
 			data-tip-sub={formatDate(line.t)}
-			className="text-caption text-muted hover:text-accent-text x-tabular mr-2 rounded-xs align-baseline transition-colors pointer-coarse:-mx-1 pointer-coarse:px-1 pointer-coarse:py-1.5"
+			className="text-caption text-fg-faint hover:text-accent x-tabular mr-2 rounded-xs align-baseline transition-colors pointer-coarse:-mx-1 pointer-coarse:px-1 pointer-coarse:py-1.5"
 		>
 			{formatClock(line.o / 1000)}
 		</button>
@@ -199,9 +199,9 @@ const Line = memo(function Line({
 	if (line.k === 'n') {
 		return (
 			<li className="px-3 py-1">
-				<div className="border-accent bg-accent-soft text-caption rounded-r-xs border-l-2 px-2.5 py-1.5 leading-relaxed">
+				<div className="border-fill-2 bg-accent-soft text-caption rounded-r-xs border-l-2 px-2.5 py-1.5 leading-relaxed">
 					{stamp}
-					<span className="text-accent-text font-semibold">
+					<span className="text-accent font-semibold">
 						<Megaphone size={14} className="mr-1.5 inline -translate-y-px" />
 						{line.s || t.player.notice}
 					</span>
@@ -217,11 +217,11 @@ const Line = memo(function Line({
 	const action = line.k === 'a';
 	const hidden = deleted && !revealed;
 	return (
-		<li className={`hover:bg-surface text-caption px-3 py-0.5 leading-relaxed ${hidden ? 'opacity-45' : ''}`}>
+		<li className={`hover:bg-raised text-caption px-3 py-0.5 leading-relaxed ${hidden ? 'opacity-45' : ''}`}>
 			{stamp}
 			<Badges line={line} assets={assets} />
 			<Name line={line} />
-			{action ? ' ' : <span className="text-muted">: </span>}
+			{action ? ' ' : <span className="text-fg-faint">: </span>}
 			{deleted ? (
 				// Kept by the recording: one click shows what was said, quietly.
 				<button
@@ -231,7 +231,7 @@ const Line = memo(function Line({
 					}}
 					aria-expanded={revealed}
 					data-tip={revealed ? t.player.hideDeleted : t.player.showDeleted}
-					className={`text-muted inline rounded-xs text-left ${revealed ? '' : 'italic hover:text-ink'}`}
+					className={`text-fg-faint inline rounded-xs text-left ${revealed ? '' : 'italic hover:text-fg'}`}
 				>
 					{revealed && line.m ? (
 						<Message text={line.m} emotes={line.e} assets={assets} />
@@ -365,9 +365,9 @@ export function ChatPanel({
 			>
 				<div ref={content} className="py-2">
 					{!hasChat ? (
-						<p className="text-small text-muted px-3 py-6 text-center">{t.player.noChat}</p>
+						<p className="text-small text-fg-faint px-3 py-6 text-center">{t.player.noChat}</p>
 					) : visible.length === 0 ? (
-						<div className="text-small text-muted grid place-items-center px-3 py-6 text-center">
+						<div className="text-small text-fg-faint grid place-items-center px-3 py-6 text-center">
 							{loading ? <Spinner /> : t.player.chatEmpty}
 						</div>
 					) : (

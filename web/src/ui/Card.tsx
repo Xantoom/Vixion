@@ -1,6 +1,6 @@
 import { Info } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { KNOB, SWITCH } from './Field';
+import { Switch } from './Field';
 
 /** A titled block of an administration page: a header with optional actions, then its content. */
 export function Card({
@@ -20,11 +20,11 @@ export function Card({
 	className?: string;
 }) {
 	return (
-		<section className={`bg-card ring-line overflow-hidden rounded-md ring-1 ${className}`}>
+		<section className={`bg-raised ring-line overflow-hidden rounded-md ring-1 ${className}`}>
 			<header className="border-line flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 border-b px-6 py-3">
 				<h2 className="text-ui flex items-center gap-2 font-semibold">
 					{title}
-					{count !== undefined ? <span className="text-muted x-tabular font-medium">{count}</span> : null}
+					{count !== undefined ? <span className="text-fg-faint x-tabular font-medium">{count}</span> : null}
 				</h2>
 				{actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div> : null}
 			</header>
@@ -41,7 +41,7 @@ function InfoTip({ text }: { text: string }) {
 			role="img"
 			aria-label={text}
 			data-tip={text}
-			className="text-muted hover:text-ink x-touch-target relative inline-grid size-5 flex-none cursor-help place-items-center rounded-full transition-colors"
+			className="text-fg-faint hover:text-fg x-touch-target relative inline-grid size-5 flex-none cursor-help place-items-center rounded-full transition-colors"
 		>
 			<Info size={15} />
 		</span>
@@ -100,20 +100,7 @@ export function Toggle({
 	onChange: (checked: boolean) => void;
 	label: string;
 }) {
-	return (
-		<button
-			type="button"
-			role="switch"
-			aria-checked={checked}
-			aria-label={label}
-			onClick={() => {
-				onChange(!checked);
-			}}
-			className={SWITCH}
-		>
-			<span className={`${KNOB} ${checked ? 'translate-x-5' : ''}`} />
-		</button>
-	);
+	return <Switch aria-label={label} checked={checked} onChange={onChange} />;
 }
 
 /** Label and value pairs, for facts that are read rather than changed; laid out like setting rows. */
@@ -125,7 +112,7 @@ export function Facts({ items }: { items: [string, ReactNode][] }) {
 					key={label}
 					className="flex min-h-16 flex-wrap items-center justify-between gap-x-8 gap-y-1 px-6 py-4"
 				>
-					<dt className="text-ui text-ink-2 font-medium">{label}</dt>
+					<dt className="text-ui text-fg-muted font-medium">{label}</dt>
 					<dd className="text-ui ml-auto min-w-0 text-right break-all">{value}</dd>
 				</div>
 			))}

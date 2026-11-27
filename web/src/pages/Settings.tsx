@@ -112,7 +112,7 @@ export function SettingsPage() {
 					label={t.settings.token}
 					tip={draft.twitch_token_source === 'stored' ? t.settings.tokenStoredHint : t.settings.tokenHint}
 				>
-					<span className="text-small bg-surface-2 text-ink-2 inline-flex h-8 items-center rounded-xs px-2.5 font-semibold">
+					<span className="text-small bg-raised-2 text-fg-muted inline-flex h-8 items-center rounded-xs px-2.5 font-semibold">
 						{t.settings.tokenSet}
 					</span>
 				</SettingRow>
@@ -210,12 +210,12 @@ function FolderFact({ folder }: { folder: Folder }) {
 		<span className="flex flex-col items-end gap-1">
 			<code className="font-mono">{folder.path}</code>
 			{folder.source ? (
-				<span className="text-small text-muted">
+				<span className="text-small text-fg-faint">
 					<code className="font-mono">{folder.source}</code> {t.settings.onHost}
 				</span>
 			) : null}
 			{folder.unmapped ? (
-				<span className="text-small text-warn flex items-center gap-1.5">
+				<span className="text-small text-warning flex items-center gap-1.5">
 					<TriangleAlert size={14} className="flex-none" />
 					{t.stats.unmapped}
 				</span>

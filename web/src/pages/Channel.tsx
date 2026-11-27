@@ -110,7 +110,7 @@ export function ChannelPage() {
 			<Hero data={data} name={name} />
 			<div className="mx-auto max-w-[120rem] px-4 sm:px-6">
 				{!profile ? (
-					<p className="text-small text-warn mb-6 flex items-center gap-2">
+					<p className="text-small text-warning mb-6 flex items-center gap-2">
 						<TriangleAlert size={16} />
 						{t.channel.twitchDown}
 					</p>
@@ -201,7 +201,7 @@ export function ChannelPage() {
 
 function Empty({ children }: { children: ReactNode }) {
 	return (
-		<p className="text-body text-muted border-line-2 rounded-lg border border-dashed px-6 py-14 text-center">
+		<p className="text-body text-fg-faint border-line-strong rounded-lg border border-dashed px-6 py-14 text-center">
 			{children}
 		</p>
 	);
@@ -228,10 +228,10 @@ function Tab({
 			aria-selected={selected}
 			tabIndex={selected ? 0 : -1}
 			onClick={onSelect}
-			className="text-ui text-muted hover:text-ink aria-selected:text-ink relative -mb-px flex h-12 items-center gap-2 px-3 font-semibold transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-transparent aria-selected:after:bg-accent-fill"
+			className="text-ui text-fg-faint hover:text-fg aria-selected:text-fg relative -mb-px flex h-12 items-center gap-2 px-3 font-semibold transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-transparent aria-selected:after:bg-accent-fill"
 		>
 			{children}
-			<span className="text-caption bg-surface x-tabular rounded-xs px-1.5 py-0.5 font-medium">{count}</span>
+			<span className="text-caption bg-raised x-tabular rounded-xs px-1.5 py-0.5 font-medium">{count}</span>
 		</button>
 	);
 }
@@ -247,7 +247,7 @@ function Hero({ data, name }: { data: Page; name: string }) {
 
 	return (
 		<header className="x-enter">
-			<div className="bg-surface-2 relative h-36 overflow-hidden sm:h-52 lg:h-64">
+			<div className="bg-raised-2 relative h-36 overflow-hidden sm:h-52 lg:h-64">
 				{banner ? (
 					<img
 						src={banner}
@@ -278,22 +278,18 @@ function Hero({ data, name }: { data: Page; name: string }) {
 									target="_blank"
 									rel="noreferrer"
 									data-tip={t.streamer.openTwitch}
-									className="hover:text-accent-text flex max-w-full min-w-0 items-center transition-colors"
+									className="hover:text-accent flex max-w-full min-w-0 items-center transition-colors"
 								>
 									<span className="truncate">{name}</span>
 								</a>
 								{profile?.partner ? (
 									<span data-tip={t.channel.partner} className="flex-none">
-										<BadgeCheck
-											size={28}
-											className="text-accent-text"
-											aria-label={t.channel.partner}
-										/>
+										<BadgeCheck size={28} className="text-accent" aria-label={t.channel.partner} />
 									</span>
 								) : null}
 								{live ? <LivePill /> : null}
 							</h1>
-							<div className="text-small text-muted flex flex-wrap items-center gap-x-6 gap-y-1.5">
+							<div className="text-small text-fg-faint flex flex-wrap items-center gap-x-6 gap-y-1.5">
 								{profile ? (
 									<Meta icon={<Users size={16} />}>
 										{t.channel.followers(formatNumber(profile.followers))}
@@ -379,8 +375,8 @@ function LiveNow({ data }: { data: Page }) {
 	};
 
 	return (
-		<article className="group bg-card ring-line relative mt-8 mb-10 flex flex-col overflow-hidden rounded-md shadow-(--shadow-card) ring-1 transition-shadow hover:shadow-(--shadow-lift) sm:flex-row">
-			<div className="bg-surface-2 relative aspect-video flex-none sm:w-96">
+		<article className="group bg-raised ring-line relative mt-8 mb-10 flex flex-col overflow-hidden rounded-md shadow-sm ring-1 transition-shadow hover:shadow-md sm:flex-row">
+			<div className="bg-raised-2 relative aspect-video flex-none sm:w-96">
 				{live?.preview_url ? (
 					<img
 						src={live.preview_url}
@@ -421,7 +417,7 @@ function LiveNow({ data }: { data: Page }) {
 							src={live.game_art_url}
 							alt=""
 							referrerPolicy="no-referrer"
-							className="bg-surface-2 aspect-[3/4] w-14 flex-none rounded-xs object-cover shadow-(--shadow-card) sm:w-16"
+							className="bg-raised-2 aspect-[3/4] w-14 flex-none rounded-xs object-cover shadow-sm sm:w-16"
 						/>
 					) : null}
 					<div className="flex min-w-0 flex-col gap-1.5">
@@ -431,13 +427,13 @@ function LiveNow({ data }: { data: Page }) {
 								href={href}
 								target="_blank"
 								rel="noreferrer"
-								className="hover:text-accent-text transition-colors after:absolute after:inset-0"
+								className="hover:text-accent transition-colors after:absolute after:inset-0"
 							>
 								{title ?? t.stream.untitled}
 							</a>
 						</h2>
 						{game ? (
-							<span className="text-small text-muted flex items-center gap-1.5">
+							<span className="text-small text-fg-faint flex items-center gap-1.5">
 								<Gamepad2 size={16} className="flex-none opacity-80" />
 								<span className="truncate">{game}</span>
 							</span>
@@ -445,7 +441,7 @@ function LiveNow({ data }: { data: Page }) {
 					</div>
 				</div>
 				<div className="mt-auto flex flex-wrap items-center justify-between gap-3">
-					<span className="text-small text-accent-text inline-flex items-center gap-1.5 font-semibold">
+					<span className="text-small text-accent inline-flex items-center gap-1.5 font-semibold">
 						<ExternalLink size={16} />
 						{t.channel.watchOnTwitch}
 					</span>
@@ -550,7 +546,7 @@ function OverlayButton({
 			aria-pressed={pressed}
 			disabled={disabled}
 			onClick={onClick}
-			className={`grid size-8 place-items-center pointer-coarse:size-10 rounded-sm bg-black/70 text-white backdrop-blur-sm transition-colors disabled:opacity-50 aria-pressed:bg-[var(--accent)] aria-pressed:text-[var(--accent-ink)] ${danger ? 'hover:bg-danger-fill' : 'hover:bg-[var(--accent)] hover:text-[var(--accent-ink)]'}`}
+			className={`grid size-8 place-items-center pointer-coarse:size-10 rounded-sm bg-black/70 text-white backdrop-blur-sm transition-colors disabled:opacity-50 aria-pressed:bg-[var(--x-fill-2)] aria-pressed:text-[var(--x-on-fill)] ${danger ? 'hover:bg-danger-fill' : 'hover:bg-[var(--x-fill-2)] hover:text-[var(--x-on-fill)]'}`}
 		>
 			{children}
 		</button>
@@ -566,7 +562,7 @@ const CARD_TITLE = 'text-body line-clamp-2 leading-snug font-semibold';
  */
 function CardMeta({ at, game, extra }: { at: number | null; game: string | null; extra: string | null }) {
 	return (
-		<p className="text-small text-muted x-tabular flex min-w-0 items-baseline gap-1.5 whitespace-nowrap [&>*+*]:before:mr-1.5 [&>*+*]:before:content-['·']">
+		<p className="text-small text-fg-faint x-tabular flex min-w-0 items-baseline gap-1.5 whitespace-nowrap [&>*+*]:before:mr-1.5 [&>*+*]:before:content-['·']">
 			{at == null ? null : (
 				<span data-tip={formatDateFull(at)} className="flex-none">
 					{formatDateTime(at)}
@@ -620,7 +616,7 @@ const StreamCard = memo(function StreamCard({
 	return (
 		<article className="group flex flex-col gap-3">
 			<div
-				className={`bg-surface-2 relative aspect-video overflow-hidden rounded-md ${stream.keep_forever ? 'ring-accent ring-2 ring-offset-2 ring-offset-[var(--bg)]' : ''}`}
+				className={`bg-raised-2 relative aspect-video overflow-hidden rounded-md ${stream.keep_forever ? 'ring-fill-2 ring-2 ring-offset-2 ring-offset-[var(--x-bg)]' : ''}`}
 			>
 				{stream.has_thumbnail ? (
 					<img
@@ -632,7 +628,7 @@ const StreamCard = memo(function StreamCard({
 					/>
 				) : recording ? null : (
 					// No picture yet (or none could be taken): a quiet mark rather than an empty box.
-					<span className="text-muted/60 absolute inset-0 grid place-items-center" aria-hidden>
+					<span className="text-fg-faint/60 absolute inset-0 grid place-items-center" aria-hidden>
 						<Film size={36} strokeWidth={1.5} />
 					</span>
 				)}
@@ -713,7 +709,7 @@ const StreamCard = memo(function StreamCard({
 						to="/$login/$id"
 						params={params}
 						title={title}
-						className={`${CARD_TITLE} hover:text-accent-text transition-colors`}
+						className={`${CARD_TITLE} hover:text-accent transition-colors`}
 					>
 						{title}
 					</Link>
@@ -744,7 +740,7 @@ const StreamCard = memo(function StreamCard({
 				}}
 			>
 				<p>{t.stream.deleteLead}</p>
-				{stream.keep_forever ? <p className="text-accent-text mt-2 font-medium">{t.stream.kept}</p> : null}
+				{stream.keep_forever ? <p className="text-accent mt-2 font-medium">{t.stream.kept}</p> : null}
 			</Confirm>
 			{streamerId != null ? (
 				<StopDialog
@@ -770,7 +766,7 @@ const VideoCard = memo(function VideoCard({ video, fallback }: { video: TwitchVi
 				href={href}
 				target="_blank"
 				rel="noreferrer"
-				className="bg-surface-2 relative block aspect-video overflow-hidden rounded-md"
+				className="bg-raised-2 relative block aspect-video overflow-hidden rounded-md"
 				aria-label={video.title || t.stream.untitled}
 			>
 				{thumbnail ? (
@@ -797,7 +793,7 @@ const VideoCard = memo(function VideoCard({ video, fallback }: { video: TwitchVi
 					href={href}
 					target="_blank"
 					rel="noreferrer"
-					className={`${CARD_TITLE} hover:text-accent-text transition-colors`}
+					className={`${CARD_TITLE} hover:text-accent transition-colors`}
 					title={video.title}
 				>
 					{video.title || t.stream.untitled}
@@ -854,7 +850,7 @@ function SettingsDialog({ streamer, onClose }: { streamer: Streamer; onClose: ()
 				<Group title={t.streamer.keepSection}>
 					{/* The menu goes under the label when both don't fit on one line. */}
 					<li className="flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 pr-2 pl-5">
-						<span className="text-ui text-ink whitespace-nowrap">{t.streamer.keepRow}</span>
+						<span className="text-ui text-fg whitespace-nowrap">{t.streamer.keepRow}</span>
 						<RetentionMenu
 							label={t.streamer.keepRow}
 							value={retention}
@@ -915,7 +911,7 @@ function RemoveDialog({ streamer, open, onClose }: { streamer: Streamer; open: b
 					<span className="text-danger font-medium">
 						{t.streamer.removeRecordings(streamer.stream_count)}
 					</span>
-					<span className="text-small text-ink-2">{t.streamer.removeKeep}</span>
+					<span className="text-small text-fg-muted">{t.streamer.removeKeep}</span>
 				</div>
 			) : null}
 		</Confirm>

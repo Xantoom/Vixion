@@ -34,7 +34,7 @@ export function StreamersPage() {
 					<>
 						{t.streamers.title}
 						{data && data.length > 0 ? (
-							<span className="text-muted ml-3 font-normal x-tabular">{data.length}</span>
+							<span className="text-fg-faint ml-3 font-normal x-tabular">{data.length}</span>
 						) : null}
 					</>
 				}
@@ -44,7 +44,7 @@ export function StreamersPage() {
 			) : error ? (
 				<p className="text-ui text-danger py-10">{error.message}</p>
 			) : data.length === 0 ? (
-				<div className="x-enter border-line-2 flex flex-col items-center gap-3 rounded-lg border border-dashed px-6 py-20 text-center">
+				<div className="x-enter border-line-strong flex flex-col items-center gap-3 rounded-lg border border-dashed px-6 py-20 text-center">
 					<h2 className="text-title font-semibold">{t.streamers.emptyTitle}</h2>
 					{canManage ? (
 						<Button variant="accent" className="mt-3" onClick={focusChannelSearch}>
@@ -118,7 +118,7 @@ function Banner({
 			className={`size-full scale-125 object-cover opacity-60 blur-2xl saturate-150 ${className}`}
 		/>
 	) : (
-		<div className="bg-surface-2 size-full" />
+		<div className="bg-raised-2 size-full" />
 	);
 }
 
@@ -137,11 +137,11 @@ const StreamerCard = memo(function StreamerCard({ streamer, priority }: { stream
 		<Link
 			to="/$login"
 			params={{ login: streamer.login }}
-			className={`group bg-card ring-line flex h-full flex-col overflow-hidden rounded-md shadow-(--shadow-card) ring-1 transition-[box-shadow,translate] duration-200 motion-safe:hover:-translate-y-0.5 hover:shadow-(--shadow-lift)`}
+			className={`group bg-raised ring-line flex h-full flex-col overflow-hidden rounded-md shadow-sm ring-1 transition-[box-shadow,translate] duration-200 motion-safe:hover:-translate-y-0.5 hover:shadow-md`}
 		>
 			{/* Not recorded: the pictures fade, the words stay readable and say so. */}
 			<div
-				className={`bg-surface-2 relative aspect-[3/1] overflow-hidden ${streamer.monitored ? '' : 'opacity-50 grayscale'}`}
+				className={`bg-raised-2 relative aspect-[3/1] overflow-hidden ${streamer.monitored ? '' : 'opacity-50 grayscale'}`}
 			>
 				<Banner
 					streamer={streamer}
@@ -150,7 +150,7 @@ const StreamerCard = memo(function StreamerCard({ streamer, priority }: { stream
 				/>
 			</div>
 			<div className="flex items-center gap-4 px-5 pt-0 pb-5">
-				<span className="bg-card relative -mt-7 flex-none self-start rounded-full p-1">
+				<span className="bg-raised relative -mt-7 flex-none self-start rounded-full p-1">
 					<Avatar
 						src={streamer.avatar_url}
 						name={streamer.display_name}
@@ -168,9 +168,9 @@ const StreamerCard = memo(function StreamerCard({ streamer, priority }: { stream
 					</span>
 					{/* Not recorded on a line of its own; then each fact whole: on a narrow card the last one
 					    goes to the next line rather than being cut, the dot staying at the end of its line. */}
-					<span className="text-small text-muted flex flex-wrap gap-x-1.5">
+					<span className="text-small text-fg-faint flex flex-wrap gap-x-1.5">
 						{streamer.monitored ? null : (
-							<span className="text-ink-2 basis-full font-medium">{t.streamers.paused}</span>
+							<span className="text-fg-muted basis-full font-medium">{t.streamers.paused}</span>
 						)}
 						<span className="whitespace-nowrap">
 							{t.streamers.streams(streamer.stream_count)}

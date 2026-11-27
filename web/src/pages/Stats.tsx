@@ -12,11 +12,11 @@ import { NotFound } from './NotFound';
 
 function Tile({ label, value, detail }: { label: string; value: string; detail?: string | null }) {
 	return (
-		<div className="bg-card ring-line flex flex-col gap-4 rounded-md p-6 ring-1">
-			<span className="text-small text-muted font-medium">{label}</span>
+		<div className="bg-raised ring-line flex flex-col gap-4 rounded-md p-6 ring-1">
+			<span className="text-small text-fg-faint font-medium">{label}</span>
 			<span className="flex flex-col gap-1">
 				<span className="text-heading x-tabular font-semibold tracking-tight">{value}</span>
-				{detail ? <span className="text-small text-muted x-tabular">{detail}</span> : null}
+				{detail ? <span className="text-small text-fg-faint x-tabular">{detail}</span> : null}
 			</span>
 		</div>
 	);
@@ -45,7 +45,7 @@ export function StatsPage() {
 	const biggest = Math.max(1, ...data.streamers.map((s) => s.bytes));
 	const segments = [
 		{ label: t.stats.usedByVixion, value: data.bytes, className: 'bg-accent-fill' },
-		{ label: t.stats.otherFiles, value: other, className: 'bg-line-2' },
+		{ label: t.stats.otherFiles, value: other, className: 'bg-line-strong' },
 	];
 
 	return (
@@ -53,16 +53,16 @@ export function StatsPage() {
 			<div className="flex flex-col gap-4">
 				{/* The disk first: how much the recordings take, and how much room is left. Full width, so
 				    it is as tall as what it holds, not stretched to a column of tiles beside it. */}
-				<section className="bg-card ring-line flex flex-col gap-6 rounded-md p-6 ring-1">
+				<section className="bg-raised ring-line flex flex-col gap-6 rounded-md p-6 ring-1">
 					<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
 						<div className="flex flex-col gap-2">
-							<h2 className="text-small text-muted font-medium">{t.stats.space}</h2>
+							<h2 className="text-small text-fg-faint font-medium">{t.stats.space}</h2>
 							<span className="text-display x-tabular font-semibold tracking-tight">
 								{formatBytes(data.bytes)}
 							</span>
 						</div>
 						{disk.total > 0 ? (
-							<span className="text-small text-muted x-tabular pb-1">
+							<span className="text-small text-fg-faint x-tabular pb-1">
 								{t.stats.diskFree(formatBytes(disk.free), formatBytes(disk.total))}
 							</span>
 						) : null}
@@ -70,7 +70,7 @@ export function StatsPage() {
 					{disk.total > 0 ? (
 						<div className="flex flex-col gap-4">
 							<div
-								className="bg-surface-2 flex h-2.5 gap-0.5 overflow-hidden rounded-xs"
+								className="bg-raised-2 flex h-2.5 gap-0.5 overflow-hidden rounded-xs"
 								role="img"
 								aria-label={t.stats.storage}
 							>
@@ -85,18 +85,18 @@ export function StatsPage() {
 									) : null,
 								)}
 							</div>
-							<ul className="text-small text-ink-2 flex flex-wrap gap-x-7 gap-y-2">
+							<ul className="text-small text-fg-muted flex flex-wrap gap-x-7 gap-y-2">
 								{segments.map((segment) => (
 									<li key={segment.label} className="flex items-center gap-2">
 										<span className={`${segment.className} size-2.5 rounded-xs`} />
 										{segment.label}
-										<span className="text-muted x-tabular">{formatBytes(segment.value)}</span>
+										<span className="text-fg-faint x-tabular">{formatBytes(segment.value)}</span>
 									</li>
 								))}
 								<li className="flex items-center gap-2">
-									<span className="bg-surface-2 ring-line-2 size-2.5 rounded-xs ring-1" />
+									<span className="bg-raised-2 ring-line-strong size-2.5 rounded-xs ring-1" />
 									{t.stats.free}
-									<span className="text-muted x-tabular">{formatBytes(disk.free)}</span>
+									<span className="text-fg-faint x-tabular">{formatBytes(disk.free)}</span>
 								</li>
 							</ul>
 						</div>
@@ -126,12 +126,12 @@ export function StatsPage() {
 								<Link
 									to="/$login"
 									params={{ login: streamer.login }}
-									className="hover:bg-surface flex min-h-18 items-center gap-4 px-6 py-4 transition-colors"
+									className="hover:bg-raised flex min-h-18 items-center gap-4 px-6 py-4 transition-colors"
 								>
 									<Avatar src={streamer.avatar_url} name={streamer.display_name} size={36} />
 									<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 										<span className="text-ui truncate font-semibold">{streamer.display_name}</span>
-										<span className="text-small text-muted x-tabular">
+										<span className="text-small text-fg-faint x-tabular">
 											<span className="whitespace-nowrap">
 												{t.streamers.streams(streamer.streams)}
 											</span>
@@ -146,7 +146,7 @@ export function StatsPage() {
 										<span className="text-ui x-tabular font-medium">
 											{formatBytes(streamer.bytes)}
 										</span>
-										<span className="bg-surface-2 h-1.5 w-full overflow-hidden rounded-xs">
+										<span className="bg-raised-2 h-1.5 w-full overflow-hidden rounded-xs">
 											<span
 												className="bg-accent-fill block h-full min-w-0.5 rounded-xs"
 												style={{ width: `${(streamer.bytes / biggest) * 100}%` }}
@@ -162,7 +162,7 @@ export function StatsPage() {
 
 			{/* Only when it matters: a folder outside any volume is lost with the container. */}
 			{unmapped.length > 0 ? (
-				<p className="reveal bg-warn-soft text-warn text-small flex items-start gap-3 rounded-md px-6 py-4">
+				<p className="reveal bg-warn-soft text-warning text-small flex items-start gap-3 rounded-md px-6 py-4">
 					<TriangleAlert size={18} className="mt-0.5 flex-none" />
 					<span>
 						{unmapped.map((folder) => (

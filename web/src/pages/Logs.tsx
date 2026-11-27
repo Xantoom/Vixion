@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CircleAlert, CircleCheck, Info, OctagonAlert, Pause, Play, Trash2, X } from 'lucide-react';
 import { memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Options } from 'xantoom-design/react';
 import { useT } from '@/i18n';
 import { alertText } from '@/lib/alerts';
 import { type Alert, type LogEntry, api } from '@/lib/api';
@@ -8,7 +9,7 @@ import { formatRelative } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import { IconButton } from '@/ui/Button';
 import { Card } from '@/ui/Card';
-import { Segmented, TextInput } from '@/ui/Field';
+import { TextInput } from '@/ui/Field';
 import { toast } from '@/ui/Toasts';
 import { NotFound } from './NotFound';
 
@@ -18,10 +19,10 @@ type Level = 'all' | 'warn' | 'error';
 
 const LEVEL_STYLE: Record<string, string> = {
 	error: 'text-danger',
-	warn: 'text-warn',
-	info: 'text-ink-2',
-	debug: 'text-muted',
-	trace: 'text-muted',
+	warn: 'text-warning',
+	info: 'text-fg-muted',
+	debug: 'text-fg-faint',
+	trace: 'text-fg-faint',
 };
 
 // Made once: a formatter costs far more to build than to use, and there are thousands of lines.
@@ -58,7 +59,7 @@ function AlertText({ alert }: { alert: Alert }) {
 	return (
 		<>
 			<p className="text-ui break-words">{title}</p>
-			{more ? <p className="text-small text-ink-2 mt-0.5 font-mono break-words">{more}</p> : null}
+			{more ? <p className="text-small text-fg-muted mt-0.5 font-mono break-words">{more}</p> : null}
 		</>
 	);
 }
@@ -66,14 +67,14 @@ function AlertText({ alert }: { alert: Alert }) {
 /** One line of the console: drawn once, not again for each line that arrives after it. */
 const LogRow = memo(function LogRow({ line }: { line: LogEntry }) {
 	return (
-		<div className="hover:bg-surface flex flex-wrap gap-x-3 rounded-[3px] px-1 whitespace-pre-wrap sm:flex-nowrap">
-			<span className="text-muted flex-none x-tabular">{time(line.at)}</span>
+		<div className="hover:bg-raised flex flex-wrap gap-x-3 rounded-[3px] px-1 whitespace-pre-wrap sm:flex-nowrap">
+			<span className="text-fg-faint flex-none x-tabular">{time(line.at)}</span>
 			<span className={`w-11 flex-none uppercase ${LEVEL_STYLE[line.level] ?? ''}`}>{line.level}</span>
 			<span className="min-w-0 break-words max-sm:basis-full max-sm:pb-1">
-				<span className="text-ink">{line.message}</span>
-				{line.fields ? <span className="text-muted"> {line.fields}</span> : null}
+				<span className="text-fg">{line.message}</span>
+				{line.fields ? <span className="text-fg-faint"> {line.fields}</span> : null}
 				{/* Vixion's own lines don't repeat its name; a library's say which. */}
-				{line.target.startsWith('vixion') ? null : <span className="text-muted"> {line.target}</span>}
+				{line.target.startsWith('vixion') ? null : <span className="text-fg-faint"> {line.target}</span>}
 			</span>
 		</div>
 	);
@@ -113,8 +114,8 @@ function Alerts() {
 	if (isPending) return null;
 	if (open.length === 0) {
 		return (
-			<p className="reveal text-small text-muted -mt-2 flex items-center gap-2.5">
-				<CircleCheck size={16} className="text-ok" />
+			<p className="reveal text-small text-fg-faint -mt-2 flex items-center gap-2.5">
+				<CircleCheck size={16} className="text-success" />
 				{t.logs.noAlerts}
 			</p>
 		);
@@ -128,13 +129,13 @@ function Alerts() {
 							{alert.level === 'error' ? (
 								<OctagonAlert size={18} className="text-danger mt-0.5 flex-none" />
 							) : alert.level === 'warning' ? (
-								<CircleAlert size={18} className="text-warn mt-0.5 flex-none" />
+								<CircleAlert size={18} className="text-warning mt-0.5 flex-none" />
 							) : (
-								<Info size={18} className="text-muted mt-0.5 flex-none" />
+								<Info size={18} className="text-fg-faint mt-0.5 flex-none" />
 							)}
 							<div className="min-w-0 flex-1">
 								<AlertText alert={alert} />
-								<p className="text-caption text-muted mt-0.5">{formatRelative(alert.created_at)}</p>
+								<p className="text-caption text-fg-faint mt-0.5">{formatRelative(alert.created_at)}</p>
 							</div>
 							<IconButton size="sm" label={t.logs.dismiss} onClick={() => void dismiss(alert.id)}>
 								<X size={16} />
@@ -244,10 +245,10 @@ function Console() {
 			title={
 				<>
 					{t.logs.console}
-					<span className="text-caption text-muted inline-flex items-center gap-1.5 font-medium">
+					<span className="text-caption text-fg-faint inline-flex items-center gap-1.5 font-medium">
 						<span
 							aria-hidden
-							className={`size-2 rounded-full ${connected && !paused ? 'bg-ok live-dot' : 'bg-line-2'}`}
+							className={`size-2 rounded-full ${connected && !paused ? 'bg-success live-dot' : 'bg-line-strong'}`}
 						/>
 						{paused
 							? waiting > 0
@@ -285,8 +286,9 @@ function Console() {
 			flush
 		>
 			<div className="border-line flex flex-wrap items-center gap-3 border-b px-6 py-3.5">
-				<Segmented
-					label={t.logs.filter}
+				<Options
+					legend={t.logs.filter}
+					name="log-level"
 					value={level}
 					onChange={setLevel}
 					options={[
@@ -320,7 +322,7 @@ function Console() {
 				className="bg-canvas max-h-[min(65dvh,44rem)] min-h-40 overflow-auto px-5 py-4 font-mono text-caption leading-relaxed"
 			>
 				{shown.length === 0 ? (
-					<p className="text-muted py-6 text-center font-sans text-sm">{t.logs.empty}</p>
+					<p className="text-fg-faint py-6 text-center font-sans text-sm">{t.logs.empty}</p>
 				) : (
 					shown.map((line) => <LogRow key={`${line.id}-${line.at}`} line={line} />)
 				)}
